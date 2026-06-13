@@ -33,7 +33,7 @@ export const ScrollToTop: React.FC = () => {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.5 }}
           onClick={scrollToTop}
-          className="fixed bottom-8 right-8 z-50 p-3 bg-m-blue hover:bg-m-blue-dark text-white rounded-full shadow-lg hover:shadow-xl transition-all focus:outline-none"
+          className="btn-glass btn-glass-blue fixed bottom-8 right-8 z-50 p-3 text-white rounded-full focus:outline-none"
           aria-label="Scroll to top"
         >
           <ArrowUp size={24} />

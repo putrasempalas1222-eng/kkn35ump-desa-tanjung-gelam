@@ -28,6 +28,9 @@ if (!PROXY_HEADER) {
   console.error("Error: Environment variables PROXY_HEADER must be set.");
   process.exit(1);
 }
+const PUTRA_AI_V1_API_URL = process?.env?.PUTRA_AI_V1_API_URL || "https://us-central1-play-integrity-2adpr7x4a8xhyex.cloudfunctions.net/api";
+const PUTRA_AI_CHAT_API_URL = process?.env?.PUTRA_AI_CHAT_API_URL || `${PUTRA_AI_V1_API_URL.replace(/\/$/, '')}/api/chat`;
+const PUTRA_MODEL = process?.env?.PUTRA_MODEL || "PutraAi-V1";
 
 app.set('trust proxy', 1 /* number of proxies between user and server */);
 
@@ -46,6 +49,7 @@ const proxyLimiter = rateLimit({
 });
 // Apply the rate limiter to the /api-proxy route before the main proxy logic
 app.use('/api-proxy', proxyLimiter);
+app.use('/putra-ai-proxy', proxyLimiter);
 
 const API_CLIENT_MAP = [
  {
@@ -323,6 +327,46 @@ app.post('/api-proxy', async (req, res) => {
   }
 });
 
+app.post('/putra-ai-proxy', async (req, res) => {
+  let targetUrl;
+  try {
+    targetUrl = new URL(PUTRA_AI_CHAT_API_URL);
+  } catch (error) {
+    console.error('[PUTRA AI Proxy] Invalid PUTRA_AI_V1_API_URL:', error);
+    return res.status(500).json({ error: 'PUTRA_AI_V1_API_URL is invalid.' });
+  }
+
+  if (targetUrl.protocol !== 'https:') {
+    return res.status(400).json({ error: 'PUTRA_AI_V1_API_URL must use https.' });
+  }
+
+  try {
+    const upstreamResponse = await fetch(targetUrl.href, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+        'model': req.body?.model || PUTRA_MODEL,
+        ...(req.get('authorization') ? { Authorization: req.get('authorization') } : {}),
+      },
+      body: JSON.stringify({
+        ...(req.body || {}),
+        model: req.body?.model || PUTRA_MODEL,
+      }),
+    });
+
+    const responseText = await upstreamResponse.text();
+    const contentType = upstreamResponse.headers.get('content-type') || 'application/json';
+    res.status(upstreamResponse.status).type(contentType).send(responseText);
+  } catch (error) {
+    console.error('[PUTRA AI Proxy] Error forwarding request:', error);
+    res.status(502).json({
+      error: 'PUTRA AI proxy failed',
+      message: error?.message || 'Unable to reach PUTRA AI proxy target.',
+    });
+  }
+});
+
 const server = app.listen(PORT, API_BACKEND_HOST, () => {
   console.log(`Vertex AI Backend listening at http://localhost:${PORT}`);
 });
@@ -464,5 +508,3 @@ server.on('upgrade', async (request, socket, head) => {
     socket.destroy();
   }
 });
-
-

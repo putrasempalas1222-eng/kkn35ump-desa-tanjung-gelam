@@ -19,12 +19,13 @@ import {
   Plus,
   Printer,
   Save,
+  Send,
   Trash2,
   User,
   Users,
   X,
 } from 'lucide-react';
-import { storage, ContactMessage } from '../services/storage';
+import { auth, storage, ContactMessage } from '../services/storage';
 import {
   DivisionName,
   EventContent,
@@ -71,6 +72,44 @@ const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const A4_WIDTH_PX = 794;
 const A4_HEIGHT_PX = 1123;
+const PUTRA_AI_PROXY_ENDPOINT = '/putra-ai-proxy';
+
+const getPutraAiProxyUrl = () => {
+  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+  return env?.VITE_PUTRA_AI_PROXY_ENDPOINT || PUTRA_AI_PROXY_ENDPOINT;
+};
+
+const extractPutraAiText = (payload: unknown): string => {
+  if (typeof payload === 'string') return payload;
+  if (!payload || typeof payload !== 'object') return '';
+
+  const data = payload as Record<string, any>;
+  const directText =
+    data.reply ||
+    data.answer ||
+    data.text ||
+    data.message ||
+    data.response ||
+    data.output ||
+    data.content;
+
+  if (typeof directText === 'string') return directText;
+
+  const choiceText = data.choices?.[0]?.message?.content || data.choices?.[0]?.text;
+  if (typeof choiceText === 'string') return choiceText;
+
+  const candidateParts = data.candidates?.[0]?.content?.parts;
+  if (Array.isArray(candidateParts)) {
+    return candidateParts.map((part) => part?.text).filter(Boolean).join('\n');
+  }
+
+  const contentParts = data.content?.parts;
+  if (Array.isArray(contentParts)) {
+    return contentParts.map((part) => part?.text).filter(Boolean).join('\n');
+  }
+
+  return '';
+};
 
 const emptyItem = (type: EditableType): EditableItem => {
   const id = `${type}_${Date.now()}`;
@@ -202,27 +241,6 @@ const fileToImageDataUrl = (file: File): Promise<string> => {
   });
 };
 
-const fileToVideoDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const maxSizeMb = 8;
-
-    if (!file.type.startsWith('video/')) {
-      reject(new Error('File harus berupa video.'));
-      return;
-    }
-
-    if (file.size > maxSizeMb * 1024 * 1024) {
-      reject(new Error(`Ukuran video maksimal ${maxSizeMb}MB agar database tetap ringan.`));
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Video gagal dibaca.'));
-    reader.onload = () => resolve(String(reader.result));
-    reader.readAsDataURL(file);
-  });
-};
-
 const getYouTubeEmbedUrl = (value: string) => {
   if (!value) return '';
 
@@ -306,66 +324,34 @@ const VideoField = ({
   value: string;
   onChange: (value: string) => void;
 }) => {
-  const [error, setError] = useState('');
-
-  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setError('');
-      const dataUrl = await fileToVideoDataUrl(file);
-      onChange(dataUrl);
-    } catch (uploadError: any) {
-      setError(uploadError?.message || 'Video gagal diunggah.');
-    } finally {
-      event.target.value = '';
-    }
-  };
-
-  const getYoutubeEmbedUrl = (url: string): string | null => {
-    try {
-      const parsed = new URL(url);
-      let videoId: string | null = null;
-      if (parsed.hostname.includes('youtube.com')) {
-        videoId = parsed.searchParams.get('v');
-      } else if (parsed.hostname.includes('youtu.be')) {
-        videoId = parsed.pathname.slice(1);
-      }
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const youtubeEmbedUrl = getYoutubeEmbedUrl(value);
+  const youtubeEmbedUrl = getYouTubeEmbedUrl(value);
+  const showWarning = value.trim() !== '' && !youtubeEmbedUrl;
 
   return (
     <div className="space-y-3">
       <Field label={label} value={value} onChange={onChange} />
-      <label className="block rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-4 py-4 cursor-pointer hover:border-m-blue transition-colors">
-        <input type="file" accept="video/mp4,video/webm,video/ogg,video/*" onChange={handleFile} className="sr-only" />
-        <span className="block text-sm font-bold text-slate-700 dark:text-slate-200">Upload video dari perangkat</span>
-        <span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Bisa isi link YouTube atau upload video kecil. Upload disimpan sebagai base64 data URL, maksimal 8MB.
-        </span>
-      </label>
-      {youtubeEmbedUrl ? (
-        <iframe
-          src={youtubeEmbedUrl}
-          title={label}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          className="aspect-video w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-950"
-        />
-      ) : value && (
-        <video
-          src={value}
-          controls
-          className="h-44 w-full rounded-lg object-cover border border-slate-200 dark:border-slate-700 bg-slate-950"
-        />
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Masukkan link video YouTube (contoh: <code className="text-m-blue font-mono">https://www.youtube.com/watch?v=...</code> atau <code className="text-m-blue font-mono">https://youtu.be/...</code>). Video akan dapat diputar langsung di halaman web.
+      </p>
+      {showWarning && (
+        <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+          ⚠️ Tautan tidak dikenali sebagai tautan YouTube yang valid. Pastikan format tautan benar agar video dapat diputar.
+        </p>
       )}
-      {error && <p className="text-sm font-semibold text-red-600 dark:text-red-300">{error}</p>}
+      {youtubeEmbedUrl && (
+        <div className="mt-2 space-y-1.5">
+          <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Preview Video
+          </span>
+          <iframe
+            src={youtubeEmbedUrl}
+            title={label}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="aspect-video w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-950 shadow-md"
+          />
+        </div>
+      )}
     </div>
   );
 };
@@ -612,13 +598,17 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   return (
     <div className="space-y-6 max-w-6xl">
       <div>
-        <h1 className="text-3xl font-black">Akun Divisi</h1>
-        <p className="text-slate-500 dark:text-slate-400">Buat akun anggota dan arahkan mereka ke dashboard laporan masing-masing.</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Manajemen</p>
+        <h1 className="text-3xl font-black text-slate-900 dark:text-white">Akun Divisi</h1>
+        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Buat akun anggota dan arahkan mereka ke dashboard laporan masing-masing.</p>
       </div>
 
       <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-5">
-        <form onSubmit={createAccount} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4">
-          <h2 className="font-black text-lg">Buat Akun Baru</h2>
+        <form onSubmit={createAccount} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4 shadow-sm">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="h-1.5 w-1.5 rounded-full bg-m-blue" />
+            <h2 className="font-black text-base text-slate-900 dark:text-white">Buat Akun Baru</h2>
+          </div>
           <SelectField
             label="Divisi"
             value={division}
@@ -629,24 +619,32 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
           <Field label="Email Login" type="email" value={email} onChange={setEmail} />
           <Field label="Password Awal" type="password" value={password} onChange={setPassword} />
           {message && (
-            <p className="rounded-lg bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <p className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {message}
             </p>
           )}
-          <button className="w-full rounded-lg bg-m-blue hover:bg-m-blue-dark text-white py-3 font-bold flex items-center justify-center gap-2">
-            <Plus size={18} />
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full rounded-xl bg-m-blue hover:bg-m-blue-dark disabled:opacity-60 text-white py-3 font-bold flex items-center justify-center gap-2 shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-[0.98]"
+          >
+            <Plus size={16} />
             {saving ? 'Membuat akun...' : 'Buat Akun'}
           </button>
         </form>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5">
-          <h2 className="font-black text-lg mb-4">Daftar Divisi</h2>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
+            <div className="h-1.5 w-1.5 rounded-full bg-m-blue" />
+            <h2 className="font-black text-base text-slate-900 dark:text-white">Daftar Divisi</h2>
+            <span className="ml-auto text-xs font-bold text-slate-400">{DIVISIONS.length} divisi</span>
+          </div>
           <div className="grid sm:grid-cols-2 gap-3">
             {DIVISIONS.map((item) => {
               const profile = profiles.find((candidate) => candidate.division === item.value);
               return (
-                <div key={item.value} className="rounded-lg border border-slate-200 dark:border-slate-800 p-4">
-                  <p className="text-xs font-black uppercase tracking-wider text-m-blue">{item.label}</p>
+                <div key={item.value} className="rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 p-4 transition-colors">
+                  <p className="text-xs font-black uppercase tracking-wider text-m-blue dark:text-[#7fcfff]">{item.label}</p>
                   {profile && editingProfileId === profile.uid ? (
                     <div className="mt-2 space-y-2">
                       <input
@@ -660,7 +658,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
                           type="button"
                           onClick={() => saveProfileName(profile)}
                           disabled={savingProfileId === profile.uid}
-                          className="rounded-lg bg-m-blue px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                          className="rounded-lg bg-m-blue px-3 py-2 text-xs font-bold text-white disabled:opacity-60 transition-colors hover:bg-m-blue-dark"
                         >
                           {savingProfileId === profile.uid ? 'Menyimpan...' : 'Simpan'}
                         </button>
@@ -670,7 +668,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
                             setEditingProfileId('');
                             setEditingProfileName('');
                           }}
-                          className="rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200"
+                          className="rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
                         >
                           Batal
                         </button>
@@ -678,19 +676,21 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
                     </div>
                   ) : (
                     <div className="mt-1 flex items-center justify-between gap-3">
-                      <p className="font-black text-slate-900 dark:text-white">{profile?.name || item.defaultName || 'Belum diisi'}</p>
+                      <div className="min-w-0">
+                        <p className="font-black text-slate-900 dark:text-white truncate">{profile?.name || item.defaultName || 'Belum diisi'}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{profile?.email || 'Akun belum dibuat'}</p>
+                      </div>
                       {profile && (
                         <button
                           type="button"
                           onClick={() => startEditProfileName(profile)}
-                          className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                          className="shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2.5 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors"
                         >
-                          Edit Nama
+                          Edit
                         </button>
                       )}
                     </div>
                   )}
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 truncate">{profile?.email || 'Akun belum dibuat'}</p>
                 </div>
               );
             })}
@@ -701,8 +701,9 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   );
 };
 
-const createEmptyReport = (profile: UserProfile, week = '1'): WeeklyReport => ({
+const createEmptyReport = (profile: UserProfile, week = '1', reportType: WeeklyReport['reportType'] = 'weekly'): WeeklyReport => ({
   id: `week_${Date.now()}`,
+  reportType,
   userId: profile.uid,
   name: profile.name,
   nim: '',
@@ -718,8 +719,49 @@ const createEmptyReport = (profile: UserProfile, week = '1'): WeeklyReport => ({
   signerName: profile.name,
   signerNim: '',
   entries: [
-    { id: `entry_${Date.now()}_1`, dayNumber: '1', dateText: '', activityName: '', activityTime: '', evidenceUrl: '' },
+    { id: `entry_${Date.now()}_1`, dayNumber: '1', dateText: '', activityName: '', activityTime: '', evidenceUrl: '', responsibleName: '' },
   ],
+});
+
+const isGroupMatrixReport = (report: WeeklyReport) =>
+  report.reportType === 'matrix' || (report.division === 'sekretaris' && report.entries.some((entry) => Boolean(entry.responsibleName)));
+
+const isIndividualMatrixReport = (report: WeeklyReport) => report.reportType === 'individualMatrix';
+const isMatrixReport = (report: WeeklyReport) => isGroupMatrixReport(report) || isIndividualMatrixReport(report);
+const isTreasurerOutputReport = (report: WeeklyReport) => report.reportType === 'treasurerOutput';
+const isCustomTableReport = (report: WeeklyReport) => isMatrixReport(report) || isTreasurerOutputReport(report);
+
+const getReportFilePrefix = (report: WeeklyReport) => {
+  if (isGroupMatrixReport(report)) return 'Matriks_Program_Kerja_Kelompok';
+  if (isIndividualMatrixReport(report)) return 'Matriks_Program_Kerja_Individu';
+  if (isTreasurerOutputReport(report)) return 'Laporan_Luaran_Bendahara';
+  return `Laporan_Mingguan_Minggu_${sanitizeFilePart(report.week)}`;
+};
+
+const parseCurrencyValue = (value: string) => {
+  const normalized = value.replace(/[^\d,-]/g, '').replace(/\./g, '').replace(',', '.');
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : 0;
+};
+
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0,
+  }).format(value);
+
+const getTreasurerOutputTotal = (entries: WeeklyReportEntry[]) =>
+  entries.reduce((total, entry) => total + parseCurrencyValue(entry.responsibleName || ''), 0);
+
+const createEmptyReportEntry = (index: number): WeeklyReportEntry => ({
+  id: `entry_${Date.now()}_${index}`,
+  dayNumber: String(index),
+  dateText: '',
+  activityName: '',
+  activityTime: '',
+  evidenceUrl: '',
+  responsibleName: '',
 });
 
 const getNextReportWeek = (reports: WeeklyReport[]) => {
@@ -815,7 +857,7 @@ const downloadReportTemplatePdf = async (report: WeeklyReport) => {
       pdf.addImage(imageData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
     }
 
-    pdf.save(`Laporan_Mingguan_Minggu_${sanitizeFilePart(report.week)}_${sanitizeFilePart(report.name)}_${getDownloadTimestamp()}.pdf`);
+    pdf.save(`${getReportFilePrefix(report)}_${sanitizeFilePart(report.name)}_${getDownloadTimestamp()}.pdf`);
   } finally {
     root.unmount();
     host.remove();
@@ -1354,12 +1396,14 @@ const generateWeeklyReportPdf = async (report: WeeklyReport) => {
     });
   });
 
-  pdf.save(`Laporan_Mingguan_Minggu_${sanitizeFilePart(report.week)}_${sanitizeFilePart(report.name)}_${getDownloadTimestamp()}.pdf`);
+  pdf.save(`${getReportFilePrefix(report)}_${sanitizeFilePart(report.name)}_${getDownloadTimestamp()}.pdf`);
 };
 
 const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfile; onLogout: () => void; onClose?: () => void }) => {
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const isSecretary = profile.division === 'sekretaris';
+  const isTreasurer = profile.division === 'bendahara';
   const closeNav = () => setIsNavOpen(false);
 
   const scrollToSection = (id: string) => {
@@ -1396,8 +1440,45 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
   const [printReport, setPrintReport] = useState<WeeklyReport | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
   const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+  const [aiChatInput, setAiChatInput] = useState('');
+  const [aiChatSending, setAiChatSending] = useState(false);
+  const [aiChatHost, setAiChatHost] = useState<HTMLElement | null>(null);
+  const [aiChatMessages, setAiChatMessages] = useState<{ role: 'assistant' | 'user'; text: string }[]>([
+    {
+      role: 'assistant',
+      text: 'Halo, saya PUTRA AI STUDIO. Tanyakan apa yang ingin kamu bantu susun untuk laporan KKN.',
+    },
+  ]);
+  const editingIsGroupMatrix = isGroupMatrixReport(editing);
+  const editingIsIndividualMatrix = isIndividualMatrixReport(editing);
+  const editingIsMatrix = isMatrixReport(editing);
+  const editingIsTreasurerOutput = isTreasurerOutputReport(editing);
 
   useEffect(() => storage.subscribeWeeklyReports(profile.uid, setReports), [profile.uid]);
+
+  useEffect(() => {
+    const host = document.createElement('div');
+    host.id = 'putra-ai-chat-root';
+    host.style.setProperty('position', 'fixed', 'important');
+    host.style.setProperty('right', '24px', 'important');
+    host.style.setProperty('bottom', '72px', 'important');
+    host.style.setProperty('z-index', '2147483647', 'important');
+    host.style.setProperty('display', 'flex', 'important');
+    host.style.setProperty('flex-direction', 'column', 'important');
+    host.style.setProperty('align-items', 'flex-end', 'important');
+    host.style.setProperty('visibility', 'visible', 'important');
+    host.style.setProperty('opacity', '1', 'important');
+    host.style.setProperty('pointer-events', 'auto', 'important');
+    host.style.setProperty('transform', 'none', 'important');
+    document.body.appendChild(host);
+    setAiChatHost(host);
+
+    return () => {
+      setAiChatHost(null);
+      host.remove();
+    };
+  }, []);
 
   // Sync to localStorage instantly whenever editing changes
   useEffect(() => {
@@ -1415,7 +1496,10 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
 
     const timer = setTimeout(async () => {
       try {
-        await storage.saveWeeklyReport(editing);
+        await storage.saveWeeklyReport({
+          ...editing,
+          reportType: isGroupMatrixReport(editing) ? 'matrix' : isIndividualMatrixReport(editing) ? 'individualMatrix' : isTreasurerOutputReport(editing) ? 'treasurerOutput' : 'weekly',
+        });
         setAutoSaveStatus('saved');
       } catch (err) {
         console.error('Firebase auto-save error:', err);
@@ -1436,17 +1520,32 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
   const addEntry = () => {
     setEditing((current) => ({
       ...current,
-      entries: [
-        ...current.entries,
-        { id: `entry_${Date.now()}`, dayNumber: String(current.entries.length + 1), dateText: '', activityName: '', activityTime: '', evidenceUrl: '' },
-      ],
+      entries: [...current.entries, createEmptyReportEntry(current.entries.length + 1)],
     }));
+  };
+
+  const createNewReport = (reportType: WeeklyReport['reportType'] = 'weekly') => {
+    const label =
+      reportType === 'matrix'
+        ? 'matriks kelompok baru'
+        : reportType === 'individualMatrix'
+          ? 'matriks individu baru'
+          : reportType === 'treasurerOutput'
+            ? 'laporan luaran baru'
+            : 'laporan mingguan baru';
+    if (window.confirm(`Buat ${label}? Laporan saat ini tidak akan hilang.`)) {
+      setEditing(createEmptyReport(profile, getNextReportWeek([...reports, editing]), reportType));
+      setAutoSaveStatus('idle');
+    }
   };
 
   const saveReport = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
-    await storage.saveWeeklyReport(editing);
+    await storage.saveWeeklyReport({
+      ...editing,
+      reportType: editingIsGroupMatrix ? 'matrix' : editingIsIndividualMatrix ? 'individualMatrix' : editingIsTreasurerOutput ? 'treasurerOutput' : 'weekly',
+    });
     setAutoSaveStatus('saved');
     setSaving(false);
   };
@@ -1488,6 +1587,78 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     } finally {
       setDownloadingPdf(null);
       setPdfGenerating(false);
+    }
+  };
+
+  const submitAiChat = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const question = aiChatInput.trim();
+    if (!question || aiChatSending) return;
+
+    const nextMessages = [...aiChatMessages, { role: 'user' as const, text: question }];
+    setAiChatMessages(nextMessages);
+    setAiChatInput('');
+    setAiChatSending(true);
+
+    try {
+      const token = await auth.currentUser?.getIdToken().catch(() => '');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        model: 'PutraAi-V1',
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const response = await fetch(getPutraAiProxyUrl(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: 'PutraAi-V1',
+          message: question,
+          prompt: question,
+          history: aiChatMessages.map((message) => ({
+            role: message.role === 'assistant' ? 'model' : 'user',
+            text: message.text,
+          })),
+          messages: nextMessages.map((message) => ({
+            role: message.role,
+            content: message.text,
+          })),
+          context: {
+            app: 'Dashboard KKN',
+            assistant: 'PUTRA AI STUDIO',
+            division: getDivisionLabel(profile.division),
+            userName: profile.name,
+            currentReportType: editing.reportType || 'weekly',
+            currentWeek: editing.week,
+          },
+        }),
+      });
+
+      const rawText = await response.text();
+      let payload: unknown = rawText;
+      try {
+        payload = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        payload = rawText;
+      }
+
+      const answer = extractPutraAiText(payload).trim();
+      if (!response.ok || !answer) {
+        throw new Error(`PUTRA AI proxy failed with status ${response.status}`);
+      }
+
+      setAiChatMessages((current) => [...current, { role: 'assistant', text: answer }]);
+    } catch (err) {
+      console.error('PUTRA AI STUDIO proxy error:', err);
+      setAiChatMessages((current) => [
+        ...current,
+        {
+          role: 'assistant',
+          text: 'Koneksi ke PUTRA AI STUDIO belum berhasil. Pastikan proxy PUTRA_AI_V1_API_URL aktif, lalu coba kirim pertanyaan lagi.',
+        },
+      ]);
+    } finally {
+      setAiChatSending(false);
     }
   };
 
@@ -1580,9 +1751,109 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     )
     : null;
 
+  const aiChatWidget = aiChatHost
+    ? createPortal(
+      <>
+        <style>{`
+          #putra-ai-chat-root {
+            position: fixed !important;
+            right: 24px !important;
+            bottom: 72px !important;
+            z-index: 2147483647 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-end !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            transform: none !important;
+            pointer-events: auto !important;
+          }
+        `}</style>
+        <div
+          id="putra-ai-chat-widget"
+          style={{
+            pointerEvents: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+          }}
+        >
+          {isAiChatOpen && (
+            <div className="mb-4 w-[calc(100vw-2.5rem)] max-w-sm overflow-hidden rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white dark:bg-[#0f1322] shadow-2xl shadow-slate-950/20">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 px-4 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-m-blue to-emerald-400 text-white flex items-center justify-center shadow-sm">
+                    <MessageSquare size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-black text-sm text-slate-900 dark:text-white leading-tight">PUTRA AI STUDIO</h3>
+                    <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-300">Tanyakan ke AI</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAiChatOpen(false)}
+                  className="rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
+                  aria-label="Tutup chat PUTRA AI STUDIO"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="max-h-72 space-y-3 overflow-y-auto px-4 py-4 bg-slate-50/80 dark:bg-slate-950/30">
+                {aiChatMessages.map((message, index) => (
+                  <div key={`${message.role}_${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${message.role === 'user'
+                          ? 'bg-m-blue text-white'
+                          : 'bg-white dark:bg-[#151a2d] text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-800'
+                        }`}
+                    >
+                      {message.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <form onSubmit={submitAiChat} className="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f1322] p-3">
+                <input
+                  value={aiChatInput}
+                  onChange={(event) => setAiChatInput(event.target.value)}
+                  placeholder={aiChatSending ? 'PUTRA AI sedang menjawab...' : 'Tulis pertanyaan...'}
+                  disabled={aiChatSending}
+                  className="min-w-0 flex-1 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 disabled:cursor-not-allowed disabled:opacity-70"
+                />
+                <button
+                  type="submit"
+                  disabled={aiChatSending || !aiChatInput.trim()}
+                  className="h-10 w-10 rounded-full bg-m-blue text-white flex items-center justify-center hover:bg-m-blue-dark transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label="Kirim pertanyaan"
+                >
+                  <Send size={17} />
+                </button>
+              </form>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsAiChatOpen((current) => !current)}
+            className="ml-auto h-14 w-14 rounded-full bg-gradient-to-tr from-m-blue to-emerald-400 text-white flex items-center justify-center shadow-2xl shadow-m-blue/40 ring-4 ring-white/80 dark:ring-slate-950/80 hover:scale-105 active:scale-95 transition-transform"
+            aria-label="Buka chat PUTRA AI STUDIO"
+            title="PUTRA AI STUDIO"
+          >
+            <MessageSquare size={24} />
+          </button>
+        </div>
+      </>,
+      aiChatHost
+    )
+    : null;
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white">
       {mobileNavDrawer}
+      {aiChatWidget}
       <header className="no-print sticky top-0 z-20 border-b border-slate-200/60 dark:border-slate-800/60 bg-white/90 dark:bg-[#0f1322]/90 backdrop-blur px-4 md:px-8 py-3.5 flex flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button
@@ -1642,31 +1913,58 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
           )}
         </nav>
 
-        <div className="flex items-center gap-3 bg-slate-50 dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-full pl-2 pr-3 py-1.5 shadow-sm hover:shadow transition-all duration-200 shrink-0">
-          <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-m-blue to-blue-500 text-white flex items-center justify-center font-bold text-sm shadow-sm select-none shrink-0">
-            {profile.name ? profile.name[0].toUpperCase() : 'U'}
+        <div className="flex items-center gap-2.5 shrink-0">
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="lg:hidden flex items-center gap-1.5 text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-3 py-2 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              title="Kembali ke Web"
+            >
+              <ArrowLeft size={14} />
+              <span>Kembali</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-3 bg-slate-50 dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-full pl-2 pr-3 py-1.5 shadow-sm hover:shadow transition-all duration-200 shrink-0">
+            <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-m-blue to-blue-500 text-white flex items-center justify-center font-bold text-sm shadow-sm select-none shrink-0">
+              {profile.name ? profile.name[0].toUpperCase() : 'U'}
+            </div>
+            <div className="hidden sm:block text-left max-w-[150px] md:max-w-[200px] overflow-hidden">
+              <p className="text-xs font-bold leading-tight text-slate-800 dark:text-slate-200 truncate">{profile.name}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight truncate mt-0.5">{profile.email}</p>
+            </div>
+            <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block mx-1"></div>
+            <button
+              onClick={onLogout}
+              className="text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 p-1.5 rounded-full transition-all duration-200 cursor-pointer"
+              title="Keluar"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
-          <div className="hidden sm:block text-left max-w-[150px] md:max-w-[200px] overflow-hidden">
-            <p className="text-xs font-bold leading-tight text-slate-800 dark:text-slate-200 truncate">{profile.name}</p>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight truncate mt-0.5">{profile.email}</p>
-          </div>
-          <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block mx-1"></div>
-          <button
-            onClick={onLogout}
-            className="text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 p-1.5 rounded-full transition-all duration-200"
-            title="Keluar"
-          >
-            <LogOut size={16} />
-          </button>
         </div>
       </header>
 
       <main className="no-print p-4 md:p-8 flex flex-col lg:grid lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_400px] gap-6">
         <form id="form-laporan" onSubmit={saveReport} className="order-2 lg:order-1 bg-white dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm hover:shadow-md transition-all duration-200">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/60 pb-5">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h2 className="text-xl font-bold tracking-tight">Isi Laporan</h2>
+          <div className="grid gap-5 border-b border-slate-100 dark:border-slate-800/60 pb-5">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0 max-w-2xl">
+                <h2 className="text-2xl font-black tracking-tight leading-tight text-slate-900 dark:text-white">
+                  {editingIsTreasurerOutput ? 'Isi Laporan Luaran' : editingIsGroupMatrix ? 'Isi Matriks Program Kerja Kelompok' : editingIsIndividualMatrix ? 'Isi Matriks Program Kerja Individu' : 'Isi Laporan Mingguan'}
+                </h2>
+                <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                  {editingIsTreasurerOutput
+                    ? 'Khusus bendahara: data ini masuk ke tabel luaran belanja dan total otomatis dijumlahkan.'
+                    : editingIsGroupMatrix
+                      ? 'Khusus sekretaris: data ini masuk ke format matrik program kerja kelompok.'
+                      : editingIsIndividualMatrix
+                        ? 'Data ini masuk ke format matrik program kerja individu sesuai bidang keilmuan.'
+                        : 'Data ini akan masuk ke template laporan mingguan PDF A4 secara langsung.'}
+                </p>
+              </div>
+              <div className="flex min-h-[32px] items-start xl:justify-end">
                 {autoSaveStatus === 'saving' && (
                   <span className="text-[11px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-3 py-1 rounded-full font-bold animate-pulse inline-flex items-center">
                     Menyimpan otomatis...
@@ -1678,23 +1976,45 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Data ini akan masuk ke template PDF A4 secara langsung.</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {isSecretary && (
+                <button
+                  type="button"
+                  onClick={() => createNewReport('matrix')}
+                  className="min-h-[44px] rounded-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-5 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 border border-emerald-200/60 dark:border-emerald-800/60"
+                >
+                  <Plus size={16} />
+                  Matriks Kelompok Baru
+                </button>
+              )}
+              {isTreasurer && (
+                <button
+                  type="button"
+                  onClick={() => createNewReport('treasurerOutput')}
+                  className="min-h-[44px] rounded-full bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-5 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 border border-amber-200/60 dark:border-amber-800/60"
+                >
+                  <Plus size={16} />
+                  Laporan Luaran Baru
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm('Buat laporan baru? Laporan saat ini tidak akan hilang.')) {
-                    setEditing(createEmptyReport(profile, getNextReportWeek([...reports, editing])));
-                    setAutoSaveStatus('idle');
-                  }
-                }}
-                className="rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-5 py-2.5 text-xs md:text-sm font-bold flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 border border-transparent dark:border-slate-700/60"
+                onClick={() => createNewReport('individualMatrix')}
+                className="min-h-[44px] rounded-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-5 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 border border-emerald-200/60 dark:border-emerald-800/60"
               >
                 <Plus size={16} />
-                Laporan Baru
+                Matriks Individu Baru
               </button>
-              <button className="rounded-full bg-m-blue hover:bg-m-blue-dark text-white px-6 py-2.5 text-xs md:text-sm font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-sm shadow-m-blue/15">
+              <button
+                type="button"
+                onClick={() => createNewReport('weekly')}
+                className="min-h-[44px] rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-5 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 border border-transparent dark:border-slate-700/60"
+              >
+                <Plus size={16} />
+                Laporan Mingguan Baru
+              </button>
+              <button className="min-h-[44px] rounded-full bg-m-blue hover:bg-m-blue-dark text-white px-6 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 shadow-sm shadow-m-blue/15">
                 <Save size={18} />
                 {saving ? 'Menyimpan...' : 'Simpan Sekarang'}
               </button>
@@ -1709,6 +2029,12 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             <Field label="Desa/Kelurahan" value={editing.desa} onChange={(value) => setEditing({ ...editing, desa: value })} />
             <Field label="Kecamatan" value={editing.kecamatan} onChange={(value) => setEditing({ ...editing, kecamatan: value })} />
             <Field label="Kode DPL" value={editing.kodeDpl} onChange={(value) => setEditing({ ...editing, kodeDpl: value })} />
+            {editingIsMatrix && (
+              <>
+                <Field label={editingIsGroupMatrix ? 'Nama Ketua Kelompok' : 'Nama Mahasiswa'} value={editing.signerName} onChange={(value) => setEditing({ ...editing, signerName: value })} />
+                <Field label={editingIsGroupMatrix ? 'NIM Ketua Kelompok' : 'NIM Mahasiswa'} value={editing.signerNim} onChange={(value) => setEditing({ ...editing, signerNim: value })} />
+              </>
+            )}
             <div className="block">
               <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 transition-colors">
                 Tanggal Tanda Tangan
@@ -1742,7 +2068,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
 
           <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800/60">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="font-bold text-lg tracking-tight">Kegiatan Mingguan</h3>
+              <h3 className="font-bold text-lg tracking-tight">{editingIsTreasurerOutput ? 'Tabel Luaran Bendahara' : editingIsGroupMatrix ? 'Matriks Program Kerja Kelompok' : editingIsIndividualMatrix ? 'Matriks Program Kerja Individu' : 'Kegiatan Mingguan'}</h3>
               <button
                 type="button"
                 onClick={addEntry}
@@ -1754,118 +2080,148 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             </div>
             <div className="space-y-4">
               {editing.entries.map((entry) => (
-                <div key={entry.id} className="relative grid md:grid-cols-[100px_1fr_1fr] gap-5 bg-slate-50/50 dark:bg-[#151a2d]/30 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 p-5 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200">
-                  <Field label="Hari Ke" value={entry.dayNumber} onChange={(value) => updateEntry(entry.id, { dayNumber: value })} />
-                  <div className="block">
-                    <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 transition-colors">
-                      Hari, Tanggal, Bulan, Tahun
-                    </span>
-                    <input
-                      type="date"
-                      value={parseIndonesianDateToIso(entry.dateText)}
-                      onChange={(event) => {
-                        const dateVal = event.target.value;
-                        if (dateVal) {
-                          const formatted = formatIndonesianDate(dateVal);
-                          updateEntry(entry.id, { dateText: formatted });
-                        }
-                      }}
-                      onKeyDown={(event) => event.preventDefault()}
-                      onPaste={(event) => event.preventDefault()}
-                      onClick={(event) => {
-                        (event.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
-                      }}
-                      className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200 dark:[color-scheme:dark]"
-                    />
-                    {entry.dateText && (
-                      <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium italic">
-                        {entry.dateText}
-                      </p>
-                    )}
+                editingIsTreasurerOutput ? (
+                  <div key={entry.id} className="relative space-y-5 bg-slate-50/50 dark:bg-[#151a2d]/30 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 p-5 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200">
+                    <div className="grid gap-5 md:grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)]">
+                      <Field label="No" value={entry.dayNumber} onChange={(value) => updateEntry(entry.id, { dayNumber: value })} />
+                      <Field label="Tanggal" value={entry.dateText} onChange={(value) => updateEntry(entry.id, { dateText: value })} />
+                      <Field label="Barang Dibeli" value={entry.activityName} onChange={(value) => updateEntry(entry.id, { activityName: value })} />
+                    </div>
+                    <div className="grid gap-5 md:grid-cols-3">
+                      <Field label="Deskripsi" rows={3} value={entry.activityTime} onChange={(value) => updateEntry(entry.id, { activityTime: value })} />
+                      <Field label="Perunit" value={entry.evidenceUrl} onChange={(value) => updateEntry(entry.id, { evidenceUrl: value })} />
+                      <Field label="Harga" value={entry.responsibleName || ''} onChange={(value) => updateEntry(entry.id, { responsibleName: value })} />
+                    </div>
                   </div>
-                  <div className="block">
-                    <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 transition-colors">
-                      Waktu Kegiatan
-                    </span>
-                    <select
-                      value={getSelectedTimeOption(entry.activityTime)}
-                      onChange={(event) => {
-                        const val = event.target.value;
-                        if (val === 'custom') {
-                          updateEntry(entry.id, { activityTime: '08:00 - 10:00 WIB' });
-                        } else {
-                          updateEntry(entry.id, { activityTime: val });
-                        }
-                      }}
-                      className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200"
-                    >
-                      <option value="">-- Pilih Waktu --</option>
-                      {STANDARD_TIMES.map((time) => (
-                        <option key={time} value={time}>{time}</option>
-                      ))}
-                      <option value="custom">Kustom (Ketik Manual)</option>
-                    </select>
-                    {getSelectedTimeOption(entry.activityTime) === 'custom' && (
-                      <input
-                        type="text"
-                        value={entry.activityTime}
-                        onChange={(event) => updateEntry(entry.id, { activityTime: event.target.value })}
-                        placeholder="Contoh: 08:00 - 10:00 WIB"
-                        className="w-full mt-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200"
-                      />
-                    )}
-                  </div>
-                  <div className="md:col-span-2">
-                    <Field label="Nama Kegiatan" rows={3} value={entry.activityName} onChange={(value) => updateEntry(entry.id, { activityName: value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Upload Bukti Foto/Screenshot
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <label className="flex-1 block rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 cursor-pointer hover:border-m-blue transition-colors text-center shadow-sm">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={async (event) => {
-                            const file = event.target.files?.[0];
-                            if (!file) return;
-                            try {
-                              const dataUrl = await fileToImageDataUrl(file);
-                              updateEntry(entry.id, { evidenceUrl: dataUrl });
-                            } catch (err: any) {
-                              alert(err?.message || 'Gagal mengupload gambar');
-                            } finally {
-                              event.target.value = '';
-                            }
-                          }}
-                          className="sr-only"
-                        />
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          {entry.evidenceUrl ? 'Ganti Gambar' : 'Pilih Gambar'}
-                        </span>
-                      </label>
-                      {entry.evidenceUrl && (
-                        <button
-                          type="button"
-                          onClick={() => updateEntry(entry.id, { evidenceUrl: '' })}
-                          className="rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 px-3 py-2 text-xs font-bold border border-red-200 dark:border-red-800/60 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors"
-                        >
-                          Hapus
-                        </button>
+                ) : editingIsMatrix ? (
+                  <div key={entry.id} className="relative space-y-5 bg-slate-50/50 dark:bg-[#151a2d]/30 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 p-5 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200">
+                    <div className="grid gap-5 md:grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)]">
+                      <Field label="No" value={entry.dayNumber} onChange={(value) => updateEntry(entry.id, { dayNumber: value })} />
+                      <Field label="Nama Kegiatan" rows={3} value={entry.activityName} onChange={(value) => updateEntry(entry.id, { activityName: value })} />
+                      <Field label="Tujuan Kegiatan" rows={3} value={entry.dateText} onChange={(value) => updateEntry(entry.id, { dateText: value })} />
+                    </div>
+                    <div className={`grid gap-5 ${editingIsGroupMatrix ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+                      <Field label="Sasaran Kegiatan" rows={3} value={entry.activityTime} onChange={(value) => updateEntry(entry.id, { activityTime: value })} />
+                      <Field label="Jadwal Kegiatan" rows={3} value={entry.evidenceUrl} onChange={(value) => updateEntry(entry.id, { evidenceUrl: value })} />
+                      {editingIsGroupMatrix && (
+                        <Field label="Penanggung Jawab" rows={3} value={entry.responsibleName || ''} onChange={(value) => updateEntry(entry.id, { responsibleName: value })} />
                       )}
                     </div>
-                    {entry.evidenceUrl && (
-                      <div className="mt-2 relative group overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900">
-                        <img
-                          src={entry.evidenceUrl}
-                          alt="Preview bukti"
-                          className="h-24 w-full object-contain p-1"
-                        />
-                      </div>
-                    )}
                   </div>
-                </div>
+                ) : (
+                  <div key={entry.id} className="relative grid md:grid-cols-[100px_1fr_1fr] gap-5 bg-slate-50/50 dark:bg-[#151a2d]/30 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 p-5 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200">
+                    <Field label="Hari Ke" value={entry.dayNumber} onChange={(value) => updateEntry(entry.id, { dayNumber: value })} />
+                    <div className="block">
+                      <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 transition-colors">
+                        Hari, Tanggal, Bulan, Tahun
+                      </span>
+                      <input
+                        type="date"
+                        value={parseIndonesianDateToIso(entry.dateText)}
+                        onChange={(event) => {
+                          const dateVal = event.target.value;
+                          if (dateVal) {
+                            const formatted = formatIndonesianDate(dateVal);
+                            updateEntry(entry.id, { dateText: formatted });
+                          }
+                        }}
+                        onKeyDown={(event) => event.preventDefault()}
+                        onPaste={(event) => event.preventDefault()}
+                        onClick={(event) => {
+                          (event.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+                        }}
+                        className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200 dark:[color-scheme:dark]"
+                      />
+                      {entry.dateText && (
+                        <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium italic">
+                          {entry.dateText}
+                        </p>
+                      )}
+                    </div>
+                    <div className="block">
+                      <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 transition-colors">
+                        Waktu Kegiatan
+                      </span>
+                      <select
+                        value={getSelectedTimeOption(entry.activityTime)}
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          if (val === 'custom') {
+                            updateEntry(entry.id, { activityTime: '08:00 - 10:00 WIB' });
+                          } else {
+                            updateEntry(entry.id, { activityTime: val });
+                          }
+                        }}
+                        className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200"
+                      >
+                        <option value="">-- Pilih Waktu --</option>
+                        {STANDARD_TIMES.map((time) => (
+                          <option key={time} value={time}>{time}</option>
+                        ))}
+                        <option value="custom">Kustom (Ketik Manual)</option>
+                      </select>
+                      {getSelectedTimeOption(entry.activityTime) === 'custom' && (
+                        <input
+                          type="text"
+                          value={entry.activityTime}
+                          onChange={(event) => updateEntry(entry.id, { activityTime: event.target.value })}
+                          placeholder="Contoh: 08:00 - 10:00 WIB"
+                          className="w-full mt-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200"
+                        />
+                      )}
+                    </div>
+                    <div className="md:col-span-2">
+                      <Field label="Nama Kegiatan" rows={3} value={entry.activityName} onChange={(value) => updateEntry(entry.id, { activityName: value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Upload Bukti Foto/Screenshot
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <label className="flex-1 block rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 cursor-pointer hover:border-m-blue transition-colors text-center shadow-sm">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                const dataUrl = await fileToImageDataUrl(file);
+                                updateEntry(entry.id, { evidenceUrl: dataUrl });
+                              } catch (err: any) {
+                                alert(err?.message || 'Gagal mengupload gambar');
+                              } finally {
+                                event.target.value = '';
+                              }
+                            }}
+                            className="sr-only"
+                          />
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                            {entry.evidenceUrl ? 'Ganti Gambar' : 'Pilih Gambar'}
+                          </span>
+                        </label>
+                        {entry.evidenceUrl && (
+                          <button
+                            type="button"
+                            onClick={() => updateEntry(entry.id, { evidenceUrl: '' })}
+                            className="rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 px-3 py-2 text-xs font-bold border border-red-200 dark:border-red-800/60 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors"
+                          >
+                            Hapus
+                          </button>
+                        )}
+                      </div>
+                      {entry.evidenceUrl && (
+                        <div className="mt-2 relative group overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900">
+                          <img
+                            src={entry.evidenceUrl}
+                            alt="Preview bukti"
+                            className="h-24 w-full object-contain p-1"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
               ))}
             </div>
           </div>
@@ -1873,14 +2229,16 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
 
         <aside className="order-1 lg:order-2 space-y-6">
           <div id="laporan-tersimpan" className="bg-white dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-2xl p-5 md:p-6 shadow-sm space-y-4">
-            <h2 className="font-bold text-lg tracking-tight border-b border-slate-100 dark:border-slate-800/60 pb-3">Laporan Tersimpan</h2>
+            <h2 className="font-bold text-lg tracking-tight border-b border-slate-100 dark:border-slate-800/60 pb-3">Dokumen Tersimpan</h2>
             <div className="space-y-3">
               {reports.map((report) => (
                 <div key={report.id} className="bg-slate-50/60 dark:bg-[#151a2d]/40 rounded-xl border border-slate-100 dark:border-slate-800/80 p-4 hover:bg-slate-100/60 dark:hover:bg-[#151a2d]/80 transition-all duration-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-black text-slate-800 dark:text-white">Minggu {report.week}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{report.entries.length} baris kegiatan</p>
+                      <p className="font-black text-slate-800 dark:text-white">
+                        {isTreasurerOutputReport(report) ? `Laporan Luaran ${report.week}` : isGroupMatrixReport(report) ? `Matriks Kelompok ${report.week}` : isIndividualMatrixReport(report) ? `Matriks Individu ${report.week}` : `Minggu ${report.week}`}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{report.entries.length} baris {isTreasurerOutputReport(report) ? 'luaran' : isMatrixReport(report) ? 'program kerja' : 'kegiatan'}</p>
                     </div>
                   </div>
                   <div className="mt-3.5 grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1992,6 +2350,19 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
         .dark input[type="time"]::-webkit-calendar-picker-indicator {
           filter: invert(1) !important;
         }
+        #putra-ai-chat-widget {
+          position: fixed !important;
+          right: 24px !important;
+          bottom: 72px !important;
+          z-index: 2147483647 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: flex-end !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          transform: none !important;
+          pointer-events: auto !important;
+        }
       `}</style>
     </div>
   );
@@ -2002,11 +2373,17 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
   const previewScale = 0.43;
   const pageWidth = `${A4_WIDTH_MM}mm`;
   const pageHeight = `${A4_HEIGHT_MM}mm`;
+  const groupMatrixTemplate = isGroupMatrixReport(report);
+  const individualMatrixTemplate = isIndividualMatrixReport(report);
+  const treasurerOutputTemplate = isTreasurerOutputReport(report);
+  const matrixTemplate = isMatrixReport(report);
+  const customTableTemplate = matrixTemplate || treasurerOutputTemplate;
+  const entriesPerPage = customTableTemplate ? 5 : 4;
   const entries = report?.entries?.length
     ? report.entries
-    : [{ id: 'empty', dayNumber: report?.week || '1', dateText: '', activityName: '', activityTime: '', evidenceUrl: '' }];
+    : [{ id: 'empty', dayNumber: report?.week || '1', dateText: '', activityName: '', activityTime: '', evidenceUrl: '', responsibleName: '' }];
   const pages = entries.reduce<WeeklyReportEntry[][]>((acc, entry, index) => {
-    const pageIndex = Math.floor(index / 4);
+    const pageIndex = Math.floor(index / entriesPerPage);
     acc[pageIndex] = [...(acc[pageIndex] || []), entry];
     return acc;
   }, []);
@@ -2103,16 +2480,35 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
                   />
                   {pageIndex === 0 && (
                     <h3 className="mt-[1.5mm] text-[11px] font-bold uppercase leading-[1.25] text-black">
-                      Laporan Mingguan (Logbook)<br />
-                      KKN Reguler - Angkatan Ke 66<br />
-                      Universitas Muhammadiyah Palembang<br />
-                      Tahun 2026<br />
-                      Buku Profil dan Potensi Desa
+                      {treasurerOutputTemplate ? (
+                        <>
+                          LAPORAN LUARAN BENDAHARA<br />
+                          KKN REGULER ANGKATAN KE 66 TAHUN 2026
+                        </>
+                      ) : matrixTemplate ? (
+                        <>
+                          FORMAT MATRIK <span className="bg-[#00ff66] px-[1mm]">{groupMatrixTemplate ? 'PROGRAM KERJA KELOMPOK' : 'PROGRAM KERJA INDIVIDU'}</span> MAHASISWA KKN
+                          {individualMatrixTemplate && (
+                            <>
+                              <br />
+                              DISESUAIKAN DENGAN BIDANG KEILMUAN MASING-MASING
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          Laporan Mingguan (Logbook)<br />
+                          KKN Reguler - Angkatan Ke 66<br />
+                          Universitas Muhammadiyah Palembang<br />
+                          Tahun 2026<br />
+                          Buku Profil dan Potensi Desa
+                        </>
+                      )}
                     </h3>
                   )}
                 </div>
 
-                {pageIndex === 0 && (
+                {pageIndex === 0 && !customTableTemplate && (
                   <>
                     <div className="mt-[1.5mm] py-[0.5px] text-[11px] font-normal leading-[1.3] uppercase text-black" style={{ fontFamily: "'Aptos Display', Aptos, sans-serif" }}>
                       <div className="flex flex-col gap-[1.2px] py-[0.5px] w-full mb-[0.2mm]">
@@ -2146,69 +2542,173 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
                   </>
                 )}
 
-                <table className={`${pageIndex === 0 ? 'mt-[1.5mm]' : 'mt-[3mm]'} w-full border-collapse text-[11px] leading-tight table-fixed text-black`}>
-                  <colgroup>
-                    <col style={{ width: '7.2%' }} />
-                    <col style={{ width: '21.5%' }} />
-                    <col style={{ width: '34%' }} />
-                    <col style={{ width: '37.3%' }} />
-                  </colgroup>
-                  {pageIndex === 0 && (
+                {treasurerOutputTemplate ? (
+                  <table className="mt-[5mm] w-full border-collapse text-[10px] leading-tight table-fixed text-black">
+                    <colgroup>
+                      <col style={{ width: '7%' }} />
+                      <col style={{ width: '15%' }} />
+                      <col style={{ width: '24%' }} />
+                      <col style={{ width: '25%' }} />
+                      <col style={{ width: '13%' }} />
+                      <col style={{ width: '16%' }} />
+                    </colgroup>
                     <thead>
-                      <tr style={{ fontFamily: "'Aptos Display', Aptos, sans-serif", fontSize: '11px', fontWeight: 'bold', lineHeight: '1.3' }}>
-                        {([
-                          ['Hari', 'ke'],
-                          ['Hari, Tanggal,', 'Bulan, Tahun'],
-                          ['Nama Kegiatan', 'Waktu Kegiatan'],
-                          ['Bukti Foto dan Screenshot Flash', 'Video Kegiatan'],
-                        ] as [string, string][]).map(([line1, line2], i) => (
-                          <th key={i} style={{ border: '1px solid black', padding: 0, fontWeight: 'bold' }}>
-                            <div style={{
-                              minHeight: '9mm',
-                              width: '100%',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              textAlign: 'center',
-                              padding: '1mm 2px 2mm',
-                              boxSizing: 'border-box',
-                            }}>
-                              <span>{line1}</span>
-                              <span>{line2}</span>
-                            </div>
-                          </th>
+                      <tr style={{ fontFamily: "'Aptos Display', Aptos, sans-serif", fontWeight: 'bold' }}>
+                        {['No', 'Tanggal', 'Barang Dibeli', 'Deskripsi', 'Perunit', 'Harga'].map((heading) => (
+                          <th key={heading} className="border border-black px-1 py-2 text-center align-middle">{heading}</th>
                         ))}
                       </tr>
                     </thead>
-                  )}
-                  <tbody>
-                    {pageEntries.map((entry, index) => (
-                      <tr key={entry.id} className="align-top">
-                        <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[32mm]' : 'h-[22mm]'}`}>{entry.dayNumber}.</td>
-                        <td className="border border-black px-1 py-2 whitespace-pre-wrap">{entry.dateText}</td>
-                        <td className="border border-black px-1 py-2 whitespace-pre-wrap">
-                          {entry.activityName}
-                          {entry.activityTime && <><br /><br />{entry.activityTime}</>}
-                        </td>
-                        <td className="border border-black px-1 py-2">
-                          {(/^https?:\/\/.+\.(png|jpg|jpeg|webp)$/i.test(entry.evidenceUrl) || /^data:image\//i.test(entry.evidenceUrl)) ? (
-                            <img src={entry.evidenceUrl} alt="Bukti kegiatan" className={`${index === 0 ? 'max-h-[26mm]' : 'max-h-[16mm]'} w-full object-contain`} />
-                          ) : (
-                            <span className="break-all">{entry.evidenceUrl}</span>
-                          )}
-                        </td>
+                    <tbody>
+                      {pageEntries.map((entry) => (
+                        <tr key={entry.id} className="align-top">
+                          <td className="border border-black px-1 py-3 text-center align-top h-[18mm]">{entry.dayNumber}</td>
+                          <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.dateText}</td>
+                          <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.activityName}</td>
+                          <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.activityTime}</td>
+                          <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.evidenceUrl}</td>
+                          <td className="border border-black px-1 py-3 whitespace-pre-wrap text-right">{entry.responsibleName}</td>
+                        </tr>
+                      ))}
+                      {pageIndex === pages.length - 1 && (
+                        <tr>
+                          <td colSpan={5} className="border border-black px-2 py-2 text-right font-bold">Jumlah</td>
+                          <td className="border border-black px-2 py-2 text-right font-bold">{formatRupiah(getTreasurerOutputTotal(entries))}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                ) : matrixTemplate ? (
+                  <table className="mt-[5mm] w-full border-collapse text-[10px] leading-tight table-fixed text-black">
+                    <colgroup>
+                      {groupMatrixTemplate ? (
+                        <>
+                          <col style={{ width: '7%' }} />
+                          <col style={{ width: '24%' }} />
+                          <col style={{ width: '19%' }} />
+                          <col style={{ width: '20%' }} />
+                          <col style={{ width: '16%' }} />
+                          <col style={{ width: '14%' }} />
+                        </>
+                      ) : (
+                        <>
+                          <col style={{ width: '7%' }} />
+                          <col style={{ width: '25%' }} />
+                          <col style={{ width: '22%' }} />
+                          <col style={{ width: '25%' }} />
+                          <col style={{ width: '21%' }} />
+                        </>
+                      )}
+                    </colgroup>
+                    <thead>
+                      <tr style={{ fontFamily: "'Aptos Display', Aptos, sans-serif", fontWeight: 'bold' }}>
+                        {(groupMatrixTemplate
+                          ? ['No', 'Nama Kegiatan', 'Tujuan Kegiatan', 'Sasaran Kegiatan', 'Jadwal Kegiatan', 'Penanggung Jawab Kegiatan']
+                          : ['No', 'Nama Kegiatan', 'Tujuan Kegiatan', 'Sasaran Kegiatan', 'Jadwal Kegiatan']
+                        ).map((heading) => (
+                          <th key={heading} className="border border-black px-1 py-2 text-center align-middle">{heading}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {pageEntries.map((entry) => (
+                        <tr key={entry.id} className="align-top">
+                          <td className="border border-black px-1 py-3 text-center align-top h-[20mm]">{entry.dayNumber}</td>
+                          <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.activityName}</td>
+                          <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.dateText}</td>
+                          <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.activityTime}</td>
+                          <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.evidenceUrl}</td>
+                          {groupMatrixTemplate && <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.responsibleName}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className={`${pageIndex === 0 ? 'mt-[1.5mm]' : 'mt-[3mm]'} w-full border-collapse text-[11px] leading-tight table-fixed text-black`}>
+                    <colgroup>
+                      <col style={{ width: '7.2%' }} />
+                      <col style={{ width: '21.5%' }} />
+                      <col style={{ width: '34%' }} />
+                      <col style={{ width: '37.3%' }} />
+                    </colgroup>
+                    {pageIndex === 0 && (
+                      <thead>
+                        <tr style={{ fontFamily: "'Aptos Display', Aptos, sans-serif", fontSize: '11px', fontWeight: 'bold', lineHeight: '1.3' }}>
+                          {([
+                            ['Hari', 'ke'],
+                            ['Hari, Tanggal,', 'Bulan, Tahun'],
+                            ['Nama Kegiatan', 'Waktu Kegiatan'],
+                            ['Bukti Foto dan Screenshot Flash', 'Video Kegiatan'],
+                          ] as [string, string][]).map(([line1, line2], i) => (
+                            <th key={i} style={{ border: '1px solid black', padding: 0, fontWeight: 'bold' }}>
+                              <div style={{
+                                minHeight: '9mm',
+                                width: '100%',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                textAlign: 'center',
+                                padding: '1mm 2px 2mm',
+                                boxSizing: 'border-box',
+                              }}>
+                                <span>{line1}</span>
+                                <span>{line2}</span>
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                    )}
+                    <tbody>
+                      {pageEntries.map((entry, index) => (
+                        <tr key={entry.id} className="align-top">
+                          <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[32mm]' : 'h-[22mm]'}`}>{entry.dayNumber}.</td>
+                          <td className="border border-black px-1 py-2 whitespace-pre-wrap">{entry.dateText}</td>
+                          <td className="border border-black px-1 py-2 whitespace-pre-wrap">
+                            {entry.activityName}
+                            {entry.activityTime && <><br /><br />{entry.activityTime}</>}
+                          </td>
+                          <td className="border border-black px-1 py-2">
+                            {(/^https?:\/\/.+\.(png|jpg|jpeg|webp)$/i.test(entry.evidenceUrl) || /^data:image\//i.test(entry.evidenceUrl)) ? (
+                              <img src={entry.evidenceUrl} alt="Bukti kegiatan" className={`${index === 0 ? 'max-h-[26mm]' : 'max-h-[16mm]'} w-full object-contain`} />
+                            ) : (
+                              <span className="break-all">{entry.evidenceUrl}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
 
                 {pageIndex === pages.length - 1 && (
-                  <div className="mt-[8mm] ml-auto w-[60mm] text-center text-[9px]">
-                    <p>{report.desa || 'Desa/Kelurahan'}, {report.villageDate || '................'} 2026</p>
-                    <div className="h-[18mm]"></div>
-                    <p>({report.signerName || 'Nama'} &nbsp; {report.signerNim || 'NIM'})</p>
-                  </div>
+                  customTableTemplate ? (
+                    <div className="mt-[10mm] grid grid-cols-3 text-[9px] text-black">
+                      <div>
+                        <p>Dosen Pembimbing Lapangan</p>
+                        <div className="h-[18mm]"></div>
+                        <p>(Nama Lengkap dan gelar)</p>
+                        <p>NIDN dan NBM</p>
+                      </div>
+                      <div className="text-center">
+                        <p>Mengetahui,</p>
+                      </div>
+                      <div>
+                        <p>{report.desa || 'Palembang'}, &nbsp;&nbsp; {report.villageDate || 'Juli'} 2026</p>
+                        <p className="mt-[6mm]">{groupMatrixTemplate ? 'Ketua Kelompok' : 'Mahasiswa'}</p>
+                        <div className="h-[12mm]"></div>
+                        <p>({report.signerName || 'Nama Lengkap'})</p>
+                        <p>{report.signerNim || (groupMatrixTemplate ? 'NIM' : 'NIM.')}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-[8mm] ml-auto w-[60mm] text-center text-[9px]">
+                      <p>{report.desa || 'Desa/Kelurahan'}, {report.villageDate || '................'} 2026</p>
+                      <div className="h-[18mm]"></div>
+                      <p>({report.signerName || 'Nama'} &nbsp; {report.signerNim || 'NIM'})</p>
+                    </div>
+                  )
                 )}
 
                 <div
@@ -2239,11 +2739,17 @@ const ReportTemplate = ({
   const fontFamily = "'Arial Narrow', Arial, sans-serif";
   const pageWidth = `${A4_WIDTH_PX}px`;
   const pageHeight = `${A4_HEIGHT_PX}px`;
+  const groupMatrixTemplate = isGroupMatrixReport(report);
+  const individualMatrixTemplate = isIndividualMatrixReport(report);
+  const treasurerOutputTemplate = isTreasurerOutputReport(report);
+  const matrixTemplate = isMatrixReport(report);
+  const customTableTemplate = matrixTemplate || treasurerOutputTemplate;
+  const entriesPerPage = customTableTemplate ? 5 : 4;
   const entries = report.entries.length
     ? report.entries
-    : [{ id: 'empty', dayNumber: report.week || '1', dateText: '', activityName: '', activityTime: '', evidenceUrl: '' }];
+    : [{ id: 'empty', dayNumber: report.week || '1', dateText: '', activityName: '', activityTime: '', evidenceUrl: '', responsibleName: '' }];
   const pages = entries.reduce<WeeklyReportEntry[][]>((acc, entry, index) => {
-    const pageIndex = Math.floor(index / 4);
+    const pageIndex = Math.floor(index / entriesPerPage);
     acc[pageIndex] = [...(acc[pageIndex] || []), entry];
     return acc;
   }, []);
@@ -2321,16 +2827,35 @@ const ReportTemplate = ({
                 />
                 {pageIndex === 0 && (
                   <h3 className="mt-[1.5mm] text-[11px] font-bold uppercase leading-[1.25] text-black">
-                    Laporan Mingguan (Logbook)<br />
-                    KKN Reguler - Angkatan Ke 66<br />
-                    Universitas Muhammadiyah Palembang<br />
-                    Tahun 2026<br />
-                    Buku Profil dan Potensi Desa
+                    {treasurerOutputTemplate ? (
+                      <>
+                        LAPORAN LUARAN BENDAHARA<br />
+                        KKN REGULER ANGKATAN KE 66 TAHUN 2026
+                      </>
+                    ) : matrixTemplate ? (
+                      <>
+                        FORMAT MATRIK <span className="bg-[#00ff66] px-[1mm]">{groupMatrixTemplate ? 'PROGRAM KERJA KELOMPOK' : 'PROGRAM KERJA INDIVIDU'}</span> MAHASISWA KKN
+                        {individualMatrixTemplate && (
+                          <>
+                            <br />
+                            DISESUAIKAN DENGAN BIDANG KEILMUAN MASING-MASING
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        Laporan Mingguan (Logbook)<br />
+                        KKN Reguler - Angkatan Ke 66<br />
+                        Universitas Muhammadiyah Palembang<br />
+                        Tahun 2026<br />
+                        Buku Profil dan Potensi Desa
+                      </>
+                    )}
                   </h3>
                 )}
               </div>
 
-              {pageIndex === 0 && (
+              {pageIndex === 0 && !customTableTemplate && (
                 <>
                   <div className="mt-[1.5mm] py-[0.5px] text-[11px] font-normal leading-[1.3] uppercase text-black" style={{ fontFamily: "'Aptos Display', Aptos, sans-serif" }}>
                     <div className="flex flex-col gap-[1.2px] py-[0.5px] w-full mb-[0.2mm]">
@@ -2364,69 +2889,173 @@ const ReportTemplate = ({
                 </>
               )}
 
-              <table className={`${pageIndex === 0 ? 'mt-[1.5mm]' : 'mt-[3mm]'} w-full border-collapse text-[11px] leading-tight table-fixed text-black`}>
-                <colgroup>
-                  <col style={{ width: '7.2%' }} />
-                  <col style={{ width: '21.5%' }} />
-                  <col style={{ width: '34%' }} />
-                  <col style={{ width: '37.3%' }} />
-                </colgroup>
-                {pageIndex === 0 && (
+              {treasurerOutputTemplate ? (
+                <table className="mt-[5mm] w-full border-collapse text-[10px] leading-tight table-fixed text-black">
+                  <colgroup>
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '15%' }} />
+                    <col style={{ width: '24%' }} />
+                    <col style={{ width: '25%' }} />
+                    <col style={{ width: '13%' }} />
+                    <col style={{ width: '16%' }} />
+                  </colgroup>
                   <thead>
-                    <tr style={{ fontFamily: "'Aptos Display', Aptos, sans-serif", fontSize: '11px', fontWeight: 'bold', lineHeight: '1.3' }}>
-                      {([
-                        ['Hari', 'ke'],
-                        ['Hari, Tanggal,', 'Bulan, Tahun'],
-                        ['Nama Kegiatan', 'Waktu Kegiatan'],
-                        ['Bukti Foto dan Screenshot Flash', 'Video Kegiatan'],
-                      ] as [string, string][]).map(([line1, line2], i) => (
-                        <th key={i} style={{ border: '1px solid black', padding: 0, fontWeight: 'bold' }}>
-                          <div style={{
-                            minHeight: '9mm',
-                            width: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            textAlign: 'center',
-                            padding: '1mm 2px 2mm',
-                            boxSizing: 'border-box',
-                          }}>
-                            <span>{line1}</span>
-                            <span>{line2}</span>
-                          </div>
-                        </th>
+                    <tr style={{ fontFamily: "'Aptos Display', Aptos, sans-serif", fontWeight: 'bold' }}>
+                      {['No', 'Tanggal', 'Barang Dibeli', 'Deskripsi', 'Perunit', 'Harga'].map((heading) => (
+                        <th key={heading} className="border border-black px-1 py-2 text-center align-middle">{heading}</th>
                       ))}
                     </tr>
                   </thead>
-                )}
-                <tbody>
-                  {pageEntries.map((entry, index) => (
-                    <tr key={entry.id} className="align-top">
-                      <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[32mm]' : 'h-[22mm]'}`}>{entry.dayNumber}.</td>
-                      <td className="border border-black px-1 py-2 whitespace-pre-wrap">{entry.dateText}</td>
-                      <td className="border border-black px-1 py-2 whitespace-pre-wrap">
-                        {entry.activityName}
-                        {entry.activityTime && <><br /><br />{entry.activityTime}</>}
-                      </td>
-                      <td className="border border-black px-1 py-2">
-                        {(/^https?:\/\/.+\.(png|jpg|jpeg|webp)$/i.test(entry.evidenceUrl) || /^data:image\//i.test(entry.evidenceUrl)) ? (
-                          <img src={entry.evidenceUrl} alt="Bukti kegiatan" className={`${index === 0 ? 'max-h-[26mm]' : 'max-h-[16mm]'} w-full object-contain`} />
-                        ) : (
-                          <span className="break-all">{entry.evidenceUrl}</span>
-                        )}
-                      </td>
+                  <tbody>
+                    {pageEntries.map((entry) => (
+                      <tr key={entry.id} className="align-top">
+                        <td className="border border-black px-1 py-3 text-center align-top h-[18mm]">{entry.dayNumber}</td>
+                        <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.dateText}</td>
+                        <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.activityName}</td>
+                        <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.activityTime}</td>
+                        <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.evidenceUrl}</td>
+                        <td className="border border-black px-1 py-3 whitespace-pre-wrap text-right">{entry.responsibleName}</td>
+                      </tr>
+                    ))}
+                    {pageIndex === pages.length - 1 && (
+                      <tr>
+                        <td colSpan={5} className="border border-black px-2 py-2 text-right font-bold">Jumlah</td>
+                        <td className="border border-black px-2 py-2 text-right font-bold">{formatRupiah(getTreasurerOutputTotal(entries))}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              ) : matrixTemplate ? (
+                <table className="mt-[5mm] w-full border-collapse text-[10px] leading-tight table-fixed text-black">
+                  <colgroup>
+                    {groupMatrixTemplate ? (
+                      <>
+                        <col style={{ width: '7%' }} />
+                        <col style={{ width: '24%' }} />
+                        <col style={{ width: '19%' }} />
+                        <col style={{ width: '20%' }} />
+                        <col style={{ width: '16%' }} />
+                        <col style={{ width: '14%' }} />
+                      </>
+                    ) : (
+                      <>
+                        <col style={{ width: '7%' }} />
+                        <col style={{ width: '25%' }} />
+                        <col style={{ width: '22%' }} />
+                        <col style={{ width: '25%' }} />
+                        <col style={{ width: '21%' }} />
+                      </>
+                    )}
+                  </colgroup>
+                  <thead>
+                    <tr style={{ fontFamily: "'Aptos Display', Aptos, sans-serif", fontWeight: 'bold' }}>
+                      {(groupMatrixTemplate
+                        ? ['No', 'Nama Kegiatan', 'Tujuan Kegiatan', 'Sasaran Kegiatan', 'Jadwal Kegiatan', 'Penanggung Jawab Kegiatan']
+                        : ['No', 'Nama Kegiatan', 'Tujuan Kegiatan', 'Sasaran Kegiatan', 'Jadwal Kegiatan']
+                      ).map((heading) => (
+                        <th key={heading} className="border border-black px-1 py-2 text-center align-middle">{heading}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {pageEntries.map((entry) => (
+                      <tr key={entry.id} className="align-top">
+                        <td className="border border-black px-1 py-3 text-center align-top h-[20mm]">{entry.dayNumber}</td>
+                        <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.activityName}</td>
+                        <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.dateText}</td>
+                        <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.activityTime}</td>
+                        <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.evidenceUrl}</td>
+                        {groupMatrixTemplate && <td className="border border-black px-1 py-3 whitespace-pre-wrap">{entry.responsibleName}</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <table className={`${pageIndex === 0 ? 'mt-[1.5mm]' : 'mt-[3mm]'} w-full border-collapse text-[11px] leading-tight table-fixed text-black`}>
+                  <colgroup>
+                    <col style={{ width: '7.2%' }} />
+                    <col style={{ width: '21.5%' }} />
+                    <col style={{ width: '34%' }} />
+                    <col style={{ width: '37.3%' }} />
+                  </colgroup>
+                  {pageIndex === 0 && (
+                    <thead>
+                      <tr style={{ fontFamily: "'Aptos Display', Aptos, sans-serif", fontSize: '11px', fontWeight: 'bold', lineHeight: '1.3' }}>
+                        {([
+                          ['Hari', 'ke'],
+                          ['Hari, Tanggal,', 'Bulan, Tahun'],
+                          ['Nama Kegiatan', 'Waktu Kegiatan'],
+                          ['Bukti Foto dan Screenshot Flash', 'Video Kegiatan'],
+                        ] as [string, string][]).map(([line1, line2], i) => (
+                          <th key={i} style={{ border: '1px solid black', padding: 0, fontWeight: 'bold' }}>
+                            <div style={{
+                              minHeight: '9mm',
+                              width: '100%',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              textAlign: 'center',
+                              padding: '1mm 2px 2mm',
+                              boxSizing: 'border-box',
+                            }}>
+                              <span>{line1}</span>
+                              <span>{line2}</span>
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                  )}
+                  <tbody>
+                    {pageEntries.map((entry, index) => (
+                      <tr key={entry.id} className="align-top">
+                        <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[32mm]' : 'h-[22mm]'}`}>{entry.dayNumber}.</td>
+                        <td className="border border-black px-1 py-2 whitespace-pre-wrap">{entry.dateText}</td>
+                        <td className="border border-black px-1 py-2 whitespace-pre-wrap">
+                          {entry.activityName}
+                          {entry.activityTime && <><br /><br />{entry.activityTime}</>}
+                        </td>
+                        <td className="border border-black px-1 py-2">
+                          {(/^https?:\/\/.+\.(png|jpg|jpeg|webp)$/i.test(entry.evidenceUrl) || /^data:image\//i.test(entry.evidenceUrl)) ? (
+                            <img src={entry.evidenceUrl} alt="Bukti kegiatan" className={`${index === 0 ? 'max-h-[26mm]' : 'max-h-[16mm]'} w-full object-contain`} />
+                          ) : (
+                            <span className="break-all">{entry.evidenceUrl}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
 
               {pageIndex === pages.length - 1 && (
-                <div className="mt-[8mm] ml-auto w-[60mm] text-center text-[9px]">
-                  <p>{report.desa || 'Desa/Kelurahan'}, {report.villageDate || '................'} 2026</p>
-                  <div className="h-[18mm]"></div>
-                  <p>({report.signerName || 'Nama'} &nbsp; {report.signerNim || 'NIM'})</p>
-                </div>
+                customTableTemplate ? (
+                  <div className="mt-[10mm] grid grid-cols-3 text-[9px] text-black">
+                    <div>
+                      <p>Dosen Pembimbing Lapangan</p>
+                      <div className="h-[18mm]"></div>
+                      <p>(Nama Lengkap dan gelar)</p>
+                      <p>NIDN dan NBM</p>
+                    </div>
+                    <div className="text-center">
+                      <p>Mengetahui,</p>
+                    </div>
+                    <div>
+                      <p>{report.desa || 'Palembang'}, &nbsp;&nbsp; {report.villageDate || 'Juli'} 2026</p>
+                      <p className="mt-[6mm]">{groupMatrixTemplate ? 'Ketua Kelompok' : 'Mahasiswa'}</p>
+                      <div className="h-[12mm]"></div>
+                      <p>({report.signerName || 'Nama Lengkap'})</p>
+                      <p>{report.signerNim || (groupMatrixTemplate ? 'NIM' : 'NIM.')}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-[8mm] ml-auto w-[60mm] text-center text-[9px]">
+                    <p>{report.desa || 'Desa/Kelurahan'}, {report.villageDate || '................'} 2026</p>
+                    <div className="h-[18mm]"></div>
+                    <p>({report.signerName || 'Nama'} &nbsp; {report.signerNim || 'NIM'})</p>
+                  </div>
+                )
               )}
 
               <div
@@ -2713,9 +3342,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
       {/* Navigation Drawer (Sidebar) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-[#0f1322] border-r border-slate-200/60 dark:border-slate-800/60 p-6 flex flex-col justify-between overflow-y-auto shrink-0 transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-[#0f1322] border-r border-slate-200/60 dark:border-slate-800/60 p-6 flex flex-col justify-between overflow-y-auto shrink-0 transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <div>
           {/* Drawer Header */}
@@ -2755,11 +3383,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     setActiveTab(item.id);
                     setIsSidebarOpen(false); // Close drawer on mobile
                   }}
-                  className={`w-full rounded-full px-5 py-3 text-sm font-bold flex items-center justify-between transition-all ${
-                    selected
+                  className={`w-full rounded-full px-5 py-3 text-sm font-bold flex items-center justify-between transition-all ${selected
                       ? 'bg-[#e8f0fe] text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff]'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#151c30]'
-                  }`}
+                    }`}
                 >
                   <span className="flex items-center gap-3.5">
                     <Icon size={18} />
@@ -2800,8 +3427,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
       {/* Main Content Area */}
       <main className="flex-1 min-h-0 md:h-full flex flex-col overflow-hidden">
-        {/* Google Style Sticky App Bar */}
-        <header className="sticky top-0 z-30 bg-white/80 dark:bg-[#0f1322]/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-800/50 px-6 py-4 flex items-center justify-between gap-4 shrink-0">
+        {/* Google Style Fixed/Sticky App Bar */}
+        <header className="fixed top-0 left-0 right-0 md:sticky md:relative md:left-auto md:right-auto z-30 bg-white/80 dark:bg-[#0f1322]/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-800/50 px-6 py-4 flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={(e) => {
@@ -2821,10 +3448,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="hidden sm:flex items-center gap-2 text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
+              className="flex items-center gap-1.5 text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-3 py-2 sm:px-4 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              title="Kembali ke Web"
             >
               <ArrowLeft size={14} />
-              Kembali ke Web
+              <span>Kembali</span>
+              <span className="hidden sm:inline"> ke Web</span>
             </button>
             <div className="h-8 w-8 rounded-full bg-m-blue/10 dark:bg-m-blue/20 text-m-blue dark:text-[#7fcfff] flex items-center justify-center font-bold text-sm border border-m-blue/20 select-none">
               {adminUser ? adminUser[0].toUpperCase() : 'A'}
@@ -2832,307 +3461,463 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           </div>
         </header>
 
+        {/* Spacer for fixed header on mobile */}
+        <div className="h-[68px] shrink-0 md:hidden" />
+
         {/* Scrollable Content Container */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8">
           {activeTab === 'overview' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-3xl font-black tracking-tight">Monitoring Website</h2>
-                <p className="text-slate-500 dark:text-slate-400 mt-1">Data realtime dari Firebase Realtime Database.</p>
+            <div className="space-y-8">
+
+              {/* Page Header */}
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Dashboard</p>
+                  <h2 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">Monitoring Website</h2>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1.5 text-sm">Data realtime dari Firebase Realtime Database.</p>
+                </div>
+                <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                  Live
+                </div>
               </div>
 
-              {/* Google Style Stats Grid */}
-              <div className="grid sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-                {stats.map((stat) => {
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3">
+                {stats.map((stat, i) => {
                   const Icon = stat.icon;
+                  const colors = [
+                    { bg: 'rgba(59,130,246,0.12)', icon: '#60a5fa', glow: 'rgba(59,130,246,0.20)' },
+                    { bg: 'rgba(168,85,247,0.12)', icon: '#c084fc', glow: 'rgba(168,85,247,0.20)' },
+                    { bg: 'rgba(20,184,166,0.12)', icon: '#2dd4bf', glow: 'rgba(20,184,166,0.20)' },
+                    { bg: 'rgba(245,158,11,0.12)', icon: '#fbbf24', glow: 'rgba(245,158,11,0.20)' },
+                    { bg: 'rgba(239,68,68,0.12)', icon: '#f87171', glow: 'rgba(239,68,68,0.20)' },
+                    { bg: 'rgba(34,197,94,0.12)', icon: '#4ade80', glow: 'rgba(34,197,94,0.20)' },
+                  ];
+                  const c = colors[i % colors.length];
+                  const hasAlert = stat.value > 0 && (stat.label === 'Ulasan Pending' || stat.label === 'Pesan Baru');
                   return (
                     <div
                       key={stat.label}
-                      className="bg-white dark:bg-[#0f1322] border border-slate-100 dark:border-slate-800/80 rounded-2xl p-5 hover:shadow-md transition-all duration-200 flex items-center gap-4"
+                      className="relative rounded-2xl p-5 transition-all duration-300 hover:-translate-y-0.5 overflow-hidden group"
+                      style={{
+                        background: 'linear-gradient(145deg,rgba(255,255,255,0.06) 0%,rgba(255,255,255,0.02) 100%)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+                        backdropFilter: 'blur(12px)',
+                      }}
                     >
-                      <div className="h-12 w-12 rounded-xl bg-m-blue/10 dark:bg-m-blue/20 text-m-blue dark:text-[#7fcfff] flex items-center justify-center shrink-0">
-                        <Icon size={22} />
-                      </div>
-                      <div>
-                        <div className="text-2xl font-black tracking-tight">{stat.value}</div>
-                        <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{stat.label}</div>
+                      {/* Glow bg */}
+                      <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        style={{ background: `radial-gradient(circle at 30% 50%, ${c.glow} 0%, transparent 70%)` }} />
+
+                      <div className="relative z-10">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
+                            style={{ background: c.bg, color: c.icon, boxShadow: `0 0 16px ${c.glow}` }}>
+                            <Icon size={20} />
+                          </div>
+                          {hasAlert && (
+                            <span className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)] mt-1" />
+                          )}
+                        </div>
+                        <div className="text-3xl font-black tracking-tight text-white">{stat.value}</div>
+                        <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mt-1">{stat.label}</div>
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-            <div className="grid lg:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5">
-                <h3 className="font-bold mb-4">Event Aktif</h3>
-                <p className="text-xl font-black">{eventContent.title}</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{formatDateTimeDisplay(eventContent.date)}</p>
-                <p className="text-sm text-slate-600 dark:text-slate-300 mt-3">{eventContent.location}</p>
-              </div>
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5">
-                <h3 className="font-bold mb-4">Pesan Terbaru</h3>
-                {messages.slice(0, 4).map((message) => (
-                  <div key={message.id} className="py-3 border-t border-slate-100 dark:border-slate-800 first:border-t-0">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-bold text-sm">{message.name}</p>
-                      <span className="text-xs text-slate-400">{message.status === 'unread' ? 'Baru' : 'Dibaca'}</span>
+              {/* Bottom Cards */}
+              <div className="grid lg:grid-cols-5 gap-4">
+                {/* Event Aktif — wider */}
+                <div
+                  className="lg:col-span-2 rounded-2xl p-6 relative overflow-hidden"
+                  style={{
+                    background: 'linear-gradient(145deg,rgba(59,130,246,0.18) 0%,rgba(37,99,235,0.08) 100%)',
+                    border: '1px solid rgba(59,130,246,0.20)',
+                    boxShadow: '0 4px 28px rgba(59,130,246,0.12)',
+                  }}
+                >
+                  <div className="absolute top-0 right-0 w-40 h-40 rounded-full opacity-10"
+                    style={{ background: 'radial-gradient(circle, #3b82f6 0%, transparent 70%)', transform: 'translate(30%, -30%)' }} />
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-4">
+                      <CalendarClock size={15} className="text-blue-400" />
+                      <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Event Aktif</span>
                     </div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{message.message}</p>
+                    <p className="text-xl font-black text-white leading-tight">{eventContent.title || '—'}</p>
+                    <p className="text-sm text-blue-300/80 mt-2 font-medium">{formatDateTimeDisplay(eventContent.date)}</p>
+                    <div className="mt-4 flex items-center gap-2 text-slate-300 text-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      {eventContent.location || 'Lokasi belum diatur'}
+                    </div>
                   </div>
-                ))}
-                {messages.length === 0 && <p className="text-sm text-slate-500">Belum ada pesan masuk.</p>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'accounts' && (
-          <AccountManager profiles={userProfiles} />
-        )}
-
-        {activeTab === 'content' && (
-          <div className="space-y-6 max-w-5xl">
-            <Header title="Konten Website" action={saveSite} saving={saving} />
-            <div className="grid lg:grid-cols-2 gap-4">
-              <Panel title="Hero">
-                <Field label="Badge" value={siteContent.heroBadge} onChange={(value) => setSiteContent({ ...siteContent, heroBadge: value })} />
-                <Field label="Judul" value={siteContent.heroTitle} onChange={(value) => setSiteContent({ ...siteContent, heroTitle: value })} />
-                <Field label="Highlight Judul" value={siteContent.heroHighlight} onChange={(value) => setSiteContent({ ...siteContent, heroHighlight: value })} />
-                <Field label="Subtitle" rows={3} value={siteContent.heroSubtitle} onChange={(value) => setSiteContent({ ...siteContent, heroSubtitle: value })} />
-                <ImageField label="Gambar Hero" value={siteContent.heroImage} onChange={(value) => setSiteContent({ ...siteContent, heroImage: value })} />
-              </Panel>
-              <Panel title="Tentang & Visi">
-                <Field label="Judul Tentang" value={siteContent.aboutTitle} onChange={(value) => setSiteContent({ ...siteContent, aboutTitle: value })} />
-                <Field label="Highlight Tentang" value={siteContent.aboutHighlight} onChange={(value) => setSiteContent({ ...siteContent, aboutHighlight: value })} />
-                <Field label="Deskripsi" rows={3} value={siteContent.aboutDescription} onChange={(value) => setSiteContent({ ...siteContent, aboutDescription: value })} />
-                <Field label="Detail" rows={3} value={siteContent.aboutDetail} onChange={(value) => setSiteContent({ ...siteContent, aboutDetail: value })} />
-                <ImageField label="Gambar Tentang" value={siteContent.aboutImage} onChange={(value) => setSiteContent({ ...siteContent, aboutImage: value })} />
-                <Field label="Poin Highlight, pisahkan dengan enter" rows={4} value={siteContent.aboutHighlights.join('\n')} onChange={(value) => setSiteContent({ ...siteContent, aboutHighlights: value.split('\n').filter(Boolean) })} />
-                <Field label="Visi" value={siteContent.visionTitle} onChange={(value) => setSiteContent({ ...siteContent, visionTitle: value })} />
-                <Field label="Deskripsi Visi" rows={2} value={siteContent.visionDescription} onChange={(value) => setSiteContent({ ...siteContent, visionDescription: value })} />
-              </Panel>
-              <Panel title="Profil Desa">
-                <Field label="Judul Profil Desa" value={siteContent.villageTitle} onChange={(value) => setSiteContent({ ...siteContent, villageTitle: value })} />
-                <Field label="Deskripsi Profil Desa" rows={2} value={siteContent.villageDescription} onChange={(value) => setSiteContent({ ...siteContent, villageDescription: value })} />
-                <Field label="Gambaran Umum" rows={4} value={siteContent.villageOverview} onChange={(value) => setSiteContent({ ...siteContent, villageOverview: value })} />
-                <Field label="Google Maps Embed URL" rows={3} value={siteContent.villageMapUrl} onChange={(value) => setSiteContent({ ...siteContent, villageMapUrl: value })} />
-              </Panel>
-              <Panel title="Kontak">
-                <Field label="Alamat" rows={2} value={siteContent.contactAddress} onChange={(value) => setSiteContent({ ...siteContent, contactAddress: value })} />
-                <Field label="Email" value={siteContent.contactEmail} onChange={(value) => setSiteContent({ ...siteContent, contactEmail: value })} />
-                <Field label="Instagram" value={siteContent.contactInstagram} onChange={(value) => setSiteContent({ ...siteContent, contactInstagram: value })} />
-                <Field label="WhatsApp" value={siteContent.contactWhatsapp} onChange={(value) => setSiteContent({ ...siteContent, contactWhatsapp: value })} />
-              </Panel>
-              <Panel title="Video Dokumentasi">
-                <Field label="Judul Video" value={siteContent.videoTitle} onChange={(value) => setSiteContent({ ...siteContent, videoTitle: value })} />
-                <Field label="Subtitle Video" value={siteContent.videoSubtitle} onChange={(value) => setSiteContent({ ...siteContent, videoSubtitle: value })} />
-                <Field label="Deskripsi Section" rows={2} value={siteContent.videoDescription} onChange={(value) => setSiteContent({ ...siteContent, videoDescription: value })} />
-                <ImageField label="Poster Video" value={siteContent.videoPoster} onChange={(value) => setSiteContent({ ...siteContent, videoPoster: value })} />
-                <VideoField label="File Video Base64" value={siteContent.videoSrc} onChange={(value) => setSiteContent({ ...siteContent, videoSrc: value })} />
-              </Panel>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'maintenance' && (
-          <div className="space-y-6 max-w-3xl">
-            <Header title="Maintenance Website" action={saveMaintenance} saving={saving} />
-            <Panel title="Status Halaman Publik">
-              <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-4">
-                <div>
-                  <span className="block font-black text-slate-900 dark:text-white">Aktifkan halaman maintenance</span>
-                  <span className="block text-sm text-slate-500 dark:text-slate-400 mt-1">
-                    Saat aktif, pengunjung akan diarahkan ke halaman status sesuai jadwal.
-                  </span>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={siteContent.maintenanceEnabled}
-                  onChange={(event) => setSiteContent({ ...siteContent, maintenanceEnabled: event.target.checked })}
-                  className="h-5 w-5 accent-m-blue"
-                />
-              </label>
 
-              <Field
-                label="Judul Halaman"
-                value={siteContent.maintenanceTitle}
-                onChange={(value) => setSiteContent({ ...siteContent, maintenanceTitle: value })}
-              />
-              <Field
-                label="Pesan Halaman"
-                rows={3}
-                value={siteContent.maintenanceMessage}
-                onChange={(value) => setSiteContent({ ...siteContent, maintenanceMessage: value })}
-              />
+                {/* Pesan Terbaru — wider */}
+                <div
+                  className="lg:col-span-3 rounded-2xl p-6 relative overflow-hidden"
+                  style={{
+                    background: 'linear-gradient(145deg,rgba(255,255,255,0.05) 0%,rgba(255,255,255,0.02) 100%)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: '0 4px 28px rgba(0,0,0,0.16)',
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-2">
+                      <Mail size={15} className="text-slate-400" />
+                      <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Pesan Terbaru</span>
+                    </div>
+                    {unreadMessages > 0 && (
+                      <span className="rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold px-2.5 py-0.5 border border-blue-500/30">
+                        {unreadMessages} baru
+                      </span>
+                    )}
+                  </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <DateField
-                  label="Tanggal Mulai"
-                  value={getEventDateInputValue(siteContent.maintenanceStart).date}
-                  onChange={(value) => setSiteContent({ ...siteContent, maintenanceStart: setEventDatePart(siteContent.maintenanceStart, 'date', value) })}
-                />
-                <Field
-                  label="Jam Mulai"
-                  type="time"
-                  value={getEventDateInputValue(siteContent.maintenanceStart).time}
-                  onChange={(value) => setSiteContent({ ...siteContent, maintenanceStart: setEventDatePart(siteContent.maintenanceStart, 'time', value) })}
-                />
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <DateField
-                  label="Tanggal Selesai"
-                  value={getEventDateInputValue(siteContent.maintenanceEnd).date}
-                  onChange={(value) => setSiteContent({ ...siteContent, maintenanceEnd: setEventDatePart(siteContent.maintenanceEnd, 'date', value) })}
-                />
-                <Field
-                  label="Jam Selesai"
-                  type="time"
-                  value={getEventDateInputValue(siteContent.maintenanceEnd).time}
-                  onChange={(value) => setSiteContent({ ...siteContent, maintenanceEnd: setEventDatePart(siteContent.maintenanceEnd, 'time', value) })}
-                />
-              </div>
-
-              <div className="rounded-lg bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
-                Mulai: <span className="font-bold">{formatDateTimeDisplay(siteContent.maintenanceStart)}</span>
-                <br />
-                Selesai: <span className="font-bold">{formatDateTimeDisplay(siteContent.maintenanceEnd)}</span>
-              </div>
-            </Panel>
-          </div>
-        )}
-
-        {activeTab === 'event' && (
-          <div className="space-y-6 max-w-3xl">
-            <Header title="Event & Countdown" action={saveEvent} saving={saving} />
-            <Panel title="Data Event">
-              <Field label="Nama Event" value={eventContent.title} onChange={(value) => setEventContent({ ...eventContent, title: value })} />
-              <Field label="Deskripsi" rows={3} value={eventContent.description} onChange={(value) => setEventContent({ ...eventContent, description: value })} />
-              <div className="grid sm:grid-cols-2 gap-4">
-                <DateField
-                  label="Tanggal"
-                  value={getEventDateInputValue(eventContent.date).date}
-                  onChange={(value) => setEventContent({ ...eventContent, date: setEventDatePart(eventContent.date, 'date', value) })}
-                />
-                <Field
-                  label="Jam"
-                  type="time"
-                  value={getEventDateInputValue(eventContent.date).time}
-                  onChange={(value) => setEventContent({ ...eventContent, date: setEventDatePart(eventContent.date, 'time', value) })}
-                />
-              </div>
-              <Field label="Lokasi" value={eventContent.location} onChange={(value) => setEventContent({ ...eventContent, location: value })} />
-              <Field label="Peserta" value={eventContent.audience} onChange={(value) => setEventContent({ ...eventContent, audience: value })} />
-              <ImageField label="Gambar Event" value={eventContent.image} onChange={(value) => setEventContent({ ...eventContent, image: value })} />
-            </Panel>
-          </div>
-        )}
-
-        {(['team', 'programs', 'gallery', 'testimonials'] as EditableType[]).includes(activeTab as EditableType) && (
-          <ListManager
-            type={activeTab as EditableType}
-            data={{ team, programs, gallery, testimonials }[activeTab as EditableType]}
-            onAdd={() => setEditing({ type: activeTab as EditableType, item: emptyItem(activeTab as EditableType) })}
-            onEdit={(item) => setEditing({ type: activeTab as EditableType, item })}
-            onDelete={(id) => deleteItem(activeTab as EditableType, id)}
-          />
-        )}
-
-        {activeTab === 'reviews' && (
-          <div className="space-y-4">
-            <div>
-              <h1 className="text-3xl font-black">Verifikasi Ulasan</h1>
-              <p className="text-slate-500 dark:text-slate-400">Ulasan dari pengunjung baru tampil setelah disetujui.</p>
-            </div>
-
-            <div className="grid gap-3">
-              {reviewSubmissions.map((review) => (
-                <div key={review.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5">
-                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                    <div className="flex gap-4">
-                      {review.avatar ? (
-                        <img src={review.avatar} alt={review.name} className="h-12 w-12 rounded-full object-cover bg-slate-100 dark:bg-slate-800" />
-                      ) : (
-                        <div className="h-12 w-12 rounded-full bg-m-blue/10 text-m-blue flex items-center justify-center font-black">
-                          {review.name.slice(0, 1).toUpperCase()}
+                  {messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-6 text-slate-500">
+                      <Mail size={28} className="mb-2 opacity-30" />
+                      <p className="text-sm">Belum ada pesan masuk.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {messages.slice(0, 4).map((message) => (
+                        <div key={message.id}
+                          className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl transition-colors duration-150 hover:bg-white/5">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500/30 to-purple-500/20 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                              {message.name.slice(0, 1).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-sm text-white truncate">{message.name}</p>
+                              <p className="text-xs text-slate-500 truncate">{message.message}</p>
+                            </div>
+                          </div>
+                          {message.status === 'unread' && (
+                            <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0 shadow-[0_0_6px_rgba(96,165,250,0.8)]" />
+                          )}
                         </div>
-                      )}
-                      <div>
-                        <h3 className="font-black">{review.name}</h3>
-                        <p className="text-sm text-m-blue font-semibold">{review.role}</p>
-                        <p className="text-xs text-slate-400 mt-1">{review.date}</p>
-                      </div>
+                      ))}
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setEditingReview(review)}
-                        className="rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-bold"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => approveReview(review)}
-                        className="rounded-lg bg-emerald-50 text-emerald-700 px-3 py-2 text-sm font-bold flex items-center gap-2"
-                      >
-                        <Check size={16} />
-                        Setujui
-                      </button>
-                      <button
-                        onClick={() => rejectReview(review.id)}
-                        className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm font-bold flex items-center gap-2"
-                      >
-                        <Trash2 size={16} />
-                        Hapus
-                      </button>
-                    </div>
-                  </div>
-                  <p className="mt-4 rounded-lg bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-700 dark:text-slate-300">
-                    {review.quote}
-                  </p>
+                  )}
                 </div>
-              ))}
-              {reviewSubmissions.length === 0 && (
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-8 text-center text-slate-500">
-                  Belum ada ulasan yang menunggu verifikasi.
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'accounts' && (
+            <AccountManager profiles={userProfiles} />
+          )}
+
+          {activeTab === 'content' && (
+            <div className="space-y-6 max-w-5xl">
+              <Header title="Konten Website" action={saveSite} saving={saving} />
+              <div className="grid lg:grid-cols-2 gap-5">
+                <Panel title="Hero Section">
+                  <Field label="Badge" value={siteContent.heroBadge} onChange={(value) => setSiteContent({ ...siteContent, heroBadge: value })} />
+                  <Field label="Judul" value={siteContent.heroTitle} onChange={(value) => setSiteContent({ ...siteContent, heroTitle: value })} />
+                  <Field label="Highlight Judul" value={siteContent.heroHighlight} onChange={(value) => setSiteContent({ ...siteContent, heroHighlight: value })} />
+                  <Field label="Subtitle" rows={3} value={siteContent.heroSubtitle} onChange={(value) => setSiteContent({ ...siteContent, heroSubtitle: value })} />
+                  <ImageField label="Gambar Hero" value={siteContent.heroImage} onChange={(value) => setSiteContent({ ...siteContent, heroImage: value })} />
+                </Panel>
+                <Panel title="Tentang & Visi">
+                  <Field label="Judul Tentang" value={siteContent.aboutTitle} onChange={(value) => setSiteContent({ ...siteContent, aboutTitle: value })} />
+                  <Field label="Highlight Tentang" value={siteContent.aboutHighlight} onChange={(value) => setSiteContent({ ...siteContent, aboutHighlight: value })} />
+                  <Field label="Deskripsi" rows={3} value={siteContent.aboutDescription} onChange={(value) => setSiteContent({ ...siteContent, aboutDescription: value })} />
+                  <Field label="Detail" rows={3} value={siteContent.aboutDetail} onChange={(value) => setSiteContent({ ...siteContent, aboutDetail: value })} />
+                  <ImageField label="Gambar Tentang" value={siteContent.aboutImage} onChange={(value) => setSiteContent({ ...siteContent, aboutImage: value })} />
+                  <Field label="Poin Highlight (pisahkan dengan enter)" rows={4} value={siteContent.aboutHighlights.join('\n')} onChange={(value) => setSiteContent({ ...siteContent, aboutHighlights: value.split('\n').filter(Boolean) })} />
+                  <Field label="Visi" value={siteContent.visionTitle} onChange={(value) => setSiteContent({ ...siteContent, visionTitle: value })} />
+                  <Field label="Deskripsi Visi" rows={2} value={siteContent.visionDescription} onChange={(value) => setSiteContent({ ...siteContent, visionDescription: value })} />
+                </Panel>
+                <Panel title="Profil Desa">
+                  <Field label="Judul Profil Desa" value={siteContent.villageTitle} onChange={(value) => setSiteContent({ ...siteContent, villageTitle: value })} />
+                  <Field label="Deskripsi Profil Desa" rows={2} value={siteContent.villageDescription} onChange={(value) => setSiteContent({ ...siteContent, villageDescription: value })} />
+                  <Field label="Gambaran Umum" rows={4} value={siteContent.villageOverview} onChange={(value) => setSiteContent({ ...siteContent, villageOverview: value })} />
+                  <Field label="Google Maps Embed URL" rows={3} value={siteContent.villageMapUrl} onChange={(value) => setSiteContent({ ...siteContent, villageMapUrl: value })} />
+                </Panel>
+                <Panel title="Kontak">
+                  <Field label="Alamat" rows={2} value={siteContent.contactAddress} onChange={(value) => setSiteContent({ ...siteContent, contactAddress: value })} />
+                  <Field label="Email" value={siteContent.contactEmail} onChange={(value) => setSiteContent({ ...siteContent, contactEmail: value })} />
+                  <Field label="Instagram" value={siteContent.contactInstagram} onChange={(value) => setSiteContent({ ...siteContent, contactInstagram: value })} />
+                  <Field label="WhatsApp" value={siteContent.contactWhatsapp} onChange={(value) => setSiteContent({ ...siteContent, contactWhatsapp: value })} />
+                </Panel>
+                <Panel title="Video Dokumentasi">
+                  <Field label="Judul Video" value={siteContent.videoTitle} onChange={(value) => setSiteContent({ ...siteContent, videoTitle: value })} />
+                  <Field label="Subtitle Video" value={siteContent.videoSubtitle} onChange={(value) => setSiteContent({ ...siteContent, videoSubtitle: value })} />
+                  <Field label="Deskripsi Section" rows={2} value={siteContent.videoDescription} onChange={(value) => setSiteContent({ ...siteContent, videoDescription: value })} />
+                  <ImageField label="Poster Video" value={siteContent.videoPoster} onChange={(value) => setSiteContent({ ...siteContent, videoPoster: value })} />
+                  <VideoField label="Link YouTube Video" value={siteContent.videoSrc} onChange={(value) => setSiteContent({ ...siteContent, videoSrc: value })} />
+                </Panel>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'maintenance' && (
+            <div className="space-y-6 max-w-3xl">
+              <Header title="Maintenance Website" action={saveMaintenance} saving={saving} />
+              <Panel title="Status Halaman Publik">
+                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-4">
+                  <div>
+                    <span className="block font-black text-slate-900 dark:text-white">Aktifkan halaman maintenance</span>
+                    <span className="block text-sm text-slate-500 dark:text-slate-400 mt-1">
+                      Saat aktif, pengunjung akan diarahkan ke halaman status sesuai jadwal.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={siteContent.maintenanceEnabled}
+                    onChange={(event) => setSiteContent({ ...siteContent, maintenanceEnabled: event.target.checked })}
+                    className="h-5 w-5 accent-m-blue"
+                  />
+                </label>
+
+                <Field
+                  label="Judul Halaman"
+                  value={siteContent.maintenanceTitle}
+                  onChange={(value) => setSiteContent({ ...siteContent, maintenanceTitle: value })}
+                />
+                <Field
+                  label="Pesan Halaman"
+                  rows={3}
+                  value={siteContent.maintenanceMessage}
+                  onChange={(value) => setSiteContent({ ...siteContent, maintenanceMessage: value })}
+                />
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <DateField
+                    label="Tanggal Mulai"
+                    value={getEventDateInputValue(siteContent.maintenanceStart).date}
+                    onChange={(value) => setSiteContent({ ...siteContent, maintenanceStart: setEventDatePart(siteContent.maintenanceStart, 'date', value) })}
+                  />
+                  <Field
+                    label="Jam Mulai"
+                    type="time"
+                    value={getEventDateInputValue(siteContent.maintenanceStart).time}
+                    onChange={(value) => setSiteContent({ ...siteContent, maintenanceStart: setEventDatePart(siteContent.maintenanceStart, 'time', value) })}
+                  />
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <DateField
+                    label="Tanggal Selesai"
+                    value={getEventDateInputValue(siteContent.maintenanceEnd).date}
+                    onChange={(value) => setSiteContent({ ...siteContent, maintenanceEnd: setEventDatePart(siteContent.maintenanceEnd, 'date', value) })}
+                  />
+                  <Field
+                    label="Jam Selesai"
+                    type="time"
+                    value={getEventDateInputValue(siteContent.maintenanceEnd).time}
+                    onChange={(value) => setSiteContent({ ...siteContent, maintenanceEnd: setEventDatePart(siteContent.maintenanceEnd, 'time', value) })}
+                  />
+                </div>
+
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+                  Mulai: <span className="font-bold">{formatDateTimeDisplay(siteContent.maintenanceStart)}</span>
+                  <br />
+                  Selesai: <span className="font-bold">{formatDateTimeDisplay(siteContent.maintenanceEnd)}</span>
+                </div>
+              </Panel>
+            </div>
+          )}
+
+          {activeTab === 'event' && (
+            <div className="space-y-6 max-w-3xl">
+              <Header title="Event & Countdown" action={saveEvent} saving={saving} />
+              <Panel title="Data Event">
+                <Field label="Nama Event" value={eventContent.title} onChange={(value) => setEventContent({ ...eventContent, title: value })} />
+                <Field label="Deskripsi" rows={3} value={eventContent.description} onChange={(value) => setEventContent({ ...eventContent, description: value })} />
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <DateField
+                    label="Tanggal"
+                    value={getEventDateInputValue(eventContent.date).date}
+                    onChange={(value) => setEventContent({ ...eventContent, date: setEventDatePart(eventContent.date, 'date', value) })}
+                  />
+                  <Field
+                    label="Jam"
+                    type="time"
+                    value={getEventDateInputValue(eventContent.date).time}
+                    onChange={(value) => setEventContent({ ...eventContent, date: setEventDatePart(eventContent.date, 'time', value) })}
+                  />
+                </div>
+                <Field label="Lokasi" value={eventContent.location} onChange={(value) => setEventContent({ ...eventContent, location: value })} />
+                <Field label="Peserta" value={eventContent.audience} onChange={(value) => setEventContent({ ...eventContent, audience: value })} />
+                <ImageField label="Gambar Event" value={eventContent.image} onChange={(value) => setEventContent({ ...eventContent, image: value })} />
+              </Panel>
+            </div>
+          )}
+
+          {(['team', 'programs', 'gallery', 'testimonials'] as EditableType[]).includes(activeTab as EditableType) && (
+            <ListManager
+              type={activeTab as EditableType}
+              data={{ team, programs, gallery, testimonials }[activeTab as EditableType]}
+              onAdd={() => setEditing({ type: activeTab as EditableType, item: emptyItem(activeTab as EditableType) })}
+              onEdit={(item) => setEditing({ type: activeTab as EditableType, item })}
+              onDelete={(id) => deleteItem(activeTab as EditableType, id)}
+            />
+          )}
+
+          {activeTab === 'reviews' && (
+            <div className="space-y-6 max-w-4xl">
+              {/* Page Header */}
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Moderasi</p>
+                  <h1 className="text-3xl font-black text-slate-900 dark:text-white">Verifikasi Ulasan</h1>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Ulasan dari pengunjung baru tampil di website setelah disetujui.</p>
+                </div>
+                {reviewSubmissions.length > 0 && (
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20 w-fit">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse inline-block" />
+                    {reviewSubmissions.length} menunggu
+                  </div>
+                )}
+              </div>
+
+              {reviewSubmissions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
+                  <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-4">
+                    <Check size={32} />
+                  </div>
+                  <p className="font-black text-lg text-slate-700 dark:text-slate-300">Semua ulasan sudah diverifikasi</p>
+                  <p className="text-sm text-slate-400 mt-1">Belum ada ulasan baru yang menunggu persetujuan.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {reviewSubmissions.map((review) => (
+                    <div key={review.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors shadow-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex gap-4 min-w-0">
+                          {review.avatar ? (
+                            <img src={review.avatar} alt={review.name} className="h-12 w-12 rounded-full object-cover bg-slate-100 dark:bg-slate-800 ring-2 ring-white dark:ring-slate-800 shrink-0" />
+                          ) : (
+                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-m-blue/20 to-purple-500/20 text-m-blue dark:text-[#7fcfff] flex items-center justify-center font-black text-lg shrink-0 ring-2 ring-white dark:ring-slate-800">
+                              {review.name.slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <h3 className="font-black text-slate-900 dark:text-white">{review.name}</h3>
+                            <p className="text-sm text-m-blue dark:text-[#7fcfff] font-semibold">{review.role}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{review.date}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 shrink-0">
+                          <button
+                            onClick={() => setEditingReview(review)}
+                            className="rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-bold transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => approveReview(review)}
+                            className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
+                          >
+                            <Check size={15} />
+                            Setujui
+                          </button>
+                          <button
+                            onClick={() => rejectReview(review.id)}
+                            className="rounded-xl bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
+                          >
+                            <Trash2 size={15} />
+                            Hapus
+                          </button>
+                        </div>
+                      </div>
+                      <blockquote className="mt-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border-l-4 border-m-blue/40 px-4 py-3 text-slate-700 dark:text-slate-300 text-sm italic leading-relaxed">
+                        "{review.quote}"
+                      </blockquote>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'messages' && (
-          <div className="space-y-4">
-            <h1 className="text-3xl font-black">Pesan Masuk</h1>
-            <div className="grid gap-3">
-              {messages.map((message) => (
-                <div key={message.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5">
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold">{message.name}</h3>
-                        {message.status === 'unread' && <span className="rounded-full bg-blue-500 px-2 py-0.5 text-xs font-bold text-white">Baru</span>}
-                      </div>
-                      <p className="text-sm text-slate-500">{message.email} - {message.date}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      {message.status === 'unread' && (
-                        <button onClick={() => storage.markMessageAsRead(message.id)} className="rounded-lg bg-emerald-50 text-emerald-700 px-3 py-2 text-sm font-bold flex items-center gap-2">
-                          <Check size={16} />
-                          Dibaca
-                        </button>
-                      )}
-                      <button onClick={() => deleteItem('messages', message.id)} className="rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm font-bold">
-                        Hapus
-                      </button>
-                    </div>
-                  </div>
-                  <p className="mt-4 text-slate-700 dark:text-slate-300">{message.message}</p>
+          {activeTab === 'messages' && (
+            <div className="space-y-6 max-w-4xl">
+              {/* Page Header */}
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Komunikasi</p>
+                  <h1 className="text-3xl font-black text-slate-900 dark:text-white">Pesan Masuk</h1>
+                  <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Pesan dari pengunjung melalui form kontak website.</p>
                 </div>
-              ))}
-              {messages.length === 0 && <p className="text-slate-500">Belum ada pesan masuk.</p>}
+                {unreadMessages > 0 && (
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold border border-blue-500/20 w-fit">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse inline-block" />
+                    {unreadMessages} belum dibaca
+                  </div>
+                )}
+              </div>
+
+              {messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
+                  <div className="h-16 w-16 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mb-4">
+                    <Mail size={32} />
+                  </div>
+                  <p className="font-black text-lg text-slate-700 dark:text-slate-300">Belum ada pesan masuk</p>
+                  <p className="text-sm text-slate-400 mt-1">Pesan dari pengunjung akan muncul di sini.</p>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`bg-white dark:bg-slate-900 border rounded-2xl p-5 shadow-sm transition-colors ${
+                        message.status === 'unread'
+                          ? 'border-blue-200 dark:border-blue-800/60 bg-blue-50/30 dark:bg-blue-950/10'
+                          : 'border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex gap-3 min-w-0">
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center font-black text-sm shrink-0 ${
+                            message.status === 'unread'
+                              ? 'bg-gradient-to-br from-blue-500/20 to-indigo-500/20 text-blue-600 dark:text-blue-400'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                          }`}>
+                            {message.name.slice(0, 1).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-black text-slate-900 dark:text-white">{message.name}</h3>
+                              {message.status === 'unread' && (
+                                <span className="rounded-full bg-blue-500 px-2 py-0.5 text-xs font-bold text-white">Baru</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{message.email} · {message.date}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          {message.status === 'unread' && (
+                            <button
+                              onClick={() => storage.markMessageAsRead(message.id)}
+                              className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
+                            >
+                              <Check size={15} />
+                              Dibaca
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteItem('messages', message.id)}
+                            className="rounded-xl bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
+                          >
+                            <Trash2 size={15} />
+                            Hapus
+                          </button>
+                        </div>
+                      </div>
+                      <p className="mt-4 text-slate-700 dark:text-slate-300 text-sm leading-relaxed bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3">{message.message}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
         </div>
       </main>
 
@@ -3158,21 +3943,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 };
 
 const Header = ({ title, action, saving }: { title: string; action: () => void; saving: boolean }) => (
-  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
     <div>
-      <h1 className="text-3xl font-black">{title}</h1>
-      <p className="text-slate-500 dark:text-slate-400">Perubahan langsung tersimpan ke Firebase.</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Admin</p>
+      <h1 className="text-3xl font-black text-slate-900 dark:text-white">{title}</h1>
+      <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Perubahan langsung tersimpan ke Firebase.</p>
     </div>
-    <button onClick={action} className="rounded-lg bg-m-blue hover:bg-m-blue-dark text-white px-5 py-3 font-bold flex items-center justify-center gap-2">
-      <Save size={18} />
-      {saving ? 'Menyimpan...' : 'Simpan'}
+    <button
+      onClick={action}
+      className="flex items-center justify-center gap-2 rounded-xl bg-m-blue hover:bg-m-blue-dark text-white px-6 py-2.5 font-bold text-sm shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-95 w-fit"
+    >
+      <Save size={16} />
+      {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
     </button>
   </div>
 );
 
 const Panel = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4">
-    <h2 className="font-black text-lg">{title}</h2>
+  <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4 shadow-sm">
+    <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
+      <div className="h-1.5 w-1.5 rounded-full bg-m-blue" />
+      <h2 className="font-black text-base text-slate-900 dark:text-white">{title}</h2>
+    </div>
     {children}
   </section>
 );
@@ -3197,43 +3989,85 @@ const ListManager = ({
     testimonials: 'Testimoni',
   };
 
+  const subtitleMap = {
+    team: 'Data anggota ditampilkan di halaman Tim.',
+    programs: 'Program kerja ditampilkan di halaman Program.',
+    gallery: 'Foto galeri ditampilkan di halaman Galeri.',
+    testimonials: 'Testimoni ditampilkan di halaman Testimoni.',
+  };
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-3xl font-black">{titleMap[type]}</h1>
-        <button onClick={onAdd} className="rounded-lg bg-m-blue hover:bg-m-blue-dark text-white px-5 py-3 font-bold flex items-center justify-center gap-2">
-          <Plus size={18} />
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Manajemen Data</p>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white">{titleMap[type]}</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">{subtitleMap[type]} Total: {data.length} item.</p>
+        </div>
+        <button
+          onClick={onAdd}
+          className="flex items-center gap-2 rounded-xl bg-m-blue hover:bg-m-blue-dark text-white px-5 py-2.5 font-bold text-sm shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-95 w-fit"
+        >
+          <Plus size={16} />
           Tambah Data
         </button>
       </div>
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {data.map((item) => {
-          const image = 'image' in item ? item.image : 'url' in item ? item.url : 'avatar' in item ? item.avatar : '';
-          const title = 'title' in item ? item.title : item.name;
-          const subtitle = 'category' in item ? item.category : 'role' in item ? item.role : '';
-          const description = 'description' in item ? item.description : 'quote' in item ? item.quote : '';
+      {data.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
+          <div className="h-16 w-16 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mb-4">
+            <Plus size={28} />
+          </div>
+          <p className="font-black text-lg text-slate-700 dark:text-slate-300">Belum ada data</p>
+          <p className="text-sm text-slate-400 mt-1">Klik tombol "Tambah Data" untuk memulai.</p>
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {data.map((item) => {
+            const image = 'image' in item ? item.image : 'url' in item ? item.url : 'avatar' in item ? item.avatar : '';
+            const title = 'title' in item ? item.title : item.name;
+            const subtitle = 'category' in item ? item.category : 'role' in item ? item.role : '';
+            const description = 'description' in item ? item.description : 'quote' in item ? item.quote : '';
 
-          return (
-            <article key={item.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
-              {image && <img src={image} alt={title} className="h-44 w-full object-cover bg-slate-200 dark:bg-slate-800" />}
-              <div className="p-5">
-                <p className="text-xs font-bold uppercase tracking-wider text-m-blue">{subtitle}</p>
-                <h3 className="font-black text-lg mt-1">{title || 'Tanpa judul'}</h3>
-                {description && <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 line-clamp-3">{description}</p>}
-                <div className="flex gap-2 mt-5">
-                  <button onClick={() => onEdit(item)} className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm font-bold">
-                    Edit
-                  </button>
-                  <button onClick={() => onDelete(item.id)} className="rounded-lg bg-red-50 text-red-700 px-3 py-2">
-                    <Trash2 size={16} />
-                  </button>
+            return (
+              <article key={item.id} className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-lg dark:hover:shadow-slate-900/50 transition-all duration-200">
+                {image && (
+                  <div className="relative overflow-hidden h-44 bg-slate-100 dark:bg-slate-800">
+                    <img src={image} alt={title} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                  </div>
+                )}
+                <div className="p-5">
+                  {subtitle && (
+                    <span className="inline-block rounded-lg bg-m-blue/10 dark:bg-m-blue/20 text-m-blue dark:text-[#7fcfff] text-xs font-bold px-2.5 py-1 mb-2">
+                      {subtitle}
+                    </span>
+                  )}
+                  <h3 className="font-black text-base text-slate-900 dark:text-white leading-snug">{title || 'Tanpa judul'}</h3>
+                  {description && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 line-clamp-3 leading-relaxed">{description}</p>
+                  )}
+                  <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      onClick={() => onEdit(item)}
+                      className="flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-bold transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => onDelete(item.id)}
+                      className="rounded-xl bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-3 py-2 transition-colors"
+                      aria-label="Hapus"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </article>
-          );
-        })}
-      </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
@@ -3253,60 +4087,80 @@ const EditModal = ({
     setEditing((current) => current && { ...current, item: { ...current.item, ...patch } as EditableItem });
   };
 
+  const titleMap: Record<EditableType, string> = {
+    team: 'Data Anggota',
+    programs: 'Program Kerja',
+    gallery: 'Foto Galeri',
+    testimonials: 'Testimoni',
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <form onSubmit={saveEditing} className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-6 space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-2xl font-black">Edit Data</h2>
-          <button type="button" onClick={() => setEditing(null)} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800">
+    <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <form
+        onSubmit={saveEditing}
+        className="w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto bg-white dark:bg-slate-900 sm:rounded-2xl rounded-t-2xl border-t sm:border border-slate-200 dark:border-slate-800 shadow-2xl"
+      >
+        {/* Modal Header */}
+        <div className="sticky top-0 z-10 bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Form</p>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white">{titleMap[editing.type]}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditing(null)}
+            className="rounded-xl p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+            aria-label="Tutup"
+          >
             <X size={20} />
           </button>
         </div>
 
-        {editing.type === 'team' && (
-          <>
-            <Field label="Nama" value={(editing.item as TeamMember).name} onChange={(value) => updateItem({ name: value } as Partial<EditableItem>)} />
-            <Field label="Jabatan" value={(editing.item as TeamMember).role} onChange={(value) => updateItem({ role: value } as Partial<EditableItem>)} />
-            <Field label="Divisi" value={(editing.item as TeamMember).division || ''} onChange={(value) => updateItem({ division: value } as Partial<EditableItem>)} />
-            <ImageField label="Foto Anggota" value={(editing.item as TeamMember).image} onChange={(value) => updateItem({ image: value } as Partial<EditableItem>)} />
-          </>
-        )}
+        <div className="p-6 space-y-4">
+          {editing.type === 'team' && (
+            <>
+              <Field label="Nama" value={(editing.item as TeamMember).name} onChange={(value) => updateItem({ name: value } as Partial<EditableItem>)} />
+              <Field label="Jabatan" value={(editing.item as TeamMember).role} onChange={(value) => updateItem({ role: value } as Partial<EditableItem>)} />
+              <Field label="Divisi" value={(editing.item as TeamMember).division || ''} onChange={(value) => updateItem({ division: value } as Partial<EditableItem>)} />
+              <ImageField label="Foto Anggota" value={(editing.item as TeamMember).image} onChange={(value) => updateItem({ image: value } as Partial<EditableItem>)} />
+            </>
+          )}
 
-        {editing.type === 'programs' && (
-          <>
-            <Field label="Kategori" value={(editing.item as Program).category} onChange={(value) => updateItem({ category: value } as Partial<EditableItem>)} />
-            <Field label="Nama Program" value={(editing.item as Program).title} onChange={(value) => updateItem({ title: value } as Partial<EditableItem>)} />
-            <Field label="Deskripsi" rows={4} value={(editing.item as Program).description} onChange={(value) => updateItem({ description: value } as Partial<EditableItem>)} />
-            <Field label="Icon Lucide" value={(editing.item as Program).iconName} onChange={(value) => updateItem({ iconName: value } as Partial<EditableItem>)} />
-          </>
-        )}
+          {editing.type === 'programs' && (
+            <>
+              <Field label="Kategori" value={(editing.item as Program).category} onChange={(value) => updateItem({ category: value } as Partial<EditableItem>)} />
+              <Field label="Nama Program" value={(editing.item as Program).title} onChange={(value) => updateItem({ title: value } as Partial<EditableItem>)} />
+              <Field label="Deskripsi" rows={4} value={(editing.item as Program).description} onChange={(value) => updateItem({ description: value } as Partial<EditableItem>)} />
+              <Field label="Icon Lucide" value={(editing.item as Program).iconName} onChange={(value) => updateItem({ iconName: value } as Partial<EditableItem>)} />
+            </>
+          )}
 
-        {editing.type === 'gallery' && (
-          <>
-            <Field label="Judul Foto" value={(editing.item as GalleryImage).title} onChange={(value) => updateItem({ title: value } as Partial<EditableItem>)} />
-            <Field label="Kategori" value={(editing.item as GalleryImage).category} onChange={(value) => updateItem({ category: value } as Partial<EditableItem>)} />
-            <ImageField label="Gambar Galeri" value={(editing.item as GalleryImage).url} onChange={(value) => updateItem({ url: value } as Partial<EditableItem>)} />
-          </>
-        )}
+          {editing.type === 'gallery' && (
+            <>
+              <Field label="Judul Foto" value={(editing.item as GalleryImage).title} onChange={(value) => updateItem({ title: value } as Partial<EditableItem>)} />
+              <Field label="Kategori" value={(editing.item as GalleryImage).category} onChange={(value) => updateItem({ category: value } as Partial<EditableItem>)} />
+              <ImageField label="Gambar Galeri" value={(editing.item as GalleryImage).url} onChange={(value) => updateItem({ url: value } as Partial<EditableItem>)} />
+            </>
+          )}
 
-        {editing.type === 'testimonials' && (
-          <>
-            <Field label="Nama" value={(editing.item as Testimonial).name} onChange={(value) => updateItem({ name: value } as Partial<EditableItem>)} />
-            <Field label="Jabatan" value={(editing.item as Testimonial).role} onChange={(value) => updateItem({ role: value } as Partial<EditableItem>)} />
-            <Field label="Testimoni" rows={4} value={(editing.item as Testimonial).quote} onChange={(value) => updateItem({ quote: value } as Partial<EditableItem>)} />
-            <ImageField label="Avatar Testimoni" value={(editing.item as Testimonial).avatar} onChange={(value) => updateItem({ avatar: value } as Partial<EditableItem>)} />
-          </>
-        )}
+          {editing.type === 'testimonials' && (
+            <>
+              <Field label="Nama" value={(editing.item as Testimonial).name} onChange={(value) => updateItem({ name: value } as Partial<EditableItem>)} />
+              <Field label="Jabatan" value={(editing.item as Testimonial).role} onChange={(value) => updateItem({ role: value } as Partial<EditableItem>)} />
+              <Field label="Testimoni" rows={4} value={(editing.item as Testimonial).quote} onChange={(value) => updateItem({ quote: value } as Partial<EditableItem>)} />
+              <ImageField label="Avatar Testimoni" value={(editing.item as Testimonial).avatar} onChange={(value) => updateItem({ avatar: value } as Partial<EditableItem>)} />
+            </>
+          )}
 
-        <button className="w-full rounded-lg bg-m-blue hover:bg-m-blue-dark text-white py-3 font-bold flex items-center justify-center gap-2">
-          <Save size={18} />
-          {saving ? 'Menyimpan...' : 'Simpan Data'}
-        </button>
+          <button className="w-full rounded-xl bg-m-blue hover:bg-m-blue-dark text-white py-3 font-bold flex items-center justify-center gap-2 shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-[0.98]">
+            <Save size={16} />
+            {saving ? 'Menyimpan...' : 'Simpan Data'}
+          </button>
+        </div>
       </form>
     </div>
   );
 };
-
 const ReviewEditModal = ({
   review,
   saving,
@@ -3323,24 +4177,38 @@ const ReviewEditModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <form onSubmit={onSave} className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-6 space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-2xl font-black">Edit Ulasan</h2>
-          <button type="button" onClick={() => setReview(null)} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800">
+    <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <form
+        onSubmit={onSave}
+        className="w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto bg-white dark:bg-slate-900 sm:rounded-2xl rounded-t-2xl border-t sm:border border-slate-200 dark:border-slate-800 shadow-2xl"
+      >
+        {/* Modal Header */}
+        <div className="sticky top-0 z-10 bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Moderasi</p>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white">Edit Ulasan</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReview(null)}
+            className="rounded-xl p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+            aria-label="Tutup"
+          >
             <X size={20} />
           </button>
         </div>
 
-        <Field label="Nama" value={review.name} onChange={(value) => updateReview({ name: value })} />
-        <Field label="Peran" value={review.role} onChange={(value) => updateReview({ role: value })} />
-        <Field label="Ulasan" rows={5} value={review.quote} onChange={(value) => updateReview({ quote: value })} />
-        <ImageField label="Avatar Ulasan" value={review.avatar} onChange={(value) => updateReview({ avatar: value })} />
+        <div className="p-6 space-y-4">
+          <Field label="Nama" value={review.name} onChange={(value) => updateReview({ name: value })} />
+          <Field label="Peran / Jabatan" value={review.role} onChange={(value) => updateReview({ role: value })} />
+          <Field label="Isi Ulasan" rows={5} value={review.quote} onChange={(value) => updateReview({ quote: value })} />
+          <ImageField label="Avatar" value={review.avatar} onChange={(value) => updateReview({ avatar: value })} />
 
-        <button className="w-full rounded-lg bg-m-blue hover:bg-m-blue-dark text-white py-3 font-bold flex items-center justify-center gap-2">
-          <Save size={18} />
-          {saving ? 'Menyimpan...' : 'Simpan Ulasan'}
-        </button>
+          <button className="w-full rounded-xl bg-m-blue hover:bg-m-blue-dark text-white py-3 font-bold flex items-center justify-center gap-2 shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-[0.98]">
+            <Save size={16} />
+            {saving ? 'Menyimpan...' : 'Simpan Ulasan'}
+          </button>
+        </div>
       </form>
     </div>
   );

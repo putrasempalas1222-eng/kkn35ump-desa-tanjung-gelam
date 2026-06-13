@@ -42,10 +42,8 @@ export const Gallery: React.FC = () => {
             <button
               key={cat}
               onClick={() => setFilter(cat)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                filter === cat 
-                  ? 'bg-m-blue text-white shadow-md' 
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              className={`btn-glass px-4 py-2 rounded-full text-sm font-medium ${
+                filter === cat ? 'btn-glass-blue text-white' : 'btn-glass-white text-slate-700 dark:text-slate-200'
               }`}
             >
               {cat}
@@ -98,7 +96,7 @@ export const Gallery: React.FC = () => {
             onClick={() => setSelectedImage(null)}
           >
             <button 
-              className="absolute top-6 right-6 text-white/70 hover:text-white transition-colors bg-white/10 hover:bg-white/20 p-2 rounded-full"
+              className="btn-glass btn-glass-white absolute top-6 right-6 text-white/80 hover:text-white p-2 rounded-full"
               onClick={(e) => { e.stopPropagation(); setSelectedImage(null); }}
             >
               <X size={24} />

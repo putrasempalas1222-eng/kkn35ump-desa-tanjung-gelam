@@ -50,14 +50,14 @@ export const Hero: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <a
               href="#about"
-              className="w-full sm:w-auto px-7 py-3 bg-m-blue hover:bg-m-blue-dark text-white rounded-full font-bold transition-all flex items-center justify-center gap-2"
+              className="btn-glass btn-glass-blue w-full sm:w-auto px-7 py-3 rounded-full font-bold text-white flex items-center justify-center gap-2"
             >
               Tentang KKN
               <ArrowRight size={18} />
             </a>
             <a
               href="#gallery"
-              className="w-full sm:w-auto px-7 py-3 bg-white/12 hover:bg-white/18 backdrop-blur-2xl text-white border border-white/16 rounded-full font-bold transition-all flex items-center justify-center gap-2"
+              className="btn-glass btn-glass-white w-full sm:w-auto px-7 py-3 rounded-full font-bold text-white flex items-center justify-center gap-2"
             >
               Dokumentasi Kegiatan
               <ImageIcon size={18} />

@@ -181,7 +181,7 @@ export const Event: React.FC = () => {
 
             <a
               href="#contact"
-              className="mt-8 inline-flex items-center justify-center rounded-full bg-m-blue px-6 py-4 text-white font-semibold hover:bg-m-blue-dark transition-colors shadow-lg shadow-m-blue/20"
+              className="btn-glass btn-glass-blue mt-8 inline-flex items-center justify-center rounded-full px-6 py-4 text-white font-semibold"
             >
               Hubungi Panitia
             </a>

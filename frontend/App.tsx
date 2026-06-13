@@ -133,11 +133,17 @@ const App: React.FC = () => {
   const [view, setView] = useState<'public' | 'admin'>('public');
   const [siteContent, setSiteContent] = useState<SiteContent>(storage.defaults.siteContent);
   const [now, setNow] = useState(Date.now());
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     // Initialize storage with default constants if empty
     storage.init().catch((error) => {
       console.error('Firebase seed failed:', error);
+    });
+
+    // Subscribe to auth changes to know if user is logged in
+    const unsubscribeAuth = storage.onAuthChange((user) => {
+      setIsLoggedIn(!!user);
     });
 
     // Check system preference or local storage for dark mode
@@ -170,6 +176,7 @@ const App: React.FC = () => {
       clearTimeout(timer);
       clearInterval(clock);
       unsubscribeSite();
+      unsubscribeAuth();
       window.removeEventListener('hashchange', handleHashChange);
     };
   }, []);
@@ -224,7 +231,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen font-sans selection:bg-m-blue selection:text-white">
-      <Navbar darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      <Navbar darkMode={darkMode} toggleDarkMode={toggleDarkMode} isLoggedIn={isLoggedIn} />
       <main>
         <Hero />
         <About />

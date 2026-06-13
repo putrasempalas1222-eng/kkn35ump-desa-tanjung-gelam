@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
         proxy: {
           //Target your Node.js backend
           '/api-proxy': 'http://127.0.0.1:5000',
+          '/putra-ai-proxy': 'http://127.0.0.1:5000',
           '/ws-proxy': {target: 'ws://127.0.0.1:5000', ws: true},
         },
       },

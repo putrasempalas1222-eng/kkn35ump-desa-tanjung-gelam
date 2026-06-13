@@ -152,7 +152,7 @@ export const Testimonials: React.FC = () => {
             <button
               type="submit"
               disabled={submitStatus === 'sending'}
-              className="rounded-lg bg-m-blue hover:bg-m-blue-dark disabled:opacity-70 text-white px-5 py-3 font-bold flex items-center justify-center gap-2"
+              className="btn-glass btn-glass-blue rounded-full disabled:opacity-60 text-white px-5 py-3 font-bold flex items-center justify-center gap-2"
             >
               <Send size={18} />
               {submitStatus === 'sending' ? 'Mengirim...' : 'Kirim Ulasan'}

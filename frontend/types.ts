@@ -116,10 +116,12 @@ export interface WeeklyReportEntry {
   activityName: string;
   activityTime: string;
   evidenceUrl: string;
+  responsibleName?: string;
 }
 
 export interface WeeklyReport {
   id: string;
+  reportType?: 'weekly' | 'matrix' | 'individualMatrix' | 'treasurerOutput';
   userId: string;
   name: string;
   nim: string;

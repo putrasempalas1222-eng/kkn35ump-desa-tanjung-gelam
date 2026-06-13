@@ -159,7 +159,7 @@ export const Contact: React.FC = () => {
               <button 
                 type="submit"
                 disabled={isSending}
-                className="w-full py-4 bg-m-blue hover:bg-m-blue-dark text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                className="btn-glass btn-glass-blue w-full py-4 text-white rounded-full font-medium flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {isSending ? 'Mengirim...' : 'Kirim Pesan'}
                 <Send size={18} />

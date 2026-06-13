@@ -8,8 +8,8 @@ export const Footer: React.FC = () => {
       <div className="container mx-auto px-4 md:px-6 text-center">
         <div className="flex justify-center items-center gap-3 mb-6">
           <img 
-            src="https://upload.wikimedia.org/wikipedia/commons/a/a0/Logo_Universitas_Muhammadiyah_Palembang.png" 
-            alt="Logo UMP" 
+            src="/report-assets/logokknv1.png" 
+            alt="Logo KKN Kelompok 35" 
             className="w-12 h-12 object-contain filter drop-shadow-md"
           />
           <div className="text-left">

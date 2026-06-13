@@ -75,7 +75,7 @@ export const Video: React.FC = () => {
             <button
               onClick={() => hasVideo && setIsOpen(true)}
               disabled={!hasVideo}
-              className="w-20 h-20 bg-m-blue/95 hover:bg-m-blue disabled:bg-white/20 disabled:cursor-not-allowed text-white rounded-full flex items-center justify-center pl-1 shadow-lg shadow-m-blue/40 transform group-hover:scale-110 transition-all duration-300 backdrop-blur-sm"
+              className={`btn-glass w-20 h-20 disabled:cursor-not-allowed text-white rounded-full flex items-center justify-center pl-1 transform group-hover:scale-110 ${hasVideo ? 'btn-glass-blue' : 'btn-glass-white opacity-50'}`}
               aria-label="Putar video"
             >
               <Play size={38} />
@@ -92,7 +92,7 @@ export const Video: React.FC = () => {
         <div className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
           <button
             onClick={() => setIsOpen(false)}
-            className="absolute right-5 top-5 rounded-full bg-white/10 p-3 text-white hover:bg-white/20"
+            className="btn-glass btn-glass-white absolute right-5 top-5 rounded-full p-3 text-white/80 hover:text-white"
             aria-label="Tutup video"
           >
             <X size={24} />
