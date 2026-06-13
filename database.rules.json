@@ -1,0 +1,58 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "siteContent": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+    },
+    "eventContent": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+    },
+    "team": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+    },
+    "programs": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+    },
+    "gallery": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+    },
+    "testimonials": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+    },
+    "userProfiles": {
+      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+        ".validate": "newData.hasChildren(['id', 'uid', 'email', 'name', 'division', 'role']) && newData.child('id').val() == $uid && newData.child('uid').val() == $uid && newData.child('email').isString() && newData.child('name').isString() && newData.child('name').val().length >= 2 && newData.child('division').isString() && (newData.child('role').val() == 'admin' || newData.child('role').val() == 'division')"
+      }
+    },
+    "weeklyReports": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+        ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+      }
+    },
+    "reviewSubmissions": {
+      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$reviewId": {
+        ".write": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (!data.exists() && newData.exists())",
+        ".validate": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (newData.hasChildren(['id', 'name', 'role', 'quote', 'date', 'status']) && newData.child('id').isString() && newData.child('id').val() == $reviewId && newData.child('name').isString() && newData.child('name').val().length >= 3 && newData.child('name').val().length <= 80 && newData.child('role').isString() && newData.child('role').val().length <= 80 && newData.child('quote').isString() && newData.child('quote').val().length >= 20 && newData.child('quote').val().length <= 500 && newData.child('status').val() == 'pending' && (!newData.child('avatar').exists() || newData.child('avatar').isString()))"
+      }
+    },
+    "messages": {
+      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$messageId": {
+        ".write": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (!data.exists() && newData.exists())",
+        ".validate": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (newData.hasChildren(['id', 'name', 'email', 'message', 'date', 'status']) && newData.child('id').isString() && newData.child('id').val() == $messageId && newData.child('name').isString() && newData.child('name').val().length >= 2 && newData.child('name').val().length <= 100 && newData.child('email').isString() && newData.child('email').val().length >= 5 && newData.child('email').val().length <= 120 && newData.child('message').isString() && newData.child('message').val().length >= 1 && newData.child('message').val().length <= 1000 && newData.child('status').val() == 'unread')"
+      }
+    }
+  }
+}
