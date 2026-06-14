@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import {
@@ -6,6 +6,8 @@ import {
   Briefcase,
   CalendarClock,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Eye,
   EyeOff,
@@ -24,12 +26,16 @@ import {
   User,
   Users,
   X,
+  Trophy,
+  ClipboardList,
 } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { auth, storage, ContactMessage } from '../services/storage';
 import {
   DivisionName,
   EventContent,
   GalleryImage,
+  LiveLocation,
   Program,
   ReviewSubmission,
   SiteContent,
@@ -38,13 +44,15 @@ import {
   UserProfile,
   WeeklyReport,
   WeeklyReportEntry,
+  CompetitionItem,
+  CompetitionRegistration,
 } from '../types';
 
 interface AdminDashboardProps {
   onClose: () => void;
 }
 
-type Tab = 'overview' | 'accounts' | 'content' | 'maintenance' | 'event' | 'team' | 'programs' | 'gallery' | 'testimonials' | 'reviews' | 'messages';
+type Tab = 'overview' | 'accounts' | 'content' | 'maintenance' | 'event' | 'team' | 'programs' | 'gallery' | 'testimonials' | 'reviews' | 'messages' | 'competitions' | 'competition-registrations';
 type EditableType = 'team' | 'programs' | 'gallery' | 'testimonials';
 type EditableItem = TeamMember | Program | GalleryImage | Testimonial;
 
@@ -65,7 +73,14 @@ const DIVISIONS: { value: DivisionName; label: string; defaultName: string }[] =
   { value: 'perlengkapan 2', label: 'Perlengkapan 2', defaultName: 'Sahlini, Diffa' },
 ];
 
-const getDivisionLabel = (value: DivisionName) => DIVISIONS.find((item) => item.value === value)?.label || value;
+const formatDivisionLabel = (value: string) =>
+  value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => (/\d+/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()))
+    .join(' ');
+
+const getDivisionLabel = (value: DivisionName) => DIVISIONS.find((item) => item.value === value)?.label || formatDivisionLabel(value);
 const REPORT_LOGO_UMP = '/report-assets/logo-ump.png';
 const REPORT_LOGO_KKN = '/report-assets/logo-kkn.png';
 const A4_WIDTH_MM = 210;
@@ -537,9 +552,66 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [customDivisions, setCustomDivisions] = useState<typeof DIVISIONS>(() => {
+    if (typeof window === 'undefined') return [];
+
+    try {
+      const saved = JSON.parse(localStorage.getItem('custom_division_slots') || '[]');
+      if (!Array.isArray(saved)) return [];
+      return saved
+        .filter((item) => item && typeof item.value === 'string' && typeof item.label === 'string')
+        .map((item) => ({
+          value: item.value.trim().toLowerCase(),
+          label: item.label.trim(),
+          defaultName: typeof item.defaultName === 'string' ? item.defaultName : '',
+        }))
+        .filter((item) => item.value && item.label && !DIVISIONS.some((divisionItem) => divisionItem.value === item.value));
+    } catch {
+      return [];
+    }
+  });
+  const [hiddenDivisions, setHiddenDivisions] = useState<DivisionName[]>(() => {
+    if (typeof window === 'undefined') return [];
+
+    try {
+      const saved = JSON.parse(localStorage.getItem('hidden_division_slots') || '[]');
+      if (!Array.isArray(saved)) return [];
+      return saved.filter((value): value is DivisionName => typeof value === 'string' && value.trim());
+    } catch {
+      return [];
+    }
+  });
+  const [restoreDivision, setRestoreDivision] = useState<DivisionName>('ketua');
+  const [restoreDivisionInput, setRestoreDivisionInput] = useState('');
   const [editingProfileId, setEditingProfileId] = useState('');
   const [editingProfileName, setEditingProfileName] = useState('');
+  const [editingProfileDivision, setEditingProfileDivision] = useState<DivisionName>('ketua');
   const [savingProfileId, setSavingProfileId] = useState('');
+  const [deletingProfileId, setDeletingProfileId] = useState('');
+  const allDivisions = useMemo(() => [...DIVISIONS, ...customDivisions], [customDivisions]);
+  const visibleDivisions = useMemo(() => allDivisions.filter((item) => !hiddenDivisions.includes(item.value)), [allDivisions, hiddenDivisions]);
+  const restorableDivisions = useMemo(() => allDivisions.filter((item) => hiddenDivisions.includes(item.value)), [allDivisions, hiddenDivisions]);
+
+  useEffect(() => {
+    localStorage.setItem('hidden_division_slots', JSON.stringify(hiddenDivisions));
+
+    if (hiddenDivisions.includes(division)) {
+      const nextDivision = visibleDivisions[0]?.value || allDivisions[0]?.value || DIVISIONS[0].value;
+      const nextDivisionInfo = allDivisions.find((item) => item.value === nextDivision);
+      setDivision(nextDivision);
+      setName(nextDivisionInfo?.defaultName || '');
+    }
+  }, [hiddenDivisions, division, visibleDivisions, allDivisions]);
+
+  useEffect(() => {
+    localStorage.setItem('custom_division_slots', JSON.stringify(customDivisions));
+  }, [customDivisions]);
+
+  useEffect(() => {
+    if (restorableDivisions.length > 0 && !restorableDivisions.some((item) => item.value === restoreDivision)) {
+      setRestoreDivision(restorableDivisions[0].value);
+    }
+  }, [restorableDivisions, restoreDivision]);
 
   const createAccount = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -554,6 +626,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
     } catch (error: any) {
       const code = error?.code || '';
       if (code === 'auth/email-already-in-use') setMessage('Email sudah dipakai akun lain.');
+      else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') setMessage('Email ini sudah pernah dibuat. Masukkan password akun lama, atau gunakan email baru.');
       else if (code === 'auth/weak-password') setMessage('Password minimal 6 karakter.');
       else setMessage(error?.message || 'Akun belum berhasil dibuat.');
     } finally {
@@ -563,13 +636,23 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
 
   const changeDivision = (value: DivisionName) => {
     setDivision(value);
-    const defaultName = DIVISIONS.find((item) => item.value === value)?.defaultName || '';
+    const defaultName = allDivisions.find((item) => item.value === value)?.defaultName || '';
     setName(defaultName);
+  };
+
+  const prepareCreateForDivision = (value: DivisionName) => {
+    const selectedDivision = allDivisions.find((item) => item.value === value);
+    setDivision(value);
+    setName(selectedDivision?.defaultName || '');
+    setEmail('');
+    setPassword('');
+    setMessage(`Silakan isi email dan password untuk membuat akun ${selectedDivision?.label || value}.`);
   };
 
   const startEditProfileName = (profile: UserProfile) => {
     setEditingProfileId(profile.uid);
     setEditingProfileName(profile.name);
+    setEditingProfileDivision(profile.division);
     setMessage('');
   };
 
@@ -584,15 +667,99 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
     setMessage('');
 
     try {
-      await storage.updateUserProfile({ ...profile, name: nextName });
+      await storage.updateUserProfile({ ...profile, name: nextName, division: editingProfileDivision });
       setEditingProfileId('');
       setEditingProfileName('');
+      setEditingProfileDivision('ketua');
       setMessage('Nama anggota berhasil diperbarui.');
     } catch (error: any) {
       setMessage(error?.message || 'Nama anggota gagal diperbarui.');
     } finally {
       setSavingProfileId('');
     }
+  };
+
+  const deleteProfile = async (profile: UserProfile) => {
+    if (!window.confirm(`Hapus ${profile.name || profile.email} dari daftar divisi? Slot divisi akan kosong lagi.`)) return;
+
+    setDeletingProfileId(profile.uid);
+    setMessage('');
+
+    try {
+      await storage.deleteUserProfile(profile.uid);
+      if (editingProfileId === profile.uid) {
+        setEditingProfileId('');
+        setEditingProfileName('');
+        setEditingProfileDivision('ketua');
+      }
+      setMessage('Akun berhasil dihapus dari daftar divisi.');
+    } catch (error: any) {
+      setMessage(error?.message || 'Akun belum berhasil dihapus dari daftar divisi.');
+    } finally {
+      setDeletingProfileId('');
+    }
+  };
+
+  const hideDivisionSlot = (value: DivisionName) => {
+    const selectedDivision = allDivisions.find((item) => item.value === value);
+    const hasProfile = profiles.some((profile) => profile.division === value);
+
+    if (hasProfile) {
+      setMessage(`Hapus akun di ${selectedDivision?.label || value} dulu sebelum menghapus slot divisinya.`);
+      return;
+    }
+
+    if (visibleDivisions.length <= 1) {
+      setMessage('Minimal harus ada satu divisi di daftar.');
+      return;
+    }
+
+    if (!window.confirm(`Hapus slot divisi ${selectedDivision?.label || value} dari daftar? Slot ini bisa ditambahkan lagi nanti.`)) return;
+
+    setHiddenDivisions((current) => (current.includes(value) ? current : [...current, value]));
+    setRestoreDivision(value);
+    setMessage(`Slot divisi ${selectedDivision?.label || value} sudah dihapus dari daftar.`);
+  };
+
+  const restoreDivisionSlot = () => {
+    const inputLabel = restoreDivisionInput.trim().replace(/\s+/g, ' ');
+    const normalizedInput = inputLabel.toLowerCase();
+    if (!normalizedInput) {
+      setMessage('Nama divisi tidak boleh kosong.');
+      return;
+    }
+
+    const selectedDivision = restorableDivisions.find((item) => (
+      item.label.toLowerCase() === normalizedInput ||
+      item.value.toLowerCase() === normalizedInput
+    ));
+
+    if (selectedDivision) {
+      setHiddenDivisions((current) => current.filter((value) => value !== selectedDivision.value));
+      setDivision(selectedDivision.value);
+      setName(selectedDivision.defaultName || '');
+      setRestoreDivisionInput('');
+      setMessage(`Slot divisi ${selectedDivision.label} sudah ditambahkan lagi.`);
+      return;
+    }
+
+    if (allDivisions.some((item) => item.value.toLowerCase() === normalizedInput || item.label.toLowerCase() === normalizedInput)) {
+      setMessage('Divisi itu sudah ada di daftar.');
+      return;
+    }
+
+    const newDivision = {
+      value: normalizedInput,
+      label: inputLabel.toUpperCase(),
+      defaultName: '',
+    };
+
+    setCustomDivisions((current) => [...current, newDivision]);
+    setHiddenDivisions((current) => current.filter((value) => value !== newDivision.value));
+    setDivision(newDivision.value);
+    setName('');
+    setRestoreDivisionInput('');
+    setMessage(`Divisi ${newDivision.label} berhasil dibuat. Silakan isi email dan password untuk akun divisi ini.`);
   };
 
   return (
@@ -613,7 +780,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
             label="Divisi"
             value={division}
             onChange={changeDivision}
-            options={DIVISIONS.map((item) => ({ value: item.value, label: item.label }))}
+            options={visibleDivisions.map((item) => ({ value: item.value, label: item.label }))}
           />
           <Field label="Nama Anggota" value={name} onChange={setName} />
           <Field label="Email Login" type="email" value={email} onChange={setEmail} />
@@ -637,58 +804,144 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
           <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
             <div className="h-1.5 w-1.5 rounded-full bg-m-blue" />
             <h2 className="font-black text-base text-slate-900 dark:text-white">Daftar Divisi</h2>
-            <span className="ml-auto text-xs font-bold text-slate-400">{DIVISIONS.length} divisi</span>
+            <span className="ml-auto text-xs font-bold text-slate-400">
+              {profiles.filter((profile) => profile.role === 'division').length}/{visibleDivisions.length} akun
+            </span>
           </div>
+
+          {restorableDivisions.length > 0 && (
+            <div className="mb-4 rounded-xl border border-dashed border-m-blue/30 bg-m-blue/5 dark:bg-m-blue/10 p-3">
+              <p className="text-xs font-black uppercase tracking-wider text-m-blue dark:text-[#7fcfff]">Tambah Lagi Divisi</p>
+              <div className="mt-2 grid sm:grid-cols-[1fr_auto] gap-2">
+                <input
+                  value={restoreDivisionInput}
+                  onChange={(event) => setRestoreDivisionInput(event.target.value)}
+                  placeholder="Contoh: PDD 3"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10"
+                />
+                <button
+                  type="button"
+                  onClick={restoreDivisionSlot}
+                  className="rounded-lg bg-m-blue px-4 py-2 text-sm font-black text-white hover:bg-m-blue-dark transition-colors"
+                >
+                  Buat Divisi
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid sm:grid-cols-2 gap-3">
-            {DIVISIONS.map((item) => {
-              const profile = profiles.find((candidate) => candidate.division === item.value);
+            {visibleDivisions.map((item) => {
+              const divisionProfiles = profiles.filter((candidate) => candidate.division === item.value);
               return (
                 <div key={item.value} className="rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 p-4 transition-colors">
-                  <p className="text-xs font-black uppercase tracking-wider text-m-blue dark:text-[#7fcfff]">{item.label}</p>
-                  {profile && editingProfileId === profile.uid ? (
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-wider text-m-blue dark:text-[#7fcfff] truncate">{item.label}</p>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                        {divisionProfiles.length ? `${divisionProfiles.length} akun terdaftar` : 'Belum ada akun'}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => prepareCreateForDivision(item.value)}
+                        className="rounded-full bg-m-blue/10 dark:bg-m-blue/20 px-2.5 py-1 text-[10px] font-black text-m-blue dark:text-[#7fcfff] hover:bg-m-blue hover:text-white transition-colors"
+                      >
+                        Tambah
+                      </button>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${divisionProfiles.length ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'}`}>
+                        {divisionProfiles.length ? 'Aktif' : 'Kosong'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {divisionProfiles.length > 0 ? (
                     <div className="mt-2 space-y-2">
-                      <input
-                        value={editingProfileName}
-                        onChange={(event) => setEditingProfileName(event.target.value)}
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20"
-                        autoFocus
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => saveProfileName(profile)}
-                          disabled={savingProfileId === profile.uid}
-                          className="rounded-lg bg-m-blue px-3 py-2 text-xs font-bold text-white disabled:opacity-60 transition-colors hover:bg-m-blue-dark"
-                        >
-                          {savingProfileId === profile.uid ? 'Menyimpan...' : 'Simpan'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingProfileId('');
-                            setEditingProfileName('');
-                          }}
-                          className="rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
-                        >
-                          Batal
-                        </button>
-                      </div>
+                      {divisionProfiles.map((profile) => (
+                        <div key={profile.uid}>
+                          {editingProfileId === profile.uid ? (
+                            <div className="space-y-2">
+                              <input
+                                value={editingProfileName}
+                                onChange={(event) => setEditingProfileName(event.target.value)}
+                                className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20"
+                                autoFocus
+                              />
+                              <SelectField
+                                label="Pindah Divisi"
+                                value={editingProfileDivision}
+                                onChange={setEditingProfileDivision}
+                                options={visibleDivisions.map((divisionItem) => ({ value: divisionItem.value, label: divisionItem.label }))}
+                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => saveProfileName(profile)}
+                                  disabled={savingProfileId === profile.uid}
+                                  className="rounded-lg bg-m-blue px-3 py-2 text-xs font-bold text-white disabled:opacity-60 transition-colors hover:bg-m-blue-dark"
+                                >
+                                  {savingProfileId === profile.uid ? 'Menyimpan...' : 'Simpan'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingProfileId('');
+                                    setEditingProfileName('');
+                                    setEditingProfileDivision('ketua');
+                                  }}
+                                  className="rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 dark:bg-slate-950/60 px-3 py-2">
+                              <div className="min-w-0">
+                                <p className="font-black text-slate-900 dark:text-white truncate">{profile.name || item.defaultName || 'Belum diisi'}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{profile.email}</p>
+                              </div>
+                              <div className="shrink-0 flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => startEditProfileName(profile)}
+                                  className="rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteProfile(profile)}
+                                  disabled={deletingProfileId === profile.uid}
+                                  className="rounded-lg bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-100 dark:border-red-900/40 px-2.5 py-1.5 text-xs font-bold text-red-600 dark:text-red-300 disabled:opacity-60 transition-colors"
+                                >
+                                  {deletingProfileId === profile.uid ? '...' : 'Hapus'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   ) : (
-                    <div className="mt-1 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-black text-slate-900 dark:text-white truncate">{profile?.name || item.defaultName || 'Belum diisi'}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{profile?.email || 'Akun belum dibuat'}</p>
-                      </div>
-                      {profile && (
-                        <button
-                          type="button"
-                          onClick={() => startEditProfileName(profile)}
-                          className="shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2.5 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors"
-                        >
-                          Edit
-                        </button>
-                      )}
+                    <div className="mt-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/40 p-3">
+                      <p className="font-black text-slate-900 dark:text-white truncate">{item.defaultName || 'Belum diisi'}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Akun belum dibuat untuk slot ini.</p>
+                      <button
+                        type="button"
+                        onClick={() => prepareCreateForDivision(item.value)}
+                        className="mt-3 w-full rounded-lg bg-m-blue/10 dark:bg-m-blue/20 text-m-blue dark:text-[#7fcfff] hover:bg-m-blue hover:text-white px-3 py-2 text-xs font-black transition-colors"
+                      >
+                        Buat akun slot ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => hideDivisionSlot(item.value)}
+                        className="mt-2 w-full rounded-lg bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-300 hover:bg-red-600 hover:text-white px-3 py-2 text-xs font-black transition-colors"
+                      >
+                        Hapus divisi
+                      </button>
                     </div>
                   )}
                 </div>
@@ -750,6 +1003,190 @@ const formatRupiah = (value: number) =>
     currency: 'IDR',
     maximumFractionDigits: 0,
   }).format(value);
+
+const isLiveLocationFresh = (location: LiveLocation) => Date.now() - Number(location.updatedAt || 0) < 2 * 60 * 1000;
+
+const formatLiveLocationTime = (timestamp: number) => {
+  if (!timestamp) return 'Belum pernah update';
+  return new Date(timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+};
+
+const lonToTileX = (lng: number, zoom: number) => ((lng + 180) / 360) * 2 ** zoom;
+const latToTileY = (lat: number, zoom: number) => {
+  const rad = (lat * Math.PI) / 180;
+  return ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 2 ** zoom;
+};
+
+const chooseMapZoom = (locations: LiveLocation[]) => {
+  if (locations.length <= 1) return 16;
+  const lats = locations.map((location) => location.lat);
+  const lngs = locations.map((location) => location.lng);
+  const spread = Math.max(Math.max(...lats) - Math.min(...lats), Math.max(...lngs) - Math.min(...lngs));
+  if (spread > 40) return 2;
+  if (spread > 20) return 3;
+  if (spread > 10) return 4;
+  if (spread > 5) return 5;
+  if (spread > 2) return 7;
+  if (spread > 1) return 8;
+  if (spread > 0.5) return 9;
+  if (spread > 0.25) return 10;
+  if (spread > 0.15) return 12;
+  if (spread > 0.06) return 13;
+  if (spread > 0.025) return 14;
+  if (spread > 0.01) return 15;
+  return 16;
+};
+
+const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation }: { locations: LiveLocation[]; currentUid: string; selectedUid: string; onSelectLocation: (uid: string) => void }) => {
+  const [manualCenter, setManualCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const dragState = useRef<{ x: number; y: number; center: { lat: number; lng: number } } | null>(null);
+  const didDrag = useRef(false);
+  const usableLocations = locations.filter((location) => Number.isFinite(location.lat) && Number.isFinite(location.lng));
+  const selectedLocation = usableLocations.find((location) => location.uid === selectedUid);
+  const centerSource = selectedLocation ? [selectedLocation] : usableLocations;
+  const autoCenter = centerSource.length
+    ? {
+        lat: centerSource.reduce((sum, location) => sum + location.lat, 0) / centerSource.length,
+        lng: centerSource.reduce((sum, location) => sum + location.lng, 0) / centerSource.length,
+      }
+    : { lat: -2.9761, lng: 104.7754 };
+  const center = manualCenter || autoCenter;
+  const zoom = chooseMapZoom(usableLocations);
+  const centerTileX = lonToTileX(center.lng, zoom);
+  const centerTileY = latToTileY(center.lat, zoom);
+  const tileColumns = 9;
+  const tileRows = 5;
+  const tileLayerWidth = tileColumns * 256;
+  const tileLayerHeight = tileRows * 256;
+  const startX = Math.floor(centerTileX) - Math.floor(tileColumns / 2);
+  const startY = Math.floor(centerTileY) - Math.floor(tileRows / 2);
+  const maxTile = 2 ** zoom;
+  const tiles = Array.from({ length: tileColumns * tileRows }, (_, index) => {
+    const dx = index % tileColumns;
+    const dy = Math.floor(index / tileColumns);
+    const x = ((startX + dx) % maxTile + maxTile) % maxTile;
+    const y = Math.min(Math.max(startY + dy, 0), maxTile - 1);
+    return { x, y, dx, dy };
+  });
+  const tileLayerOffsetX = tileLayerWidth / 2 + (startX - centerTileX) * 256;
+  const tileLayerOffsetY = tileLayerHeight / 2 + (startY - centerTileY) * 256;
+
+  const updateCenterFromDrag = (clientX: number, clientY: number) => {
+    if (!dragState.current) return;
+
+    const deltaX = clientX - dragState.current.x;
+    const deltaY = clientY - dragState.current.y;
+    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+      didDrag.current = true;
+    }
+    const startTileX = lonToTileX(dragState.current.center.lng, zoom);
+    const startTileY = latToTileY(dragState.current.center.lat, zoom);
+    const nextTileX = startTileX - deltaX / 256;
+    const nextTileY = startTileY - deltaY / 256;
+    const n = 2 ** zoom;
+    const lng = (nextTileX / n) * 360 - 180;
+    const latRad = Math.atan(Math.sinh(Math.PI * (1 - (2 * nextTileY) / n)));
+    const lat = (latRad * 180) / Math.PI;
+    setManualCenter({ lat: Math.max(-85, Math.min(85, lat)), lng });
+  };
+
+  return (
+    <div
+      className="relative h-[360px] overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 cursor-grab active:cursor-grabbing touch-none"
+      onPointerDown={(event) => {
+        didDrag.current = false;
+        dragState.current = { x: event.clientX, y: event.clientY, center };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => updateCenterFromDrag(event.clientX, event.clientY)}
+      onPointerUp={(event) => {
+        dragState.current = null;
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onPointerCancel={() => {
+        dragState.current = null;
+      }}
+    >
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        style={{ width: `${tileLayerWidth}px`, height: `${tileLayerHeight}px` }}
+      >
+        {tiles.map((tile) => (
+          <img
+            key={`${zoom}_${tile.x}_${tile.y}_${tile.dx}_${tile.dy}`}
+            src={`https://tile.openstreetmap.org/${zoom}/${tile.x}/${tile.y}.png`}
+            alt=""
+            className="pointer-events-none absolute h-64 w-64 select-none object-cover"
+            style={{ left: `${tileLayerOffsetX + tile.dx * 256}px`, top: `${tileLayerOffsetY + tile.dy * 256}px` }}
+            draggable={false}
+          />
+        ))}
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-white/10 pointer-events-none" />
+      {usableLocations.map((location) => {
+        const tileX = lonToTileX(location.lng, zoom);
+        const tileY = latToTileY(location.lat, zoom);
+        const left = (tileX - centerTileX) * 256;
+        const top = (tileY - centerTileY) * 256;
+        const fresh = isLiveLocationFresh(location);
+        const isCurrentUser = location.uid === currentUid;
+        const isSelected = location.uid === selectedUid;
+
+        return (
+          <div
+            key={location.uid}
+            className="absolute -translate-x-1/2 -translate-y-full cursor-pointer"
+            style={{ left: `calc(50% + ${left}px)`, top: `calc(50% + ${top}px)` }}
+            title={`${location.name} - ${getDivisionLabel(location.division)}`}
+            onClick={() => {
+              if (!didDrag.current) {
+                onSelectLocation(location.uid);
+              }
+            }}
+          >
+            <div className={`relative flex h-10 w-10 items-center justify-center rounded-full border-4 text-sm font-black text-white shadow-xl ${isSelected ? 'ring-4 ring-amber-300 ring-offset-2 ring-offset-white dark:ring-offset-slate-950' : ''} ${isCurrentUser ? 'border-white bg-m-blue' : fresh ? 'border-white bg-emerald-500' : 'border-slate-200 bg-slate-500'}`}>
+              {location.name?.[0]?.toUpperCase() || 'D'}
+              {fresh && <span className={`absolute inset-0 -z-10 rounded-full ${isCurrentUser ? 'bg-m-blue' : 'bg-emerald-500'} animate-ping opacity-40`} />}
+            </div>
+            <div className="absolute left-1/2 top-11 min-w-max -translate-x-1/2 rounded-full bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-800 px-2.5 py-1 text-[10px] font-black text-slate-800 dark:text-white shadow-sm">
+              {getDivisionLabel(location.division)}
+            </div>
+          </div>
+        );
+      })}
+      {usableLocations.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
+          <p className="rounded-2xl bg-white/90 dark:bg-slate-950/90 px-4 py-3 text-sm font-bold text-slate-600 dark:text-slate-300 shadow-sm">
+            Belum ada lokasi aktif. Aktifkan Live Maps untuk mulai berbagi lokasi.
+          </p>
+        </div>
+      )}
+      <a
+        href={`https://www.google.com/maps?q=${center.lat},${center.lng}`}
+        target="_blank"
+        rel="noreferrer"
+        className="absolute bottom-3 right-3 rounded-full bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs font-black text-m-blue shadow-sm hover:bg-m-blue hover:text-white transition-colors"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        Buka Maps
+      </a>
+      <button
+        type="button"
+        onClick={() => {
+          setManualCenter(null);
+          onSelectLocation('');
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        className="absolute bottom-3 left-3 rounded-full bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs font-black text-slate-700 dark:text-slate-200 shadow-sm hover:bg-m-blue hover:text-white transition-colors"
+      >
+        Lihat Semua
+      </button>
+      <div className="absolute left-3 top-3 rounded-full bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-800 px-3 py-1.5 text-[11px] font-black text-slate-600 dark:text-slate-300 shadow-sm pointer-events-none">
+        Geser peta untuk melihat sekitar
+      </div>
+    </div>
+  );
+};
 
 const getTreasurerOutputTotal = (entries: WeeklyReportEntry[]) =>
   entries.reduce((total, entry) => total + parseCurrencyValue(entry.responsibleName || ''), 0);
@@ -1401,7 +1838,24 @@ const generateWeeklyReportPdf = async (report: WeeklyReport) => {
 
 const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfile; onLogout: () => void; onClose?: () => void }) => {
   const [reports, setReports] = useState<WeeklyReport[]>([]);
+  const [liveLocations, setLiveLocations] = useState<LiveLocation[]>([]);
+  const [isLocationTracking, setIsLocationTracking] = useState(false);
+  const [locationStatus, setLocationStatus] = useState('Live Maps belum aktif.');
+  const [locationError, setLocationError] = useState('');
+  const [selectedLocationUid, setSelectedLocationUid] = useState('');
+  const [dashboardView, setDashboardView] = useState<'home' | 'maps' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput'>('home');
+  const reportPageType: WeeklyReport['reportType'] =
+    dashboardView === 'individualMatrix'
+      ? 'individualMatrix'
+      : dashboardView === 'groupMatrix'
+        ? 'matrix'
+        : dashboardView === 'treasurerOutput'
+          ? 'treasurerOutput'
+          : 'weekly';
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const locationWatchId = useRef<number | null>(null);
+  const locationWakeLock = useRef<any>(null);
+  const liveTrackingPreferenceKey = `live_maps_tracking_${profile.uid}`;
   const isSecretary = profile.division === 'sekretaris';
   const isTreasurer = profile.division === 'bendahara';
   const closeNav = () => setIsNavOpen(false);
@@ -1418,6 +1872,32 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     event.stopPropagation();
     event.currentTarget.blur();
     scrollToSection(id);
+  };
+
+  const isReportDashboardView = (view: typeof dashboardView) =>
+    view === 'weekly' || view === 'individualMatrix' || view === 'groupMatrix' || view === 'treasurerOutput';
+
+  const getNormalizedReportType = (report: WeeklyReport): WeeklyReport['reportType'] =>
+    isGroupMatrixReport(report) ? 'matrix' : isIndividualMatrixReport(report) ? 'individualMatrix' : isTreasurerOutputReport(report) ? 'treasurerOutput' : 'weekly';
+
+  const openDashboardView = (view: typeof dashboardView, sectionId?: string) => {
+    setDashboardView(view);
+    closeNav();
+
+    if (sectionId) {
+      window.setTimeout(() => scrollToSection(sectionId), 80);
+    } else {
+      window.setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
+    }
+  };
+
+  const openReportPage = (view: 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput', sectionId = 'form-laporan') => {
+    const targetType: WeeklyReport['reportType'] =
+      view === 'groupMatrix' ? 'matrix' : view === 'treasurerOutput' ? 'treasurerOutput' : view;
+    const matchingReport = [editing, ...reports].find((report) => getNormalizedReportType(report) === targetType);
+
+    setEditing(matchingReport || createEmptyReport(profile, getNextReportWeek([...reports, editing]), targetType));
+    openDashboardView(view, sectionId);
   };
   const [editing, setEditing] = useState<WeeklyReport>(() => {
     if (typeof window !== 'undefined' && profile?.uid) {
@@ -1456,6 +1936,17 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
   const editingIsTreasurerOutput = isTreasurerOutputReport(editing);
 
   useEffect(() => storage.subscribeWeeklyReports(profile.uid, setReports), [profile.uid]);
+  useEffect(() => storage.subscribeLiveLocations(setLiveLocations), []);
+
+  useEffect(() => {
+    return () => {
+      if (locationWatchId.current !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.clearWatch(locationWatchId.current);
+      }
+      locationWakeLock.current?.release?.().catch?.(() => undefined);
+      storage.deleteLiveLocation(profile.uid).catch(() => undefined);
+    };
+  }, [profile.uid]);
 
   useEffect(() => {
     const host = document.createElement('div');
@@ -1570,7 +2061,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
 
     await storage.deleteWeeklyReport(profile.uid, report.id);
     if (editing.id === report.id) {
-      setEditing(createEmptyReport(profile, getNextReportWeek(reports.filter((item) => item.id !== report.id))));
+      setEditing(createEmptyReport(profile, getNextReportWeek(reports.filter((item) => item.id !== report.id)), reportPageType));
       setAutoSaveStatus('idle');
     }
   };
@@ -1589,6 +2080,125 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
       setPdfGenerating(false);
     }
   };
+
+  const requestLocationWakeLock = async () => {
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return;
+
+    try {
+      locationWakeLock.current = await (navigator as any).wakeLock.request('screen');
+    } catch {
+      locationWakeLock.current = null;
+    }
+  };
+
+  const releaseLocationWakeLock = async () => {
+    await locationWakeLock.current?.release?.().catch?.(() => undefined);
+    locationWakeLock.current = null;
+  };
+
+  const startLocationTracking = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setLocationError('Browser ini belum mendukung GPS/geolocation.');
+      return;
+    }
+
+    setLocationError('');
+    setLocationStatus('Meminta izin lokasi...');
+    setIsLocationTracking(true);
+    localStorage.setItem(liveTrackingPreferenceKey, '1');
+    requestLocationWakeLock();
+
+    if (locationWatchId.current !== null) {
+      navigator.geolocation.clearWatch(locationWatchId.current);
+    }
+
+    locationWatchId.current = navigator.geolocation.watchPosition(
+      async (position) => {
+        const { latitude, longitude, accuracy, heading, speed } = position.coords;
+        const nextLocation: LiveLocation = {
+          uid: profile.uid,
+          name: profile.name,
+          email: profile.email,
+          division: profile.division,
+          lat: latitude,
+          lng: longitude,
+          accuracy,
+          heading,
+          speed,
+          updatedAt: Date.now(),
+        };
+
+        try {
+          await storage.saveLiveLocation(nextLocation);
+          setLocationStatus(`Lokasi diperbarui ${formatLiveLocationTime(nextLocation.updatedAt)}`);
+          setLocationError('');
+        } catch (error: any) {
+          setLocationError(error?.message || 'Lokasi belum berhasil disimpan.');
+        }
+      },
+      (error) => {
+        setIsLocationTracking(false);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationError('Izin lokasi ditolak. Aktifkan izin lokasi di browser.');
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          setLocationError('Lokasi belum tersedia. Pastikan GPS/perangkat lokasi aktif.');
+        } else {
+          setLocationError('Waktu pencarian lokasi habis. Coba aktifkan lagi.');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 3000,
+        timeout: 15000,
+      }
+    );
+  };
+
+  const stopLocationTracking = async () => {
+    if (locationWatchId.current !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.clearWatch(locationWatchId.current);
+      locationWatchId.current = null;
+    }
+
+    setIsLocationTracking(false);
+    localStorage.removeItem(liveTrackingPreferenceKey);
+    await releaseLocationWakeLock();
+    setLocationStatus('Live Maps dimatikan.');
+    await storage.deleteLiveLocation(profile.uid).catch(() => undefined);
+  };
+
+  useEffect(() => {
+    if (localStorage.getItem(liveTrackingPreferenceKey) === '1') {
+      startLocationTracking();
+    }
+  }, [liveTrackingPreferenceKey]);
+
+  useEffect(() => {
+    const keepTrackingAlive = () => {
+      if (document.visibilityState === 'visible' && localStorage.getItem(liveTrackingPreferenceKey) === '1') {
+        requestLocationWakeLock();
+        if (locationWatchId.current === null) {
+          startLocationTracking();
+        }
+      }
+    };
+
+    const warnBeforeClose = (event: BeforeUnloadEvent) => {
+      if (localStorage.getItem(liveTrackingPreferenceKey) !== '1') return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    document.addEventListener('visibilitychange', keepTrackingAlive);
+    window.addEventListener('focus', keepTrackingAlive);
+    window.addEventListener('beforeunload', warnBeforeClose);
+
+    return () => {
+      document.removeEventListener('visibilitychange', keepTrackingAlive);
+      window.removeEventListener('focus', keepTrackingAlive);
+      window.removeEventListener('beforeunload', warnBeforeClose);
+    };
+  }, [liveTrackingPreferenceKey]);
 
   const submitAiChat = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -1662,6 +2272,26 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     }
   };
 
+  const currentLiveLocation = liveLocations.find((location) => location.uid === profile.uid);
+  const sortedLiveLocations = [...liveLocations].sort((a, b) => {
+    if (a.uid === profile.uid) return -1;
+    if (b.uid === profile.uid) return 1;
+    return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+  });
+  const activeSelectedLocationUid =
+    selectedLocationUid && sortedLiveLocations.some((location) => location.uid === selectedLocationUid)
+      ? selectedLocationUid
+      : currentLiveLocation?.uid || sortedLiveLocations[0]?.uid || '';
+  const pageReports = reports.filter((report) => getNormalizedReportType(report) === reportPageType);
+  const reportPageTitle =
+    reportPageType === 'matrix'
+      ? 'Matriks Program Kerja Kelompok'
+      : reportPageType === 'individualMatrix'
+        ? 'Matriks Program Kerja Individu'
+        : reportPageType === 'treasurerOutput'
+          ? 'Laporan Pengeluaran Bendahara'
+          : 'Laporan Mingguan';
+
   const mobileNavDrawer = typeof document !== 'undefined' && isNavOpen
     ? createPortal(
       <>
@@ -1677,7 +2307,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                 <span className="text-[9px] bg-m-blue/10 text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
                   Divisi {getDivisionLabel(profile.division)}
                 </span>
-                <h2 className="font-bold text-lg text-slate-800 dark:text-white mt-1">Laporan Mingguan</h2>
+                <h2 className="font-bold text-lg text-slate-800 dark:text-white mt-1">Dashboard Divisi</h2>
               </div>
               <button
                 type="button"
@@ -1692,25 +2322,50 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             <nav className="space-y-1">
               <button
                 type="button"
-                onClick={(event) => navigateToSection(event, 'form-laporan')}
+                onClick={() => openDashboardView('home')}
                 className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
               >
-                Tulis Laporan
+                Home
               </button>
               <button
                 type="button"
-                onClick={(event) => navigateToSection(event, 'laporan-tersimpan')}
+                onClick={() => openDashboardView('maps', 'live-maps')}
                 className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
               >
-                Laporan Tersimpan
+                Live Maps
               </button>
               <button
                 type="button"
-                onClick={(event) => navigateToSection(event, 'pratinjau-pdf')}
+                onClick={() => openReportPage('weekly')}
                 className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
               >
-                Pratinjau PDF A4
+                Laporan Mingguan
               </button>
+              <button
+                type="button"
+                onClick={() => openReportPage('individualMatrix')}
+                className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
+              >
+                Matriks Individu
+              </button>
+              {isSecretary && (
+                <button
+                  type="button"
+                  onClick={() => openReportPage('groupMatrix')}
+                  className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
+                >
+                  Matriks Kelompok
+                </button>
+              )}
+              {isTreasurer && (
+                <button
+                  type="button"
+                  onClick={() => openReportPage('treasurerOutput')}
+                  className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
+                >
+                  Laporan Pengeluaran
+                </button>
+              )}
               {onClose && (
                 <button
                   type="button"
@@ -1874,8 +2529,8 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
               </span>
             </div>
             <h1 className="text-base sm:text-2xl font-black mt-0.5 tracking-tight leading-tight">
-              <span className="inline sm:hidden">Laporan Mingguan</span>
-              <span className="hidden sm:inline">Dashboard Laporan Mingguan</span>
+              <span className="inline sm:hidden">Dashboard Divisi</span>
+              <span className="hidden sm:inline">Dashboard Divisi KKN</span>
             </h1>
           </div>
         </div>
@@ -1883,25 +2538,50 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
         <nav className="hidden lg:flex items-center gap-1">
           <button
             type="button"
-            onClick={(event) => navigateToSection(event, 'form-laporan')}
-            className="rounded-full px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            onClick={() => openDashboardView('home')}
+            className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${dashboardView === 'home' ? 'bg-m-blue text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
           >
-            Tulis Laporan
+            Home
           </button>
           <button
             type="button"
-            onClick={(event) => navigateToSection(event, 'laporan-tersimpan')}
-            className="rounded-full px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            onClick={() => openDashboardView('maps', 'live-maps')}
+            className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${dashboardView === 'maps' ? 'bg-m-blue text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
           >
-            Laporan Tersimpan
+            Live Maps
           </button>
           <button
             type="button"
-            onClick={(event) => navigateToSection(event, 'pratinjau-pdf')}
-            className="rounded-full px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            onClick={() => openReportPage('weekly')}
+            className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${dashboardView === 'weekly' ? 'bg-m-blue text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
           >
-            Pratinjau A4
+            Mingguan
           </button>
+          <button
+            type="button"
+            onClick={() => openReportPage('individualMatrix')}
+            className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${dashboardView === 'individualMatrix' ? 'bg-m-blue text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+          >
+            Matriks Individu
+          </button>
+          {isSecretary && (
+            <button
+              type="button"
+              onClick={() => openReportPage('groupMatrix')}
+              className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${dashboardView === 'groupMatrix' ? 'bg-m-blue text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+            >
+              Matriks Kelompok
+            </button>
+          )}
+          {isTreasurer && (
+            <button
+              type="button"
+              onClick={() => openReportPage('treasurerOutput')}
+              className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${dashboardView === 'treasurerOutput' ? 'bg-m-blue text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+            >
+              Pengeluaran
+            </button>
+          )}
           {onClose && (
             <button
               type="button"
@@ -1947,12 +2627,161 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
       </header>
 
       <main className="no-print p-4 md:p-8 flex flex-col lg:grid lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_400px] gap-6">
+        {dashboardView === 'home' && (
+          <section className="order-1 lg:col-span-2 overflow-hidden rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-[#0f1322] shadow-sm">
+            <div className="bg-gradient-to-br from-m-blue via-blue-600 to-emerald-500 px-6 py-8 md:px-8 text-white">
+              <p className="text-xs font-black uppercase tracking-widest text-white/80">Home Divisi</p>
+              <h2 className="mt-2 max-w-3xl text-3xl md:text-4xl font-black leading-tight">
+                Selamat datang, {profile.name || getDivisionLabel(profile.division)}
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm md:text-base font-semibold text-white/85">
+                Kelola laporan, pantau lokasi divisi secara realtime, dan akses dokumen tersimpan dari satu tempat.
+              </p>
+            </div>
+            <div className="grid gap-4 p-5 md:p-6 lg:grid-cols-4">
+              {[
+                { title: 'Live Maps', desc: `${liveLocations.length} divisi sedang berbagi lokasi`, action: () => openDashboardView('maps', 'live-maps'), tone: 'emerald' },
+                { title: 'Laporan Mingguan', desc: 'Isi kegiatan mingguan dan bukti foto', action: () => openReportPage('weekly'), tone: 'blue' },
+                { title: 'Matriks Individu', desc: 'Program kerja individu semua divisi', action: () => openReportPage('individualMatrix'), tone: 'slate' },
+                ...(isSecretary ? [{ title: 'Matriks Kelompok', desc: 'Khusus sekretaris untuk program kerja kelompok', action: () => openReportPage('groupMatrix'), tone: 'emerald' }] : []),
+                ...(isTreasurer ? [{ title: 'Pengeluaran Bendahara', desc: 'Khusus bendahara untuk laporan pengeluaran', action: () => openReportPage('treasurerOutput'), tone: 'amber' }] : []),
+              ].map((item) => (
+                <button
+                  key={item.title}
+                  type="button"
+                  onClick={item.action}
+                  className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4 text-left hover:-translate-y-0.5 hover:border-m-blue/40 hover:shadow-lg hover:shadow-slate-950/10 transition-all"
+                >
+                  <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl text-white font-black ${item.tone === 'emerald' ? 'bg-emerald-500' : item.tone === 'amber' ? 'bg-amber-500' : item.tone === 'blue' ? 'bg-m-blue' : 'bg-slate-700'}`}>
+                    {item.title[0]}
+                  </span>
+                  <h3 className="mt-4 font-black text-slate-900 dark:text-white">{item.title}</h3>
+                  <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">{item.desc}</p>
+                  <span className="mt-4 inline-flex text-xs font-black text-m-blue group-hover:translate-x-1 transition-transform">
+                    Buka menu
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {dashboardView === 'maps' && (
+        <section id="live-maps" className="order-1 lg:col-span-2 bg-white dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-2xl p-5 md:p-6 shadow-sm space-y-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Live Maps Divisi</p>
+              <h2 className="mt-1 text-2xl font-black text-slate-900 dark:text-white">Lokasi Realtime Semua Divisi</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                Aktifkan Live Maps agar posisi divisi kamu tersambung ke Firebase dan bisa dilihat oleh divisi lain secara realtime.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={startLocationTracking}
+                disabled={isLocationTracking}
+                className="rounded-full bg-m-blue px-5 py-2.5 text-sm font-black text-white shadow-sm shadow-m-blue/20 hover:bg-m-blue-dark disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
+              >
+                {isLocationTracking ? 'Live Aktif' : 'Aktifkan Live Maps'}
+              </button>
+              <button
+                type="button"
+                onClick={stopLocationTracking}
+                disabled={!isLocationTracking && !currentLiveLocation}
+                className="rounded-full bg-slate-100 dark:bg-slate-800 px-5 py-2.5 text-sm font-black text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+              >
+                Matikan
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+            <LiveLocationsMap
+              locations={sortedLiveLocations}
+              currentUid={profile.uid}
+              selectedUid={selectedLocationUid}
+              onSelectLocation={setSelectedLocationUid}
+            />
+
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="font-black text-slate-900 dark:text-white">Status Lokasi</h3>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{locationStatus}</p>
+                </div>
+                <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${isLocationTracking ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                  {isLocationTracking ? 'Online' : 'Offline'}
+                </span>
+              </div>
+
+              {locationError && (
+                <p className="mt-3 rounded-xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 px-3 py-2 text-xs font-bold text-red-600 dark:text-red-300">
+                  {locationError}
+                </p>
+              )}
+
+              <div className="mt-4 max-h-[285px] space-y-2 overflow-y-auto pr-1">
+                {sortedLiveLocations.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 px-3 py-4 text-center text-sm font-bold text-slate-500 dark:text-slate-400">
+                    Belum ada divisi yang membagikan lokasi.
+                  </p>
+                )}
+                {sortedLiveLocations.map((location) => {
+                  const fresh = isLiveLocationFresh(location);
+                  const isCurrentUser = location.uid === profile.uid;
+                  return (
+                    <button
+                      key={location.uid}
+                      type="button"
+                      onClick={() => setSelectedLocationUid(location.uid)}
+                      className={`w-full rounded-xl bg-white dark:bg-[#0f1322] border px-3 py-3 text-left transition-all hover:border-m-blue hover:shadow-sm ${selectedLocationUid === location.uid ? 'border-m-blue ring-4 ring-m-blue/10' : 'border-slate-200 dark:border-slate-800'}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-black text-slate-900 dark:text-white truncate">
+                            {getDivisionLabel(location.division)} {isCurrentUser ? '(Saya)' : ''}
+                          </p>
+                          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">{location.name}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${fresh ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+                          {fresh ? 'Realtime' : 'Lama'}
+                        </span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        <span>Update: {formatLiveLocationTime(location.updatedAt)}</span>
+                        <span>Akurasi: {location.accuracy ? `${Math.round(location.accuracy)} m` : '-'}</span>
+                      </div>
+                      <a
+                        href={
+                          currentLiveLocation
+                            ? `https://www.google.com/maps/dir/?api=1&origin=${currentLiveLocation.lat},${currentLiveLocation.lng}&destination=${location.lat},${location.lng}`
+                            : `https://www.google.com/maps?q=${location.lat},${location.lng}`
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                        className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-m-blue/10 dark:bg-m-blue/20 px-3 py-2 text-xs font-black text-m-blue dark:text-[#7fcfff] hover:bg-m-blue hover:text-white transition-colors"
+                      >
+                        {isCurrentUser ? 'Buka Lokasi Saya' : 'Lihat Arah ke Divisi Ini'}
+                      </a>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+        )}
+
+        {isReportDashboardView(dashboardView) && (
+        <>
         <form id="form-laporan" onSubmit={saveReport} className="order-2 lg:order-1 bg-white dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm hover:shadow-md transition-all duration-200">
           <div className="grid gap-5 border-b border-slate-100 dark:border-slate-800/60 pb-5">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0 max-w-2xl">
                 <h2 className="text-2xl font-black tracking-tight leading-tight text-slate-900 dark:text-white">
-                  {editingIsTreasurerOutput ? 'Isi Laporan Luaran' : editingIsGroupMatrix ? 'Isi Matriks Program Kerja Kelompok' : editingIsIndividualMatrix ? 'Isi Matriks Program Kerja Individu' : 'Isi Laporan Mingguan'}
+                  Isi {reportPageTitle}
                 </h2>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
                   {editingIsTreasurerOutput
@@ -1978,41 +2807,13 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
-              {isSecretary && (
-                <button
-                  type="button"
-                  onClick={() => createNewReport('matrix')}
-                  className="min-h-[44px] rounded-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-5 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 border border-emerald-200/60 dark:border-emerald-800/60"
-                >
-                  <Plus size={16} />
-                  Matriks Kelompok Baru
-                </button>
-              )}
-              {isTreasurer && (
-                <button
-                  type="button"
-                  onClick={() => createNewReport('treasurerOutput')}
-                  className="min-h-[44px] rounded-full bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-5 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 border border-amber-200/60 dark:border-amber-800/60"
-                >
-                  <Plus size={16} />
-                  Laporan Luaran Baru
-                </button>
-              )}
               <button
                 type="button"
-                onClick={() => createNewReport('individualMatrix')}
+                onClick={() => createNewReport(reportPageType)}
                 className="min-h-[44px] rounded-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-5 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 border border-emerald-200/60 dark:border-emerald-800/60"
               >
                 <Plus size={16} />
-                Matriks Individu Baru
-              </button>
-              <button
-                type="button"
-                onClick={() => createNewReport('weekly')}
-                className="min-h-[44px] rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-5 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 border border-transparent dark:border-slate-700/60"
-              >
-                <Plus size={16} />
-                Laporan Mingguan Baru
+                {reportPageTitle} Baru
               </button>
               <button className="min-h-[44px] rounded-full bg-m-blue hover:bg-m-blue-dark text-white px-6 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 shadow-sm shadow-m-blue/15">
                 <Save size={18} />
@@ -2229,9 +3030,9 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
 
         <aside className="order-1 lg:order-2 space-y-6">
           <div id="laporan-tersimpan" className="bg-white dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-2xl p-5 md:p-6 shadow-sm space-y-4">
-            <h2 className="font-bold text-lg tracking-tight border-b border-slate-100 dark:border-slate-800/60 pb-3">Dokumen Tersimpan</h2>
+            <h2 className="font-bold text-lg tracking-tight border-b border-slate-100 dark:border-slate-800/60 pb-3">{reportPageTitle} Tersimpan</h2>
             <div className="space-y-3">
-              {reports.map((report) => (
+              {pageReports.map((report) => (
                 <div key={report.id} className="bg-slate-50/60 dark:bg-[#151a2d]/40 rounded-xl border border-slate-100 dark:border-slate-800/80 p-4 hover:bg-slate-100/60 dark:hover:bg-[#151a2d]/80 transition-all duration-200">
                   <div className="flex items-center justify-between">
                     <div>
@@ -2276,9 +3077,9 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                   </div>
                 </div>
               ))}
-              {reports.length === 0 && (
+              {pageReports.length === 0 && (
                 <div className="text-center py-6">
-                  <p className="text-sm text-slate-400 dark:text-slate-500">Belum ada laporan tersimpan.</p>
+                  <p className="text-sm text-slate-400 dark:text-slate-500">Belum ada {reportPageTitle.toLowerCase()} tersimpan.</p>
                 </div>
               )}
             </div>
@@ -2293,6 +3094,8 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             </div>
           </div>
         </aside>
+        </>
+        )}
       </main>
 
       {printReport && <div id="weekly-report-print"><ReportTemplate report={printReport} printMode /></div>}
@@ -3097,6 +3900,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [editing, setEditing] = useState<{ type: EditableType; item: EditableItem } | null>(null);
   const [editingReview, setEditingReview] = useState<ReviewSubmission | null>(null);
+  const [competitions, setCompetitions] = useState<CompetitionItem[]>([]);
+  const [competitionRegistrations, setCompetitionRegistrations] = useState<CompetitionRegistration[]>([]);
 
   useEffect(() => {
     const unsubscribeAuth = storage.onAuthChange((user) => {
@@ -3115,6 +3920,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       storage.subscribeReviewSubmissions(setReviewSubmissions),
       storage.subscribeMessages(setMessages),
       storage.subscribeUserProfiles(setUserProfiles),
+      storage.subscribeCompetitions(setCompetitions),
+      storage.subscribeCompetitionRegistrations(setCompetitionRegistrations),
     ];
 
     return () => {
@@ -3241,6 +4048,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     { id: 'event', label: 'Event & Countdown', icon: CalendarClock },
     { id: 'team', label: 'Anggota', icon: Users },
     { id: 'programs', label: 'Program', icon: Briefcase },
+    { id: 'competitions', label: 'Perlombaan', icon: Trophy },
+    { id: 'competition-registrations', label: 'Pendaftar Lomba', icon: ClipboardList, badge: competitionRegistrations.filter(r => r.status === 'pending').length },
     { id: 'gallery', label: 'Galeri', icon: ImageIcon },
     { id: 'testimonials', label: 'Testimoni', icon: MessageSquare },
     { id: 'reviews', label: 'Verifikasi Ulasan', icon: Check, badge: pendingReviews },
@@ -3918,6 +4727,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               )}
             </div>
           )}
+
+          {activeTab === 'competitions' && (
+            <CompetitionManager competitions={competitions} />
+          )}
+
+          {activeTab === 'competition-registrations' && (
+            <CompetitionRegistrationManager
+              registrations={competitionRegistrations}
+              competitions={competitions}
+            />
+          )}
         </div>
       </main>
 
@@ -3937,6 +4757,763 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           setReview={setEditingReview}
           onSave={saveReviewEdit}
         />
+      )}
+    </div>
+  );
+};
+
+/* ─────────────────────────────────────────────────
+   Competition Manager (Admin)
+───────────────────────────────────────────────── */
+
+const ICON_OPTIONS = [
+  'Palette', 'BookOpen', 'Music', 'Dumbbell', 'Mic2', 'Trophy', 'Star',
+  'Gamepad2', 'Scissors', 'Heart', 'Leaf', 'Camera', 'Bike', 'Zap', 'Flame',
+  'Shield', 'Gift', 'Globe', 'Coffee', 'Smile',
+];
+
+const COLOR_OPTIONS = [
+  { value: 'blue',    label: '🔵 Biru' },
+  { value: 'pink',    label: '🩷 Pink' },
+  { value: 'violet',  label: '🟣 Ungu' },
+  { value: 'green',   label: '🟢 Hijau' },
+  { value: 'amber',   label: '🟡 Amber' },
+  { value: 'default', label: '⚪ Default' },
+];
+
+const CATEGORY_OPTIONS = [
+  'Anak-anak', 'Pelajar', 'Remaja', 'Umum', 'Olahraga', 'Seni & Budaya', 'Hiburan', 'Akademik',
+];
+
+const MAX_PARTICIPANTS_OPTIONS = [
+  '10 Peserta', '20 Peserta', '25 Peserta', '30 Peserta', '40 Peserta',
+  '50 Peserta', '16 Tim', '20 Tim', '32 Tim', 'Tidak dibatasi',
+];
+
+const FEE_OPTIONS = [
+  'Gratis', 'Rp 5.000', 'Rp 10.000', 'Rp 15.000', 'Rp 20.000',
+  'Rp 25.000', 'Rp 50.000/Tim', 'Rp 100.000/Tim',
+];
+
+const EMPTY_COMPETITION = (): CompetitionItem => ({
+  id: `comp_${Date.now()}`,
+  title: '',
+  category: CATEGORY_OPTIONS[0],
+  description: '',
+  requirements: '',
+  prizes: '',
+  registrationStart: '',
+  registrationEnd: '',
+  maxParticipants: MAX_PARTICIPANTS_OPTIONS[2],
+  fee: FEE_OPTIONS[0],
+  iconName: 'Trophy',
+  color: 'blue',
+  isOpen: true,
+  order: 0,
+});
+
+const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ competitions }) => {
+  const [form, setForm] = useState<CompetitionItem>(EMPTY_COMPETITION());
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const startEdit = (comp: CompetitionItem) => {
+    setForm({ ...comp });
+    setEditingId(comp.id);
+    setMsg('');
+    document.getElementById('comp-form-top')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setForm(EMPTY_COMPETITION());
+    setEditingId(null);
+    setMsg('');
+  };
+
+  const setF = <K extends keyof CompetitionItem>(key: K, val: CompetitionItem[K]) =>
+    setForm((prev) => ({ ...prev, [key]: val }));
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim()) { setMsg('Judul lomba wajib diisi.'); return; }
+    setSaving(true);
+    setMsg('');
+    try {
+      await storage.upsertCompetition({ ...form, id: editingId || form.id });
+      setMsg(editingId ? 'Lomba berhasil diperbarui.' : 'Lomba berhasil ditambahkan.');
+      cancelEdit();
+    } catch {
+      setMsg('Gagal menyimpan, coba lagi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string, title: string) => {
+    if (!window.confirm(`Hapus lomba "${title}"?`)) return;
+    await storage.deleteCompetition(id);
+  };
+
+  const PreviewIcon = (LucideIcons as Record<string, React.FC<{ size?: number; className?: string }>>)[form.iconName] ?? LucideIcons.Trophy;
+
+  return (
+    <div className="space-y-8 max-w-5xl">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Manajemen</p>
+        <h1 className="text-3xl font-black text-slate-900 dark:text-white">Perlombaan</h1>
+        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Buat dan kelola daftar perlombaan yang tampil di website.</p>
+      </div>
+
+      {/* Form */}
+      <div id="comp-form-top" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-5">
+          <h2 className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2">
+            <Trophy size={17} className="text-m-blue" />
+            {editingId ? 'Edit Lomba' : 'Tambah Lomba Baru'}
+          </h2>
+          {editingId && (
+            <button onClick={cancelEdit} className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white flex items-center gap-1">
+              <X size={14} /> Batal
+            </button>
+          )}
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-5">
+          {/* Judul + Kategori */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Judul Lomba *" value={form.title} onChange={(v) => setF('title', v)} />
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Kategori</span>
+              <select
+                value={form.category}
+                onChange={(e) => setF('category', e.target.value)}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+              >
+                {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+          </div>
+
+          {/* Deskripsi */}
+          <Field label="Deskripsi" rows={3} value={form.description} onChange={(v) => setF('description', v)} />
+
+          {/* Syarat + Hadiah */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Syarat Peserta (satu per baris)" rows={4} value={form.requirements} onChange={(v) => setF('requirements', v)} />
+            <Field label="Hadiah (satu per baris)" rows={4} value={form.prizes} onChange={(v) => setF('prizes', v)} />
+          </div>
+
+          {/* Tanggal pendaftaran */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 space-y-3">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Periode Pendaftaran</p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Tanggal Mulai</span>
+                <input
+                  type="date"
+                  value={form.registrationStart}
+                  onChange={(e) => setF('registrationStart', e.target.value)}
+                  onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
+                  onKeyDown={(e) => e.preventDefault()}
+                  lang="id-ID"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all dark:[color-scheme:dark]"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Tanggal Berakhir / Deadline</span>
+                <input
+                  type="date"
+                  value={form.registrationEnd}
+                  onChange={(e) => setF('registrationEnd', e.target.value)}
+                  onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
+                  onKeyDown={(e) => e.preventDefault()}
+                  min={form.registrationStart || undefined}
+                  lang="id-ID"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all dark:[color-scheme:dark]"
+                />
+              </label>
+            </div>
+            {form.registrationStart && form.registrationEnd && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                Pendaftaran:{' '}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {new Date(form.registrationStart).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  {' '}&rarr;{' '}
+                  {new Date(form.registrationEnd).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
+              </p>
+            )}
+          </div>
+
+          {/* Maks. Peserta + Biaya */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Maks. Peserta</span>
+              <select
+                value={form.maxParticipants}
+                onChange={(e) => setF('maxParticipants', e.target.value)}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+              >
+                {MAX_PARTICIPANTS_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Biaya Pendaftaran</span>
+              <select
+                value={form.fee}
+                onChange={(e) => setF('fee', e.target.value)}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+              >
+                {FEE_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </label>
+          </div>
+
+          {/* Ikon + Warna + Urutan */}
+          <div className="grid sm:grid-cols-3 gap-4">
+            {/* Icon */}
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Ikon</span>
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center bg-slate-50 dark:bg-slate-800 text-m-blue shrink-0">
+                  <PreviewIcon size={20} />
+                </div>
+                <select
+                  value={form.iconName}
+                  onChange={(e) => setF('iconName', e.target.value)}
+                  className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                >
+                  {ICON_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </div>
+            </label>
+
+            {/* Warna */}
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Warna Aksen</span>
+              <select
+                value={form.color}
+                onChange={(e) => setF('color', e.target.value)}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+              >
+                {COLOR_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+            </label>
+
+            {/* Urutan + Toggle */}
+            <div className="space-y-3">
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Urutan Tampil</span>
+                <select
+                  value={String(form.order ?? 0)}
+                  onChange={(e) => setF('order', Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                >
+                  {[0,1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={n}>{n === 0 ? '0 (pertama)' : n}</option>)}
+                </select>
+              </label>
+              <label className="flex items-center gap-2.5 cursor-pointer rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={form.isOpen}
+                  onChange={(e) => setF('isOpen', e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-m-blue"
+                />
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Pendaftaran Dibuka</span>
+                <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${form.isOpen ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'}`}>
+                  {form.isOpen ? 'Buka' : 'Tutup'}
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {msg && (
+            <p className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{msg}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full sm:w-auto rounded-xl bg-m-blue hover:bg-m-blue-dark text-white px-8 py-3 font-bold flex items-center gap-2 shadow-sm shadow-m-blue/20 transition-all disabled:opacity-60 active:scale-[0.98]"
+          >
+            <Save size={16} />
+            {saving ? 'Menyimpan...' : editingId ? 'Perbarui Lomba' : 'Simpan Lomba'}
+          </button>
+        </form>
+      </div>
+
+      {/* List */}
+      <div className="space-y-3">
+        <h2 className="font-black text-base text-slate-900 dark:text-white">{competitions.length} Lomba Terdaftar</h2>
+        {competitions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
+            <Trophy size={32} className="text-slate-300 dark:text-slate-600 mb-3" />
+            <p className="font-black text-slate-500 dark:text-slate-400">Belum ada lomba ditambahkan</p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-3">
+            {competitions.map((comp) => {
+              const IconComp = (LucideIcons as Record<string, React.FC<{ size?: number; className?: string }>>)[comp.iconName] ?? LucideIcons.Trophy;
+              return (
+                <div key={comp.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-start gap-4">
+                  <div className="w-11 h-11 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center justify-center bg-slate-50 dark:bg-slate-800 text-m-blue shrink-0">
+                    <IconComp size={20} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-black text-slate-900 dark:text-white">{comp.title}</p>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${comp.isOpen ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'}`}>
+                        {comp.isOpen ? 'Buka' : 'Tutup'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {comp.category} · {comp.fee}
+                      {comp.registrationEnd
+                        ? ` · Deadline: ${new Date(comp.registrationEnd).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                        : ''}
+                    </p>
+                    <div className="mt-2.5 flex gap-2">
+                      <button
+                        onClick={() => startEdit(comp)}
+                        className="rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(comp.id, comp.title)}
+                        className="rounded-lg bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900 px-3 py-1.5 text-xs font-bold transition-colors"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ─────────────────────────────────────────────────
+   Competition Registration Manager (Admin)
+───────────────────────────────────────────────── */
+const STATUS_LABELS: Record<CompetitionRegistration['status'], { label: string; cls: string }> = {
+  pending:   { label: 'Pending',    cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  confirmed: { label: 'Diterima',   cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  rejected:  { label: 'Ditolak',    cls: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
+};
+
+const CompetitionRegistrationManager: React.FC<{
+  registrations: CompetitionRegistration[];
+  competitions: CompetitionItem[];
+}> = ({ registrations, competitions }) => {
+  const PAGE_SIZE = 10;
+
+  // Active competition tab — default ke yang pertama ada pendaftarnya, atau semua
+  const compTitles = Array.from(new Set(registrations.map((r) => r.competitionTitle)));
+  const [activeComp, setActiveComp] = useState<string>('__all__');
+  const [filterStatus, setFilterStatus] = useState<'semua' | CompetitionRegistration['status']>('semua');
+  const [page, setPage] = useState(1);
+  const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
+
+  // Reset halaman ketika filter berubah
+  const handleCompChange = (val: string) => { setActiveComp(val); setPage(1); };
+  const handleStatusChange = (val: typeof filterStatus) => { setFilterStatus(val); setPage(1); };
+
+  const filtered = registrations.filter((r) => {
+    const matchComp = activeComp === '__all__' || r.competitionTitle === activeComp;
+    const matchStatus = filterStatus === 'semua' || r.status === filterStatus;
+    return matchComp && matchStatus;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pending = registrations.filter((r) => r.status === 'pending').length;
+
+  const setStatus = async (id: string, status: CompetitionRegistration['status']) => {
+    await storage.updateCompetitionRegistrationStatus(id, status);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Hapus data pendaftar ini?')) return;
+    await storage.deleteCompetitionRegistration(id);
+  };
+
+  // ── Download PDF rekap per lomba ──────────────────────────────────
+  const downloadPdf = async (compTitle: string) => {
+    const list = registrations.filter((r) => r.competitionTitle === compTitle);
+    if (!list.length) return;
+    setDownloadingPdf(compTitle);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      const pageW = 210;
+      const margin = 14;
+      const colW = pageW - margin * 2;
+      let y = margin;
+
+      const addText = (text: string, x: number, yPos: number, opts: { size?: number; bold?: boolean; color?: [number,number,number] } = {}) => {
+        pdf.setFontSize(opts.size ?? 10);
+        pdf.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+        if (opts.color) pdf.setTextColor(...opts.color);
+        else pdf.setTextColor(30, 30, 30);
+        pdf.text(text, x, yPos);
+      };
+
+      // Header
+      pdf.setFillColor(26, 115, 232);
+      pdf.rect(0, 0, pageW, 28, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`Rekap Pendaftar Lomba`, margin, 11);
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(compTitle, margin, 20);
+      pdf.setFontSize(8);
+      pdf.text(`Dicetak: ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}  ·  Total: ${list.length} pendaftar`, margin, 26);
+      y = 36;
+
+      // Table header
+      const cols = [
+        { label: 'No',    w: 10 },
+        { label: 'Nama',  w: 45 },
+        { label: 'No HP', w: 35 },
+        { label: 'Usia',  w: 15 },
+        { label: 'Alamat / RT', w: 45 },
+        { label: 'Status', w: 22 },
+        { label: 'Tgl Daftar', w: 28 },
+      ];
+
+      pdf.setFillColor(241, 245, 249);
+      pdf.rect(margin, y - 4, colW, 8, 'F');
+      pdf.setDrawColor(200, 210, 220);
+      pdf.rect(margin, y - 4, colW, 8, 'S');
+
+      let cx = margin;
+      cols.forEach((col) => {
+        addText(col.label, cx + 1, y + 0.5, { size: 8, bold: true, color: [60, 80, 110] });
+        cx += col.w;
+      });
+      y += 7;
+
+      // Rows
+      list.forEach((reg, idx) => {
+        if (y > 270) {
+          pdf.addPage();
+          y = margin;
+        }
+        const rowBg = idx % 2 === 0;
+        if (rowBg) {
+          pdf.setFillColor(249, 250, 252);
+          pdf.rect(margin, y - 4, colW, 8, 'F');
+        }
+        pdf.setDrawColor(220, 228, 236);
+        pdf.line(margin, y + 4, margin + colW, y + 4);
+
+        const statusColor: [number, number, number] =
+          reg.status === 'confirmed' ? [22, 163, 74] :
+          reg.status === 'rejected'  ? [220, 38, 38] : [180, 120, 0];
+
+        cx = margin;
+        const cells: { text: string; color?: [number,number,number] }[] = [
+          { text: String(idx + 1) },
+          { text: reg.name },
+          { text: reg.phone },
+          { text: reg.age || '—' },
+          { text: reg.address || '—' },
+          { text: reg.status === 'confirmed' ? 'Diterima' : reg.status === 'rejected' ? 'Ditolak' : 'Pending', color: statusColor },
+          { text: reg.date.split(',')[0] ?? reg.date },
+        ];
+        cells.forEach((cell, ci) => {
+          const text = pdf.splitTextToSize(cell.text, cols[ci].w - 2)[0] ?? '';
+          addText(text, cx + 1, y + 0.5, { size: 8, color: cell.color });
+          cx += cols[ci].w;
+        });
+        y += 8;
+      });
+
+      // Footer line
+      y += 4;
+      pdf.setDrawColor(200, 210, 220);
+      pdf.line(margin, y, margin + colW, y);
+      y += 5;
+      addText(`Total pendaftar: ${list.length}  ·  Diterima: ${list.filter(r => r.status === 'confirmed').length}  ·  Pending: ${list.filter(r => r.status === 'pending').length}  ·  Ditolak: ${list.filter(r => r.status === 'rejected').length}`, margin, y, { size: 8, bold: true, color: [80, 100, 130] });
+
+      const safeName = compTitle.replace(/[^a-zA-Z0-9]/g, '_');
+      pdf.save(`Rekap_${safeName}_${new Date().toISOString().slice(0,10)}.pdf`);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal membuat PDF, coba lagi.');
+    } finally {
+      setDownloadingPdf(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-5xl">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Manajemen</p>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white">Pendaftar Lomba</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Daftar peserta yang mendaftar melalui website.</p>
+        </div>
+        {pending > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20 w-fit">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse inline-block" />
+            {pending} pending
+          </div>
+        )}
+      </div>
+
+      {/* Stats global */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total',    value: registrations.length,                                  cls: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' },
+          { label: 'Pending',  value: registrations.filter(r => r.status === 'pending').length,   cls: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' },
+          { label: 'Diterima', value: registrations.filter(r => r.status === 'confirmed').length, cls: 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' },
+          { label: 'Ditolak',  value: registrations.filter(r => r.status === 'rejected').length,  cls: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
+        ].map((s) => (
+          <div key={s.label} className={`rounded-2xl p-4 ${s.cls} text-center`}>
+            <p className="text-2xl font-black">{s.value}</p>
+            <p className="text-xs font-bold uppercase tracking-wider mt-1 opacity-80">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Slide tab per lomba */}
+      <div className="relative">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <button
+            onClick={() => handleCompChange('__all__')}
+            className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-all ${activeComp === '__all__' ? 'bg-m-blue text-white shadow-md shadow-blue-500/25' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-m-blue hover:text-m-blue'}`}
+          >
+            Semua ({registrations.length})
+          </button>
+          {compTitles.map((title) => {
+            const count = registrations.filter(r => r.competitionTitle === title).length;
+            const pend  = registrations.filter(r => r.competitionTitle === title && r.status === 'pending').length;
+            return (
+              <button
+                key={title}
+                onClick={() => handleCompChange(title)}
+                className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${activeComp === title ? 'bg-m-blue text-white shadow-md shadow-blue-500/25' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-m-blue hover:text-m-blue'}`}
+              >
+                {title} ({count})
+                {pend > 0 && (
+                  <span className={`rounded-full px-1.5 py-0.5 text-xs font-black ${activeComp === title ? 'bg-white/25 text-white' : 'bg-amber-400 text-amber-900'}`}>{pend}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Toolbar: status filter + download PDF */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Status:</span>
+          <select
+            value={filterStatus}
+            onChange={(e) => handleStatusChange(e.target.value as typeof filterStatus)}
+            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-2 focus:ring-m-blue/10"
+          >
+            <option value="semua">Semua Status</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Diterima</option>
+            <option value="rejected">Ditolak</option>
+          </select>
+          <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">{filtered.length} peserta</span>
+        </div>
+
+        {/* Download PDF — muncul hanya kalau filter satu lomba */}
+        {activeComp !== '__all__' && (
+          <button
+            onClick={() => downloadPdf(activeComp)}
+            disabled={downloadingPdf !== null}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-sm font-bold transition-colors disabled:opacity-50"
+          >
+            <Download size={15} className={downloadingPdf ? 'animate-bounce' : ''} />
+            {downloadingPdf ? 'Membuat PDF...' : `Unduh Rekap PDF`}
+          </button>
+        )}
+
+        {/* Download semua lomba — satu PDF per tombol */}
+        {activeComp === '__all__' && compTitles.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {compTitles.map((title) => (
+              <button
+                key={title}
+                onClick={() => downloadPdf(title)}
+                disabled={downloadingPdf !== null}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-600 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-colors disabled:opacity-50"
+              >
+                <Download size={13} />
+                PDF {title}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* List */}
+      {paginated.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
+          <ClipboardList size={32} className="text-slate-300 dark:text-slate-600 mb-3" />
+          <p className="font-black text-slate-500 dark:text-slate-400">Belum ada pendaftar</p>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-[#0f1322] rounded-2xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden shadow-sm">
+          {paginated.map((reg, idx) => {
+            const no = (page - 1) * PAGE_SIZE + idx + 1;
+            const isLast = idx === paginated.length - 1;
+
+            // Avatar background — hash sederhana dari nama
+            const avatarBg = [
+              '#1a73e8','#34a853','#ea4335','#fbbc04',
+              '#9c27b0','#00acc1','#ff7043','#5c6bc0',
+            ][(reg.name.charCodeAt(0) || 65) % 8];
+
+            return (
+              <div
+                key={reg.id}
+                className={`flex items-center gap-4 px-5 py-4 hover:bg-slate-50/60 dark:hover:bg-white/[0.03] transition-colors duration-150 ${!isLast ? 'border-b border-slate-100 dark:border-slate-800/60' : ''}`}
+              >
+                {/* Avatar */}
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 select-none"
+                  style={{ background: avatarBg }}
+                >
+                  {reg.name.slice(0, 1).toUpperCase()}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-slate-900 dark:text-white truncate">{reg.name}</span>
+                    {activeComp === '__all__' && (
+                      <span className="text-xs text-slate-400 dark:text-slate-500 font-medium truncate hidden sm:inline">{reg.competitionTitle}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{reg.phone}</span>
+                    {reg.age && <span className="text-xs text-slate-400 dark:text-slate-500">{reg.age} thn</span>}
+                    {reg.address && <span className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-[140px]">{reg.address}</span>}
+                    {reg.notes && <span className="text-xs text-slate-400 dark:text-slate-500 italic truncate max-w-[120px]">"{reg.notes}"</span>}
+                  </div>
+                  <div className="text-xs text-slate-300 dark:text-slate-600 mt-0.5">{reg.date}</div>
+                </div>
+
+                {/* Status chip */}
+                <div className="shrink-0">
+                  {reg.status === 'confirmed' && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-[#34a853] bg-[#e6f4ea] dark:bg-[#34a853]/10 dark:text-[#81c995] px-2.5 py-1 rounded-full">
+                      <Check size={11} strokeWidth={2.5} /> Diterima
+                    </span>
+                  )}
+                  {reg.status === 'rejected' && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-[#ea4335] bg-[#fce8e6] dark:bg-[#ea4335]/10 dark:text-[#f28b82] px-2.5 py-1 rounded-full">
+                      <X size={11} strokeWidth={2.5} /> Ditolak
+                    </span>
+                  )}
+                  {reg.status === 'pending' && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-[#f29900] bg-[#fef7e0] dark:bg-[#fbbc04]/10 dark:text-[#fdd663] px-2.5 py-1 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#f29900] dark:bg-[#fdd663]" /> Pending
+                    </span>
+                  )}
+                </div>
+
+                {/* Aksi */}
+                <div className="shrink-0 flex items-center gap-0.5">
+                  {/* Tombol Terima — hanya muncul jika belum confirmed */}
+                  {reg.status !== 'confirmed' && (
+                    <button
+                      onClick={() => setStatus(reg.id, 'confirmed')}
+                      title="Terima"
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-[#34a853] hover:bg-[#e6f4ea] dark:hover:bg-[#34a853]/10 transition-colors"
+                    >
+                      <Check size={16} />
+                    </button>
+                  )}
+                  {/* Tombol Tolak — hanya muncul jika belum rejected */}
+                  {reg.status !== 'rejected' && (
+                    <button
+                      onClick={() => setStatus(reg.id, 'rejected')}
+                      title="Tolak"
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-[#ea4335] hover:bg-[#fce8e6] dark:hover:bg-[#ea4335]/10 transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                  {/* Tombol Hapus */}
+                  <button
+                    onClick={() => handleDelete(reg.id)}
+                    title="Hapus"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-slate-300 dark:text-slate-600 hover:text-[#ea4335] hover:bg-[#fce8e6] dark:hover:bg-[#ea4335]/10 transition-colors"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-4 pt-2">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Halaman <span className="font-bold text-slate-700 dark:text-slate-300">{page}</span> dari <span className="font-bold">{totalPages}</span>
+            {' · '}Menampilkan {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} dari {filtered.length}
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="h-8 w-8 rounded-lg flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors"
+              aria-label="Halaman sebelumnya"
+            >
+              <ChevronLeft size={15} />
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+              .reduce<(number | '...')[]>((acc, p, i, arr) => {
+                if (i > 0 && (p as number) - (arr[i - 1] as number) > 1) acc.push('...');
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((p, i) =>
+                p === '...'
+                  ? <span key={`e${i}`} className="h-8 w-8 flex items-center justify-center text-slate-400 text-sm">…</span>
+                  : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p as number)}
+                      className={`h-8 w-8 rounded-lg text-sm font-bold transition-colors ${page === p ? 'bg-m-blue text-white shadow-sm' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                    >
+                      {p}
+                    </button>
+                  )
+              )}
+
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="h-8 w-8 rounded-lg flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors"
+              aria-label="Halaman berikutnya"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -83,21 +83,40 @@ export interface EventContent {
   audience: string;
 }
 
+export interface CompetitionItem {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  requirements: string;
+  prizes: string;
+  registrationStart: string;   // ISO date string YYYY-MM-DD
+  registrationEnd: string;     // ISO date string YYYY-MM-DD
+  maxParticipants: string;
+  fee: string;
+  iconName: string;
+  color: string;
+  isOpen: boolean;
+  order?: number;
+}
+
+export interface CompetitionRegistration {
+  id: string;
+  competitionId: string;
+  competitionTitle: string;
+  name: string;
+  phone: string;
+  address: string;
+  age: string;
+  notes: string;
+  status: 'pending' | 'confirmed' | 'rejected';
+  date: string;
+  createdAt?: number | object;
+}
+
 export type UserRole = 'admin' | 'division';
 
-export type DivisionName =
-  | 'ketua'
-  | 'sekretaris'
-  | 'bendahara'
-  | 'pdd 1'
-  | 'pdd 2'
-  | 'pdd 3'
-  | 'humas 1'
-  | 'humas 2'
-  | 'acara 1'
-  | 'acara 2'
-  | 'perlengkapan 1'
-  | 'perlengkapan 2';
+export type DivisionName = string;
 
 export interface UserProfile {
   id: string;
@@ -107,6 +126,19 @@ export interface UserProfile {
   division: DivisionName;
   role: UserRole;
   createdAt?: number | object;
+}
+
+export interface LiveLocation {
+  uid: string;
+  name: string;
+  email: string;
+  division: DivisionName;
+  lat: number;
+  lng: number;
+  accuracy?: number;
+  heading?: number | null;
+  speed?: number | null;
+  updatedAt: number;
 }
 
 export interface WeeklyReportEntry {

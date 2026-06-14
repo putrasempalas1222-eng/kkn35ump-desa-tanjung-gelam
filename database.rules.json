@@ -40,6 +40,13 @@
         ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
       }
     },
+    "liveLocations": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'name', 'email', 'division', 'lat', 'lng', 'updatedAt']) && newData.child('uid').val() == $uid && newData.child('name').isString() && newData.child('email').isString() && newData.child('division').isString() && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180 && newData.child('updatedAt').isNumber())"
+      }
+    },
     "reviewSubmissions": {
       ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$reviewId": {

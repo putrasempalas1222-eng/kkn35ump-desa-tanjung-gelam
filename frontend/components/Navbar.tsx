@@ -15,6 +15,7 @@ const NAV_LINKS = [
   { name: 'Tim', href: '#team' },
   { name: 'Program', href: '#programs' },
   { name: 'Event', href: '#event' },
+  { name: 'Perlombaan', href: '#competition' },
   { name: 'Galeri', href: '#gallery' },
   { name: 'Kontak', href: '#contact' },
 ];
@@ -252,7 +253,7 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, isLogg
                   className="flex items-center gap-2 py-2.5 px-4 rounded-xl text-blue-400 hover:bg-blue-500/10 font-bold transition-all duration-200"
                 >
                   <ShieldAlert size={18} />
-                  {isLoggedIn ? 'Dashboard Admin' : 'Login Admin'}
+                  {isLoggedIn ? 'Dashboard Admin' : 'Login'}
                 </a>
               </li>
             </ul>

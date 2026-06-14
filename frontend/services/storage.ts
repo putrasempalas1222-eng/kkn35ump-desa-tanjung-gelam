@@ -12,6 +12,7 @@ import {
   getDatabase,
   ref,
   onValue,
+  onDisconnect,
   set,
   update,
   remove,
@@ -22,6 +23,7 @@ import {
   DivisionName,
   EventContent,
   GalleryImage,
+  LiveLocation,
   Program,
   ReviewSubmission,
   SiteContent,
@@ -29,6 +31,8 @@ import {
   Testimonial,
   UserProfile,
   WeeklyReport,
+  CompetitionItem,
+  CompetitionRegistration,
 } from '../types';
 
 export interface ContactMessage {
@@ -75,6 +79,9 @@ const COLLECTIONS = {
   messages: 'messages',
   userProfiles: 'userProfiles',
   weeklyReports: 'weeklyReports',
+  liveLocations: 'liveLocations',
+  competitions: 'competitions',
+  competitionRegistrations: 'competitionRegistrations',
 };
 
 const ACCOUNT_CREATOR_APP = 'accountCreator';
@@ -277,11 +284,20 @@ export const storage = {
     division: DivisionName;
   }) => {
     const creatorAuth = getAccountCreatorAuth();
-    const credential = await createUserWithEmailAndPassword(creatorAuth, account.email.trim(), account.password);
+    const email = account.email.trim();
+    let credential;
+
+    try {
+      credential = await createUserWithEmailAndPassword(creatorAuth, email, account.password);
+    } catch (error: any) {
+      if (error?.code !== 'auth/email-already-in-use') throw error;
+      credential = await signInWithEmailAndPassword(creatorAuth, email, account.password);
+    }
+
     const profile: UserProfile = {
       id: credential.user.uid,
       uid: credential.user.uid,
-      email: account.email.trim(),
+      email,
       name: account.name.trim(),
       division: account.division,
       role: 'division',
@@ -294,6 +310,7 @@ export const storage = {
   },
   updateUserProfile: (profile: UserProfile) =>
     set(ref(database, `${COLLECTIONS.userProfiles}/${profile.uid}`), profile),
+  deleteUserProfile: (uid: string) => remove(ref(database, `${COLLECTIONS.userProfiles}/${uid}`)),
 
   subscribeSiteContent: (callback: (data: SiteContent) => void) =>
     subscribeValue<SiteContent>(COLLECTIONS.site, EMPTY_SITE_CONTENT, callback),
@@ -402,4 +419,67 @@ export const storage = {
     return id;
   },
   deleteWeeklyReport: (uid: string, id: string) => remove(ref(database, `${COLLECTIONS.weeklyReports}/${uid}/${id}`)),
+
+  subscribeLiveLocations: (callback: (data: LiveLocation[]) => void) =>
+    subscribeList<LiveLocation>(COLLECTIONS.liveLocations, (locations) =>
+      callback(locations.sort((a, b) => String(a.division).localeCompare(String(b.division)) || a.name.localeCompare(b.name)))
+    ),
+  saveLiveLocation: async (location: LiveLocation) => {
+    const locationRef = ref(database, `${COLLECTIONS.liveLocations}/${location.uid}`);
+    await onDisconnect(locationRef).remove();
+    await set(locationRef, location);
+  },
+  deleteLiveLocation: (uid: string) => remove(ref(database, `${COLLECTIONS.liveLocations}/${uid}`)),
+
+  subscribeCompetitions: (callback: (data: CompetitionItem[]) => void) =>
+    subscribeList<CompetitionItem>(COLLECTIONS.competitions, (items) =>
+      callback(items.sort((a, b) => (a.order ?? 99) - (b.order ?? 99)))
+    ),
+  upsertCompetition: (item: CompetitionItem) => upsertItem(COLLECTIONS.competitions, item),
+  deleteCompetition: (id: string) => remove(ref(database, `${COLLECTIONS.competitions}/${id}`)),
+
+  subscribeCompetitionRegistrations: (callback: (data: CompetitionRegistration[]) => void) =>
+    subscribeList<CompetitionRegistration>(COLLECTIONS.competitionRegistrations, (regs) =>
+      callback(regs.sort((a, b) => String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date))))
+    ),
+  addCompetitionRegistration: async (reg: Omit<CompetitionRegistration, 'id' | 'date' | 'status' | 'createdAt'>) => {
+    // Cek duplikat nama di lomba yang sama (case-insensitive, trim)
+    const snapshot = await new Promise<CompetitionRegistration[]>((resolve) => {
+      const unsub = onValue(
+        ref(database, COLLECTIONS.competitionRegistrations),
+        (snap) => {
+          unsub();
+          resolve(mapRecordToArray<CompetitionRegistration>(snap.val()));
+        },
+        () => resolve([])
+      );
+    });
+
+    const normalizedName = reg.name.trim().toLowerCase();
+    const isDuplicate = snapshot.some(
+      (r) =>
+        r.competitionId === reg.competitionId &&
+        r.name.trim().toLowerCase() === normalizedName &&
+        r.status !== 'rejected' // yang sudah ditolak boleh daftar lagi
+    );
+
+    if (isDuplicate) {
+      throw new Error(`Nama "${reg.name}" sudah terdaftar di lomba ini. Satu peserta hanya boleh mendaftar satu kali.`);
+    }
+
+    const regRef = push(ref(database, COLLECTIONS.competitionRegistrations));
+    const newReg: CompetitionRegistration = {
+      ...reg,
+      id: regRef.key || `reg_${Date.now()}`,
+      date: new Date().toLocaleString('id-ID'),
+      status: 'pending',
+      createdAt: serverTimestamp(),
+    };
+    await set(regRef, newReg);
+    return newReg;
+  },
+  updateCompetitionRegistrationStatus: (id: string, status: CompetitionRegistration['status']) =>
+    update(ref(database, `${COLLECTIONS.competitionRegistrations}/${id}`), { status }),
+  deleteCompetitionRegistration: (id: string) =>
+    remove(ref(database, `${COLLECTIONS.competitionRegistrations}/${id}`)),
 };
