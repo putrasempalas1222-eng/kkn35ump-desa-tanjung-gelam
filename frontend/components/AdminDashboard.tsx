@@ -809,26 +809,24 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
             </span>
           </div>
 
-          {restorableDivisions.length > 0 && (
-            <div className="mb-4 rounded-xl border border-dashed border-m-blue/30 bg-m-blue/5 dark:bg-m-blue/10 p-3">
-              <p className="text-xs font-black uppercase tracking-wider text-m-blue dark:text-[#7fcfff]">Tambah Lagi Divisi</p>
-              <div className="mt-2 grid sm:grid-cols-[1fr_auto] gap-2">
-                <input
-                  value={restoreDivisionInput}
-                  onChange={(event) => setRestoreDivisionInput(event.target.value)}
-                  placeholder="Contoh: PDD 3"
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10"
-                />
-                <button
-                  type="button"
-                  onClick={restoreDivisionSlot}
-                  className="rounded-lg bg-m-blue px-4 py-2 text-sm font-black text-white hover:bg-m-blue-dark transition-colors"
-                >
-                  Buat Divisi
-                </button>
-              </div>
+          <div className="mb-4 rounded-xl border border-dashed border-m-blue/30 bg-m-blue/5 dark:bg-m-blue/10 p-3">
+            <p className="text-xs font-black uppercase tracking-wider text-m-blue dark:text-[#7fcfff]">Tambah Lagi Divisi</p>
+            <div className="mt-2 grid sm:grid-cols-[1fr_auto] gap-2">
+              <input
+                value={restoreDivisionInput}
+                onChange={(event) => setRestoreDivisionInput(event.target.value)}
+                placeholder="Contoh: PERLENGKAPAN 3"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10"
+              />
+              <button
+                type="button"
+                onClick={restoreDivisionSlot}
+                className="rounded-lg bg-m-blue px-4 py-2 text-sm font-black text-white hover:bg-m-blue-dark transition-colors"
+              >
+                Buat Divisi
+              </button>
             </div>
-          )}
+          </div>
 
           <div className="grid sm:grid-cols-2 gap-3">
             {visibleDivisions.map((item) => {
