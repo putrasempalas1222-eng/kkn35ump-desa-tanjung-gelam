@@ -1039,13 +1039,28 @@ const chooseMapZoom = (locations: LiveLocation[]) => {
 
 const clampMapZoom = (zoom: number) => Math.max(2, Math.min(18, zoom));
 
+const TANJUNG_GELAM_CENTER = { lat: -3.27384, lng: 104.678205 };
+const TANJUNG_GELAM_GOOGLE_MAPS_URL = 'https://www.google.com/maps/search/?api=1&query=-3.273840,104.678205';
+
 const getLocationsCenter = (locations: LiveLocation[]) =>
   locations.length
     ? {
         lat: locations.reduce((sum, location) => sum + location.lat, 0) / locations.length,
         lng: locations.reduce((sum, location) => sum + location.lng, 0) / locations.length,
       }
-    : { lat: -2.9761, lng: 104.7754 };
+    : TANJUNG_GELAM_CENTER;
+
+const TANJUNG_GELAM_BOUNDARY_POINTS = [
+  { lat: -3.2817, lng: 104.6498 },
+  { lat: -3.2743, lng: 104.6545 },
+  { lat: -3.2734, lng: 104.6662 },
+  { lat: -3.2747, lng: 104.6778 },
+  { lat: -3.2796, lng: 104.6851 },
+  { lat: -3.2877, lng: 104.6845 },
+  { lat: -3.2922, lng: 104.6754 },
+  { lat: -3.2915, lng: 104.6636 },
+  { lat: -3.2874, lng: 104.6543 },
+];
 
 const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation }: { locations: LiveLocation[]; currentUid: string; selectedUid: string; onSelectLocation: (uid: string) => void }) => {
   const [viewport, setViewport] = useState<{ center: { lat: number; lng: number }; zoom: number } | null>(null);
@@ -1078,6 +1093,13 @@ const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation
   });
   const tileLayerOffsetX = tileLayerWidth / 2 + (startX - centerTileX) * 256;
   const tileLayerOffsetY = tileLayerHeight / 2 + (startY - centerTileY) * 256;
+  const tanjungGelamBoundaryPath = `${TANJUNG_GELAM_BOUNDARY_POINTS.map((point, index) => {
+    const pointTileX = lonToTileX(point.lng, zoom);
+    const pointTileY = latToTileY(point.lat, zoom);
+    const x = tileLayerWidth / 2 + (pointTileX - centerTileX) * 256;
+    const y = tileLayerHeight / 2 + (pointTileY - centerTileY) * 256;
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ')} Z`;
 
   useEffect(() => {
     if (hasInitialFit || usableLocations.length === 0) return;
@@ -1135,6 +1157,9 @@ const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation
     setHasInitialFit(true);
     onSelectLocation('');
   };
+  const googleMapsHref = selectedLocation
+    ? `https://www.google.com/maps?q=${selectedLocation.lat},${selectedLocation.lng}`
+    : TANJUNG_GELAM_GOOGLE_MAPS_URL;
 
   return (
     <div
@@ -1167,6 +1192,24 @@ const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation
             draggable={false}
           />
         ))}
+        <svg
+          className="pointer-events-none absolute inset-0"
+          width={tileLayerWidth}
+          height={tileLayerHeight}
+          viewBox={`0 0 ${tileLayerWidth} ${tileLayerHeight}`}
+          aria-hidden="true"
+        >
+          <path
+            d={tanjungGelamBoundaryPath}
+            fill="rgba(14, 165, 233, 0.10)"
+            stroke="#0284c7"
+            strokeWidth="4"
+            strokeDasharray="10 7"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
       </div>
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-white/10 pointer-events-none" />
       {usableLocations.map((location) => {
@@ -1208,7 +1251,7 @@ const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation
         </div>
       )}
       <a
-        href={`https://www.google.com/maps?q=${center.lat},${center.lng}`}
+        href={googleMapsHref}
         target="_blank"
         rel="noreferrer"
         className="absolute bottom-3 right-3 rounded-full bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs font-black text-m-blue shadow-sm hover:bg-m-blue hover:text-white transition-colors"
