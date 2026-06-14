@@ -1037,21 +1037,29 @@ const chooseMapZoom = (locations: LiveLocation[]) => {
   return 16;
 };
 
-const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation }: { locations: LiveLocation[]; currentUid: string; selectedUid: string; onSelectLocation: (uid: string) => void }) => {
-  const [manualCenter, setManualCenter] = useState<{ lat: number; lng: number } | null>(null);
-  const dragState = useRef<{ x: number; y: number; center: { lat: number; lng: number } } | null>(null);
-  const didDrag = useRef(false);
-  const usableLocations = locations.filter((location) => Number.isFinite(location.lat) && Number.isFinite(location.lng));
-  const selectedLocation = usableLocations.find((location) => location.uid === selectedUid);
-  const centerSource = selectedLocation ? [selectedLocation] : usableLocations;
-  const autoCenter = centerSource.length
+const clampMapZoom = (zoom: number) => Math.max(2, Math.min(18, zoom));
+
+const getLocationsCenter = (locations: LiveLocation[]) =>
+  locations.length
     ? {
-        lat: centerSource.reduce((sum, location) => sum + location.lat, 0) / centerSource.length,
-        lng: centerSource.reduce((sum, location) => sum + location.lng, 0) / centerSource.length,
+        lat: locations.reduce((sum, location) => sum + location.lat, 0) / locations.length,
+        lng: locations.reduce((sum, location) => sum + location.lng, 0) / locations.length,
       }
     : { lat: -2.9761, lng: 104.7754 };
-  const center = manualCenter || autoCenter;
-  const zoom = chooseMapZoom(usableLocations);
+
+const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation }: { locations: LiveLocation[]; currentUid: string; selectedUid: string; onSelectLocation: (uid: string) => void }) => {
+  const [viewport, setViewport] = useState<{ center: { lat: number; lng: number }; zoom: number } | null>(null);
+  const [hasInitialFit, setHasInitialFit] = useState(false);
+  const dragState = useRef<{ x: number; y: number; center: { lat: number; lng: number } } | null>(null);
+  const didDrag = useRef(false);
+  const lastSelectedUid = useRef('');
+  const usableLocations = locations.filter((location) => Number.isFinite(location.lat) && Number.isFinite(location.lng));
+  const selectedLocation = usableLocations.find((location) => location.uid === selectedUid);
+  const locationsSignature = usableLocations.map((location) => `${location.uid}:${location.lat.toFixed(5)},${location.lng.toFixed(5)}`).join('|');
+  const initialCenter = getLocationsCenter(usableLocations);
+  const initialZoom = clampMapZoom(chooseMapZoom(usableLocations));
+  const center = viewport?.center || initialCenter;
+  const zoom = viewport?.zoom ?? initialZoom;
   const centerTileX = lonToTileX(center.lng, zoom);
   const centerTileY = latToTileY(center.lat, zoom);
   const tileColumns = 9;
@@ -1071,6 +1079,28 @@ const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation
   const tileLayerOffsetX = tileLayerWidth / 2 + (startX - centerTileX) * 256;
   const tileLayerOffsetY = tileLayerHeight / 2 + (startY - centerTileY) * 256;
 
+  useEffect(() => {
+    if (hasInitialFit || usableLocations.length === 0) return;
+
+    setViewport({ center: initialCenter, zoom: initialZoom });
+    setHasInitialFit(true);
+  }, [hasInitialFit, initialCenter.lat, initialCenter.lng, initialZoom, usableLocations.length, locationsSignature]);
+
+  useEffect(() => {
+    if (!selectedUid || selectedUid === lastSelectedUid.current) {
+      lastSelectedUid.current = selectedUid;
+      return;
+    }
+
+    lastSelectedUid.current = selectedUid;
+    if (!selectedLocation) return;
+
+    setViewport((current) => ({
+      center: { lat: selectedLocation.lat, lng: selectedLocation.lng },
+      zoom: current?.zoom ?? clampMapZoom(Math.max(initialZoom, 15)),
+    }));
+  }, [selectedUid, selectedLocation?.lat, selectedLocation?.lng, initialZoom]);
+
   const updateCenterFromDrag = (clientX: number, clientY: number) => {
     if (!dragState.current) return;
 
@@ -1087,7 +1117,23 @@ const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation
     const lng = (nextTileX / n) * 360 - 180;
     const latRad = Math.atan(Math.sinh(Math.PI * (1 - (2 * nextTileY) / n)));
     const lat = (latRad * 180) / Math.PI;
-    setManualCenter({ lat: Math.max(-85, Math.min(85, lat)), lng });
+    setViewport((current) => ({
+      center: { lat: Math.max(-85, Math.min(85, lat)), lng },
+      zoom: current?.zoom ?? zoom,
+    }));
+  };
+
+  const changeZoom = (nextZoom: number) => {
+    setViewport((current) => ({
+      center,
+      zoom: clampMapZoom(nextZoom),
+    }));
+  };
+
+  const showAllLocations = () => {
+    setViewport({ center: initialCenter, zoom: initialZoom });
+    setHasInitialFit(true);
+    onSelectLocation('');
   };
 
   return (
@@ -1172,15 +1218,33 @@ const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation
       </a>
       <button
         type="button"
-        onClick={() => {
-          setManualCenter(null);
-          onSelectLocation('');
-        }}
+        onClick={showAllLocations}
         onPointerDown={(event) => event.stopPropagation()}
         className="absolute bottom-3 left-3 rounded-full bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs font-black text-slate-700 dark:text-slate-200 shadow-sm hover:bg-m-blue hover:text-white transition-colors"
       >
         Lihat Semua
       </button>
+      <div
+        className="absolute right-3 top-3 flex overflow-hidden rounded-full border border-slate-200 bg-white/95 shadow-sm dark:border-slate-800 dark:bg-slate-950/95"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={() => changeZoom(zoom + 1)}
+          className="h-9 w-10 text-base font-black text-slate-700 transition-colors hover:bg-m-blue hover:text-white dark:text-slate-200"
+          aria-label="Perbesar maps"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={() => changeZoom(zoom - 1)}
+          className="h-9 w-10 border-l border-slate-200 text-base font-black text-slate-700 transition-colors hover:bg-m-blue hover:text-white dark:border-slate-800 dark:text-slate-200"
+          aria-label="Perkecil maps"
+        >
+          -
+        </button>
+      </div>
       <div className="absolute left-3 top-3 rounded-full bg-white/95 dark:bg-slate-950/95 border border-slate-200 dark:border-slate-800 px-3 py-1.5 text-[11px] font-black text-slate-600 dark:text-slate-300 shadow-sm pointer-events-none">
         Geser peta untuk melihat sekitar
       </div>
@@ -1840,6 +1904,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [liveLocations, setLiveLocations] = useState<LiveLocation[]>([]);
   const [isLocationTracking, setIsLocationTracking] = useState(false);
+  const [isLocationPermissionRequesting, setIsLocationPermissionRequesting] = useState(false);
   const [locationStatus, setLocationStatus] = useState('Live Maps belum aktif.');
   const [locationError, setLocationError] = useState('');
   const [selectedLocationUid, setSelectedLocationUid] = useState('');
@@ -2096,9 +2161,27 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     locationWakeLock.current = null;
   };
 
-  const startLocationTracking = () => {
+  const getLocationPermissionState = async () => {
+    if (typeof navigator === 'undefined' || !('permissions' in navigator)) return '';
+
+    try {
+      const status = await (navigator as any).permissions.query({ name: 'geolocation' });
+      return String(status?.state || '');
+    } catch {
+      return '';
+    }
+  };
+
+  const startLocationTracking = async (allowPermissionPrompt = true) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setLocationError('Browser ini belum mendukung GPS/geolocation.');
+      return;
+    }
+
+    const permissionState = await getLocationPermissionState();
+    if (!allowPermissionPrompt && permissionState !== 'granted') {
+      setIsLocationTracking(false);
+      setLocationStatus('Tekan Aktifkan Live Maps untuk memberi izin lokasi.');
       return;
     }
 
@@ -2106,6 +2189,9 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     setLocationStatus('Meminta izin lokasi...');
     setIsLocationTracking(true);
     localStorage.setItem(liveTrackingPreferenceKey, '1');
+    closeNav();
+    setIsAiChatOpen(false);
+    setIsLocationPermissionRequesting(permissionState !== 'granted');
     requestLocationWakeLock();
 
     if (locationWatchId.current !== null) {
@@ -2130,16 +2216,22 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
 
         try {
           await storage.saveLiveLocation(nextLocation);
+          setIsLocationPermissionRequesting(false);
           setLocationStatus(`Lokasi diperbarui ${formatLiveLocationTime(nextLocation.updatedAt)}`);
           setLocationError('');
         } catch (error: any) {
+          setIsLocationPermissionRequesting(false);
           setLocationError(error?.message || 'Lokasi belum berhasil disimpan.');
         }
       },
       (error) => {
+        setIsLocationPermissionRequesting(false);
         setIsLocationTracking(false);
+        localStorage.removeItem(liveTrackingPreferenceKey);
+        locationWatchId.current = null;
+        releaseLocationWakeLock();
         if (error.code === error.PERMISSION_DENIED) {
-          setLocationError('Izin lokasi ditolak. Aktifkan izin lokasi di browser.');
+          setLocationError('Izin lokasi belum berhasil. Jika muncul pesan overlay Android, tutup tombol melayang/aplikasi overlay lalu tekan Aktifkan Live Maps lagi.');
         } else if (error.code === error.POSITION_UNAVAILABLE) {
           setLocationError('Lokasi belum tersedia. Pastikan GPS/perangkat lokasi aktif.');
         } else {
@@ -2161,6 +2253,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     }
 
     setIsLocationTracking(false);
+    setIsLocationPermissionRequesting(false);
     localStorage.removeItem(liveTrackingPreferenceKey);
     await releaseLocationWakeLock();
     setLocationStatus('Live Maps dimatikan.');
@@ -2169,7 +2262,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
 
   useEffect(() => {
     if (localStorage.getItem(liveTrackingPreferenceKey) === '1') {
-      startLocationTracking();
+      startLocationTracking(false);
     }
   }, [liveTrackingPreferenceKey]);
 
@@ -2178,7 +2271,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
       if (document.visibilityState === 'visible' && localStorage.getItem(liveTrackingPreferenceKey) === '1') {
         requestLocationWakeLock();
         if (locationWatchId.current === null) {
-          startLocationTracking();
+          startLocationTracking(false);
         }
       }
     };
@@ -2406,7 +2499,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     )
     : null;
 
-  const aiChatWidget = aiChatHost
+  const aiChatWidget = aiChatHost && !isLocationPermissionRequesting
     ? createPortal(
       <>
         <style>{`
@@ -2679,7 +2772,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={startLocationTracking}
+                onClick={() => startLocationTracking()}
                 disabled={isLocationTracking}
                 className="rounded-full bg-m-blue px-5 py-2.5 text-sm font-black text-white shadow-sm shadow-m-blue/20 hover:bg-m-blue-dark disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
               >
