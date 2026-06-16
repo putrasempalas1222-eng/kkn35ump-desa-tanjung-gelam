@@ -153,7 +153,7 @@ export interface WeeklyReportEntry {
 
 export interface WeeklyReport {
   id: string;
-  reportType?: 'weekly' | 'matrix' | 'individualMatrix' | 'treasurerOutput';
+  reportType?: 'weekly' | 'matrix' | 'individualMatrix' | 'treasurerOutput' | 'treasurerIncome';
   userId: string;
   name: string;
   nim: string;
@@ -169,5 +169,15 @@ export interface WeeklyReport {
   signerName: string;
   signerNim: string;
   entries: WeeklyReportEntry[];
+  updatedAt?: number | object;
+}
+
+export interface DivisionNote {
+  id: string;
+  userId: string;
+  division: DivisionName;
+  title: string;
+  content: string;
+  date: string;
   updatedAt?: number | object;
 }

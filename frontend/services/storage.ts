@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   User as FirebaseUser,
@@ -33,6 +34,7 @@ import {
   WeeklyReport,
   CompetitionItem,
   CompetitionRegistration,
+  DivisionNote,
 } from '../types';
 
 export interface ContactMessage {
@@ -45,15 +47,23 @@ export interface ContactMessage {
   createdAt?: number | object;
 }
 
+const getRequiredEnv = (key: string) => {
+  const value = import.meta.env[key];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value;
+};
+
 const firebaseConfig = {
-  apiKey: 'AIzaSyCxFcWI6vLfGNcQMnTVRsRtXsDJfzqiWEw',
-  authDomain: 'project-3dfa8c97-bc93-4195-a5a.firebaseapp.com',
-  databaseURL: 'https://project-3dfa8c97-bc93-4195-a5a-default-rtdb.firebaseio.com',
-  projectId: 'project-3dfa8c97-bc93-4195-a5a',
-  storageBucket: 'project-3dfa8c97-bc93-4195-a5a.firebasestorage.app',
-  messagingSenderId: '275478991025',
-  appId: '1:275478991025:web:80d97124eb119cc039d290',
-  measurementId: 'G-YL95DFEMDK',
+  apiKey: getRequiredEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: getRequiredEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  databaseURL: getRequiredEnv('VITE_FIREBASE_DATABASE_URL'),
+  projectId: getRequiredEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: getRequiredEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getRequiredEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: getRequiredEnv('VITE_FIREBASE_APP_ID'),
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
 };
 
 const app = initializeApp(firebaseConfig);
@@ -79,6 +89,8 @@ const COLLECTIONS = {
   messages: 'messages',
   userProfiles: 'userProfiles',
   weeklyReports: 'weeklyReports',
+  financialReports: 'financialReports',
+  divisionNotes: 'divisionNotes',
   liveLocations: 'liveLocations',
   competitions: 'competitions',
   competitionRegistrations: 'competitionRegistrations',
@@ -249,6 +261,34 @@ const validatePublicReview = (review: Pick<ReviewSubmission, 'name' | 'role' | '
   return '';
 };
 
+const validateCompetitionRegistration = (reg: Pick<CompetitionRegistration, 'name' | 'phone' | 'age' | 'address' | 'notes'>) => {
+  const name = reg.name.trim();
+  const phone = reg.phone.trim();
+  const age = reg.age.trim();
+
+  if (!/^[A-Za-zÀ-ÖØ-öø-ÿ\s'.-]{3,80}$/.test(name)) {
+    return 'Nama lengkap hanya boleh berisi huruf dan minimal 3 karakter.';
+  }
+
+  if (!/^(08|628)\d{8,12}$/.test(phone)) {
+    return 'Nomor HP harus angka saja, diawali 08 atau 628, minimal 10 digit dan maksimal 14 digit.';
+  }
+
+  if (age && (!/^\d{1,3}$/.test(age) || Number(age) < 1 || Number(age) > 100)) {
+    return 'Usia harus berada di antara 1 sampai 100.';
+  }
+
+  if (reg.address.length > 120 || reg.notes.length > 160) {
+    return 'Alamat maksimal 120 karakter dan catatan maksimal 160 karakter.';
+  }
+
+  if (/[<>]/.test(`${reg.address}${reg.notes}`)) {
+    return 'Alamat dan catatan tidak boleh memakai karakter < atau >.';
+  }
+
+  return '';
+};
+
 export const storage = {
   defaults: {
     siteContent: EMPTY_SITE_CONTENT,
@@ -259,6 +299,11 @@ export const storage = {
 
   onAuthChange: (callback: (user: FirebaseUser | null) => void) => onAuthStateChanged(auth, callback),
   login: (email: string, password: string) => signInWithEmailAndPassword(auth, email, password),
+  sendPasswordReset: (email: string) =>
+    sendPasswordResetEmail(auth, email.trim(), {
+      url: `${window.location.origin}/#admin`,
+      handleCodeInApp: false,
+    }),
   logout: () => signOut(auth),
 
   subscribeUserProfile: (uid: string, callback: (data: UserProfile | null) => void) => {
@@ -310,7 +355,30 @@ export const storage = {
   },
   updateUserProfile: (profile: UserProfile) =>
     set(ref(database, `${COLLECTIONS.userProfiles}/${profile.uid}`), profile),
-  deleteUserProfile: (uid: string) => remove(ref(database, `${COLLECTIONS.userProfiles}/${uid}`)),
+  deleteUserProfile: async (uid: string) => {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Sesi admin tidak ditemukan. Silakan login ulang.');
+
+    const response = await fetch('/admin/delete-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ uid }),
+    });
+
+    if (!response.ok) {
+      let message = 'Akun belum berhasil dihapus dari Firebase Auth.';
+      try {
+        const payload = await response.json();
+        message = payload?.message || message;
+      } catch {
+        message = await response.text().catch(() => message);
+      }
+      throw new Error(message);
+    }
+  },
 
   subscribeSiteContent: (callback: (data: SiteContent) => void) =>
     subscribeValue<SiteContent>(COLLECTIONS.site, EMPTY_SITE_CONTENT, callback),
@@ -409,16 +477,56 @@ export const storage = {
       callback(reports.sort((a, b) => Number(a.week || 0) - Number(b.week || 0)))
     );
   },
+  subscribeFinancialReports: (callback: (data: WeeklyReport[]) => void) =>
+    subscribeList<WeeklyReport>(COLLECTIONS.financialReports, (reports) =>
+      callback(
+        reports
+          .filter((report) => report.reportType === 'treasurerOutput' || report.reportType === 'treasurerIncome')
+          .sort((a, b) => String(b.updatedAt || b.week || '').localeCompare(String(a.updatedAt || a.week || '')))
+      )
+    ),
   saveWeeklyReport: async (report: WeeklyReport) => {
     const id = report.id || `week_${Date.now()}`;
-    await set(ref(database, `${COLLECTIONS.weeklyReports}/${report.userId}/${id}`), {
+    const payload = {
       ...report,
+      id,
+      updatedAt: serverTimestamp(),
+    };
+    await set(ref(database, `${COLLECTIONS.weeklyReports}/${report.userId}/${id}`), payload);
+
+    if (report.reportType === 'treasurerOutput' || report.reportType === 'treasurerIncome') {
+      await set(ref(database, `${COLLECTIONS.financialReports}/${id}`), payload);
+    } else {
+      await remove(ref(database, `${COLLECTIONS.financialReports}/${id}`));
+    }
+
+    return id;
+  },
+  deleteWeeklyReport: async (uid: string, id: string) => {
+    await remove(ref(database, `${COLLECTIONS.weeklyReports}/${uid}/${id}`));
+    await remove(ref(database, `${COLLECTIONS.financialReports}/${id}`));
+  },
+
+  subscribeDivisionNotes: (uid: string, callback: (data: DivisionNote[]) => void) => {
+    if (!uid) {
+      callback([]);
+      return () => undefined;
+    }
+
+    return subscribeList<DivisionNote>(`${COLLECTIONS.divisionNotes}/${uid}`, (notes) =>
+      callback(notes.sort((a, b) => String(b.updatedAt || b.date).localeCompare(String(a.updatedAt || a.date))))
+    );
+  },
+  saveDivisionNote: async (note: DivisionNote) => {
+    const id = note.id || `note_${Date.now()}`;
+    await set(ref(database, `${COLLECTIONS.divisionNotes}/${note.userId}/${id}`), {
+      ...note,
       id,
       updatedAt: serverTimestamp(),
     });
     return id;
   },
-  deleteWeeklyReport: (uid: string, id: string) => remove(ref(database, `${COLLECTIONS.weeklyReports}/${uid}/${id}`)),
+  deleteDivisionNote: (uid: string, id: string) => remove(ref(database, `${COLLECTIONS.divisionNotes}/${uid}/${id}`)),
 
   subscribeLiveLocations: (callback: (data: LiveLocation[]) => void) =>
     subscribeList<LiveLocation>(COLLECTIONS.liveLocations, (locations) =>
@@ -443,6 +551,18 @@ export const storage = {
       callback(regs.sort((a, b) => String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date))))
     ),
   addCompetitionRegistration: async (reg: Omit<CompetitionRegistration, 'id' | 'date' | 'status' | 'createdAt'>) => {
+    const validationError = validateCompetitionRegistration({
+      name: reg.name,
+      phone: reg.phone,
+      age: reg.age,
+      address: reg.address,
+      notes: reg.notes,
+    });
+
+    if (validationError) {
+      throw new Error(validationError);
+    }
+
     // Cek duplikat nama di lomba yang sama (case-insensitive, trim)
     const snapshot = await new Promise<CompetitionRegistration[]>((resolve) => {
       const unsub = onValue(

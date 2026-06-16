@@ -43,6 +43,17 @@ const parseMaxParticipants = (val: string): number => {
 const countActive = (regs: CompetitionRegistration[], compId: string) =>
   regs.filter((r) => r.competitionId === compId && r.status !== 'rejected').length;
 
+const sanitizeName = (value: string) =>
+  value.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s'.-]/g, '').replace(/\s{2,}/g, ' ').slice(0, 80);
+const sanitizePhone = (value: string) => value.replace(/\D/g, '').slice(0, 14);
+const sanitizeAge = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 3);
+  if (!digits) return '';
+  return String(Math.min(100, Math.max(1, Number(digits))));
+};
+const sanitizeShortText = (value: string, maxLength = 120) =>
+  value.replace(/[<>]/g, '').replace(/\s{2,}/g, ' ').slice(0, maxLength);
+
 /* ────────────────────────────────────────────────
    Registration Modal
 ──────────────────────────────────────────────── */
@@ -80,13 +91,31 @@ const RegistrationModal: React.FC<{
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanName = sanitizeName(form.name).trim();
+    const cleanPhone = sanitizePhone(form.phone);
+    const cleanAge = sanitizeAge(form.age);
+    const cleanAddress = sanitizeShortText(form.address, 120).trim();
+    const cleanNotes = sanitizeShortText(form.notes, 160).trim();
+
     if (isFull) { setErrorMsg('Kuota pendaftaran sudah penuh.'); return; }
-    if (!form.name.trim() || !form.phone.trim()) {
+    if (!cleanName || !cleanPhone) {
       setErrorMsg('Nama lengkap dan nomor HP wajib diisi.');
       return;
     }
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ\s'.-]{3,80}$/.test(cleanName)) {
+      setErrorMsg('Nama lengkap hanya boleh berisi huruf dan minimal 3 karakter.');
+      return;
+    }
+    if (!/^(08|628)\d{8,12}$/.test(cleanPhone)) {
+      setErrorMsg('Nomor HP harus angka saja, diawali 08 atau 628, minimal 10 digit dan maksimal 14 digit.');
+      return;
+    }
+    if (cleanAge && (Number(cleanAge) < 1 || Number(cleanAge) > 100)) {
+      setErrorMsg('Usia harus berada di antara 1 sampai 100.');
+      return;
+    }
     if (isDuplicateName) {
-      setErrorMsg(`Nama "${form.name.trim()}" sudah terdaftar di lomba ini.`);
+      setErrorMsg(`Nama "${cleanName}" sudah terdaftar di lomba ini.`);
       return;
     }
     setSubmitting(true);
@@ -95,11 +124,11 @@ const RegistrationModal: React.FC<{
       await storage.addCompetitionRegistration({
         competitionId: comp.id,
         competitionTitle: comp.title,
-        name: form.name.trim(),
-        phone: form.phone.trim(),
-        age: form.age.trim(),
-        address: form.address.trim(),
-        notes: form.notes.trim(),
+        name: cleanName,
+        phone: cleanPhone,
+        age: cleanAge,
+        address: cleanAddress,
+        notes: cleanNotes,
       });
       setStatus('success');
     } catch (err: any) {
@@ -211,8 +240,12 @@ const RegistrationModal: React.FC<{
                   required
                   type="text"
                   value={form.name}
-                  onChange={(e) => set('name')(e.target.value)}
+                  onChange={(e) => setField('name')(sanitizeName(e.target.value))}
+                  minLength={3}
+                  maxLength={80}
+                  pattern="[A-Za-zÀ-ÖØ-öø-ÿ\s'.-]{3,80}"
                   placeholder="Masukkan nama lengkap"
+                  title="Nama lengkap hanya boleh berisi huruf, spasi, titik, apostrof, atau tanda hubung."
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
                 />
               </label>
@@ -225,9 +258,14 @@ const RegistrationModal: React.FC<{
                 <input
                   required
                   type="tel"
+                  inputMode="numeric"
                   value={form.phone}
-                  onChange={(e) => set('phone')(e.target.value)}
-                  placeholder="Contoh: 0812xxxxxxxx"
+                  onChange={(e) => setField('phone')(sanitizePhone(e.target.value))}
+                  minLength={10}
+                  maxLength={14}
+                  pattern="(08|628)\d{8,12}"
+                  placeholder="Contoh: 081234567890"
+                  title="Nomor HP hanya boleh angka, diawali 08 atau 628, minimal 10 digit dan maksimal 14 digit."
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
                 />
               </label>
@@ -242,7 +280,7 @@ const RegistrationModal: React.FC<{
                   min="1"
                   max="100"
                   value={form.age}
-                  onChange={(e) => set('age')(e.target.value)}
+                  onChange={(e) => setField('age')(sanitizeAge(e.target.value))}
                   placeholder="Usia peserta"
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
                 />
@@ -256,7 +294,8 @@ const RegistrationModal: React.FC<{
                 <input
                   type="text"
                   value={form.address}
-                  onChange={(e) => set('address')(e.target.value)}
+                  onChange={(e) => setField('address')(sanitizeShortText(e.target.value, 120))}
+                  maxLength={120}
                   placeholder="Contoh: RT 03 Desa Tanjung Gelam"
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
                 />
@@ -270,7 +309,8 @@ const RegistrationModal: React.FC<{
                 <textarea
                   rows={2}
                   value={form.notes}
-                  onChange={(e) => set('notes')(e.target.value)}
+                  onChange={(e) => setField('notes')(sanitizeShortText(e.target.value, 160))}
+                  maxLength={160}
                   placeholder="Misal: nama tim, kategori usia, dll."
                   className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all resize-none"
                 />
@@ -477,11 +517,16 @@ const CompetitionCard: React.FC<{
 ──────────────────────────────────────────────── */
 export const Competition: React.FC = () => {
   const [competitions, setCompetitions] = useState<CompetitionItem[]>([]);
+  const [registrations, setRegistrations] = useState<CompetitionRegistration[]>([]);
   const [filter, setFilter] = useState('Semua');
   const [registering, setRegistering] = useState<CompetitionItem | null>(null);
 
   useEffect(() => {
     return storage.subscribeCompetitions(setCompetitions);
+  }, []);
+
+  useEffect(() => {
+    return storage.subscribeCompetitionRegistrations(setRegistrations);
   }, []);
 
   const categories = ['Semua', ...Array.from(new Set(competitions.map((c) => c.category)))];
@@ -538,9 +583,21 @@ export const Competition: React.FC = () => {
           {/* Grid */}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             <AnimatePresence mode="popLayout">
-              {filtered.map((comp, idx) => (
-                <CompetitionCard key={comp.id} comp={comp} index={idx} onRegister={setRegistering} />
-              ))}
+              {filtered.map((comp, idx) => {
+                const maxCount = parseMaxParticipants(comp.maxParticipants);
+                const registrationCount = countActive(registrations, comp.id);
+
+                return (
+                  <CompetitionCard
+                    key={comp.id}
+                    comp={comp}
+                    index={idx}
+                    registrationCount={registrationCount}
+                    maxCount={maxCount}
+                    onRegister={setRegistering}
+                  />
+                );
+              })}
             </AnimatePresence>
           </div>
 
@@ -584,9 +641,20 @@ export const Competition: React.FC = () => {
 
       {/* Registration Modal */}
       <AnimatePresence>
-        {registering && (
-          <RegistrationModal comp={registering} onClose={() => setRegistering(null)} />
-        )}
+        {registering && (() => {
+          const maxCount = parseMaxParticipants(registering.maxParticipants);
+          const registrationCount = countActive(registrations, registering.id);
+
+          return (
+            <RegistrationModal
+              comp={registering}
+              registrationCount={registrationCount}
+              maxCount={maxCount}
+              existingRegistrations={registrations}
+              onClose={() => setRegistering(null)}
+            />
+          );
+        })()}
       </AnimatePresence>
     </>
   );

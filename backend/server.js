@@ -10,6 +10,7 @@ import { GoogleAuth } from 'google-auth-library';
 import fetch from 'node-fetch';
 import rateLimit from 'express-rate-limit';
 import { WebSocketServer, WebSocket } from 'ws';
+import admin from 'firebase-admin';
 
 const app = express();
 app.use(express.json({limit: process?.env?.API_PAYLOAD_MAX_SIZE || "7mb"}));
@@ -31,6 +32,28 @@ if (!PROXY_HEADER) {
 const PUTRA_AI_V1_API_URL = process?.env?.PUTRA_AI_V1_API_URL || "https://us-central1-play-integrity-2adpr7x4a8xhyex.cloudfunctions.net/api";
 const PUTRA_AI_CHAT_API_URL = process?.env?.PUTRA_AI_CHAT_API_URL || `${PUTRA_AI_V1_API_URL.replace(/\/$/, '')}/api/chat`;
 const PUTRA_MODEL = process?.env?.PUTRA_MODEL || "PutraAi-V1";
+const FIREBASE_PROJECT_ID = process?.env?.FIREBASE_PROJECT_ID;
+const FIREBASE_DATABASE_URL = process?.env?.FIREBASE_DATABASE_URL;
+const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
+
+function getFirebaseAdminApp() {
+  if (admin.apps.length) return admin.app();
+
+  const serviceAccountJson = process?.env?.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const credential = serviceAccountJson
+    ? admin.credential.cert(JSON.parse(serviceAccountJson))
+    : admin.credential.applicationDefault();
+
+  return admin.initializeApp({
+    credential,
+    projectId: FIREBASE_PROJECT_ID,
+    databaseURL: FIREBASE_DATABASE_URL,
+  });
+}
+
+const firebaseAdminApp = getFirebaseAdminApp();
+const firebaseAuth = admin.auth(firebaseAdminApp);
+const firebaseDatabase = admin.database(firebaseAdminApp);
 
 app.set('trust proxy', 1 /* number of proxies between user and server */);
 
@@ -363,6 +386,76 @@ app.post('/putra-ai-proxy', async (req, res) => {
     res.status(502).json({
       error: 'PUTRA AI proxy failed',
       message: error?.message || 'Unable to reach PUTRA AI proxy target.',
+    });
+  }
+});
+
+app.post('/admin/delete-user', async (req, res) => {
+  const authorization = req.get('authorization') || '';
+  const token = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length).trim() : '';
+  const targetUid = String(req.body?.uid || '').trim();
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'Token admin tidak ditemukan.' });
+  }
+
+  if (!targetUid) {
+    return res.status(400).json({ error: 'Bad Request', message: 'UID akun wajib dikirim.' });
+  }
+
+  try {
+    const decodedToken = await firebaseAuth.verifyIdToken(token);
+    const requesterProfileSnapshot = await firebaseDatabase.ref(`userProfiles/${decodedToken.uid}`).get();
+    const requesterProfile = requesterProfileSnapshot.val();
+    const isAdmin =
+      decodedToken.email === ADMIN_EMAIL ||
+      requesterProfile?.role === 'admin';
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Hanya admin yang boleh menghapus akun Auth.' });
+    }
+
+    if (targetUid === decodedToken.uid) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Admin tidak boleh menghapus akunnya sendiri dari dashboard ini.' });
+    }
+
+    const targetProfileSnapshot = await firebaseDatabase.ref(`userProfiles/${targetUid}`).get();
+    const targetProfile = targetProfileSnapshot.val();
+
+    if (targetProfile?.role === 'admin') {
+      return res.status(403).json({ error: 'Forbidden', message: 'Akun admin tidak boleh dihapus lewat daftar divisi.' });
+    }
+
+    try {
+      await firebaseAuth.deleteUser(targetUid);
+    } catch (error) {
+      if (error?.code !== 'auth/user-not-found') throw error;
+    }
+
+    const financialReportsSnapshot = await firebaseDatabase
+      .ref('financialReports')
+      .orderByChild('userId')
+      .equalTo(targetUid)
+      .get();
+    const updates = {
+      [`userProfiles/${targetUid}`]: null,
+      [`weeklyReports/${targetUid}`]: null,
+      [`divisionNotes/${targetUid}`]: null,
+      [`liveLocations/${targetUid}`]: null,
+    };
+
+    financialReportsSnapshot.forEach((child) => {
+      updates[`financialReports/${child.key}`] = null;
+    });
+
+    await firebaseDatabase.ref().update(updates);
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('[Admin Delete User] Failed:', error);
+    return res.status(500).json({
+      error: 'Delete user failed',
+      message: error?.message || 'Akun belum berhasil dihapus dari Firebase Auth.',
     });
   }
 });

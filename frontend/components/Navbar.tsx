@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Moon, Sun, ShieldAlert } from 'lucide-react';
+import { LogIn, Menu, X, Moon, Sun } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface NavbarProps {
@@ -23,7 +23,7 @@ const NAV_LINKS = [
 // Light-bg sections (light mode only)
 const LIGHT_SECTIONS = new Set(['about', 'team', 'event', 'gallery', 'village', 'programs', 'contact']);
 
-export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, isLoggedIn }) => {
+export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isOverLight, setIsOverLight] = useState(false);
@@ -75,12 +75,15 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, isLogg
       style={!darkMode ? {
         background: onLight
           ? 'linear-gradient(135deg,rgba(255,255,255,0.62) 0%,rgba(241,245,249,0.52) 100%)'
-          : 'linear-gradient(135deg,rgba(0,0,0,0.36) 0%,rgba(10,18,35,0.26) 100%)',
-        backdropFilter: 'blur(28px) saturate(200%)',
-        WebkitBackdropFilter: 'blur(28px) saturate(200%)',
+          : 'linear-gradient(135deg,rgba(255,255,255,0.20) 0%,rgba(255,255,255,0.08) 48%,rgba(255,255,255,0.16) 100%)',
+        borderBottom: onLight ? '1px solid rgba(15,23,42,0.08)' : '1px solid rgba(255,255,255,0.22)',
+        backdropFilter: 'blur(18px) saturate(220%) contrast(1.08)',
+        WebkitBackdropFilter: 'blur(18px) saturate(220%) contrast(1.08)',
       } : {
-        backdropFilter: 'blur(28px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+        background: 'linear-gradient(135deg,rgba(255,255,255,0.14),rgba(255,255,255,0.06) 52%,rgba(255,255,255,0.12))',
+        borderBottom: '1px solid rgba(255,255,255,0.16)',
+        backdropFilter: 'blur(18px) saturate(210%) contrast(1.08)',
+        WebkitBackdropFilter: 'blur(18px) saturate(210%) contrast(1.08)',
       }}
     >
       <div className="container mx-auto px-4 md:px-6 flex justify-between items-center">
@@ -123,10 +126,10 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, isLogg
               <li key={link.name}>
                 <a
                   href={link.href}
-                  className={`block rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95 ${
+                  className={`block rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-200 hover:bg-gradient-to-b hover:from-[#6aa7ff]/45 hover:to-[#2f63c7]/38 hover:text-white hover:shadow-[0_6px_18px_rgba(47,99,199,0.20),inset_0_1px_0_rgba(255,255,255,0.30)] hover:ring-1 hover:ring-white/18 active:scale-95 ${
                     onLight
-                      ? 'text-slate-700 hover:text-slate-950 hover:bg-black/8'
-                      : 'text-white/88 hover:text-white hover:bg-white/15 drop-shadow-sm'
+                      ? 'text-slate-700'
+                      : 'text-white/88 drop-shadow-sm'
                   }`}
                 >
                   {link.name}
@@ -162,8 +165,8 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, isLogg
                 boxShadow: '0 4px 18px rgba(59,130,246,0.38),inset 0 1px 0 rgba(255,255,255,0.28)',
               }}
             >
-              <ShieldAlert size={14} />
-              {isLoggedIn ? 'Dashboard' : 'Login'}
+              <LogIn size={14} />
+              Login
             </a>
           </div>
         </div>
@@ -186,9 +189,9 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, isLogg
             href="#admin"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.hash = '#admin'; }}
             className={`p-2 rounded-full transition-all duration-300 ${onLight ? 'text-slate-700 hover:bg-black/8' : 'text-white/85 hover:bg-white/15'}`}
-            aria-label="Admin"
+            aria-label="Login"
           >
-            <ShieldAlert size={20} />
+            <LogIn size={20} />
           </a>
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsMobileMenuOpen((p) => !p); }}
@@ -208,17 +211,37 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, isLogg
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.22, ease: 'easeInOut' }}
-            className={`md:hidden overflow-hidden border-t ${darkMode ? 'bg-slate-950/95 border-white/8' : ''}`}
+            className={`md:hidden relative overflow-hidden border-t ${darkMode ? 'border-white/10' : ''}`}
             style={!darkMode ? {
               borderColor: onLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)',
               background: onLight
-                ? 'linear-gradient(135deg,rgba(255,255,255,0.92) 0%,rgba(248,250,252,0.88) 100%)'
-                : 'linear-gradient(135deg,rgba(5,10,22,0.88) 0%,rgba(15,25,45,0.84) 100%)',
-              backdropFilter: 'blur(28px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-            } : undefined}
+                ? 'linear-gradient(145deg,rgba(255,255,255,0.64),rgba(226,232,240,0.42) 52%,rgba(255,255,255,0.54))'
+                : 'linear-gradient(145deg,rgba(255,255,255,0.18),rgba(255,255,255,0.07) 46%,rgba(255,255,255,0.15))',
+              backdropFilter: 'blur(18px) saturate(235%) contrast(1.12)',
+              WebkitBackdropFilter: 'blur(18px) saturate(235%) contrast(1.12)',
+              boxShadow: onLight
+                ? '0 24px 70px rgba(15,23,42,0.16), inset 0 1px 0 rgba(255,255,255,0.92), inset 0 -1px 0 rgba(148,163,184,0.14)'
+                : '0 26px 80px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.42), inset 0 -1px 0 rgba(255,255,255,0.18)',
+            } : {
+              background: 'linear-gradient(145deg,rgba(255,255,255,0.16),rgba(255,255,255,0.06) 50%,rgba(255,255,255,0.13))',
+              backdropFilter: 'blur(18px) saturate(230%) contrast(1.12)',
+              WebkitBackdropFilter: 'blur(18px) saturate(230%) contrast(1.12)',
+              boxShadow: '0 26px 80px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.32), inset 0 -1px 0 rgba(255,255,255,0.14)',
+            }}
           >
-            <ul className="flex flex-col py-4 px-6 gap-1">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/24 blur-3xl"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-28 top-14 h-80 w-80 rounded-full bg-white/16 blur-3xl"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-5 top-3 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent"
+            />
+            <ul className="relative z-10 flex flex-col gap-1.5 px-6 py-5">
               {NAV_LINKS.map((link) => (
                 <li key={link.name}>
                   <a
@@ -231,10 +254,10 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, isLogg
                         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                       }, 220);
                     }}
-                    className={`block py-2.5 px-4 rounded-xl font-semibold transition-all duration-200 ${
+                    className={`block rounded-2xl px-5 py-3 font-bold transition-all duration-300 hover:bg-gradient-to-b hover:from-[#6aa7ff]/45 hover:to-[#2f63c7]/38 hover:text-white hover:shadow-[0_8px_22px_rgba(47,99,199,0.20),inset_0_1px_0_rgba(255,255,255,0.30)] hover:ring-1 hover:ring-white/18 active:scale-[0.98] ${
                       onLight
-                        ? 'text-slate-700 hover:text-slate-950 hover:bg-black/6'
-                        : 'text-white/80 hover:text-white hover:bg-white/10'
+                        ? 'text-slate-700'
+                        : 'bg-white/8 text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)]'
                     }`}
                   >
                     {link.name}
@@ -250,13 +273,17 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, isLogg
                     setIsMobileMenuOpen(false);
                     setTimeout(() => { window.location.hash = '#admin'; }, 220);
                   }}
-                  className="flex items-center gap-2 py-2.5 px-4 rounded-xl text-blue-400 hover:bg-blue-500/10 font-bold transition-all duration-200"
+                  className="flex items-center gap-2 rounded-2xl px-5 py-3 font-bold text-blue-300 transition-all duration-300 hover:bg-blue-500/15 hover:text-blue-200 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_10px_30px_rgba(37,99,235,0.18)] active:scale-[0.98]"
                 >
-                  <ShieldAlert size={18} />
-                  {isLoggedIn ? 'Dashboard Admin' : 'Login'}
+                  <LogIn size={18} />
+                  Login
                 </a>
               </li>
             </ul>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-4 bottom-0 h-px bg-gradient-to-r from-transparent via-white/28 to-transparent"
+            />
           </motion.div>
         )}
       </AnimatePresence>

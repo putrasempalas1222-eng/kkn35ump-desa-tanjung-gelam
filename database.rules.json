@@ -4,15 +4,15 @@
     ".write": false,
     "siteContent": {
       ".read": true,
-      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^pdd(\\s.*)?$/))"
     },
     "eventContent": {
       ".read": true,
-      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))"
     },
     "team": {
       ".read": true,
-      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^pdd(\\s.*)?$/))"
     },
     "programs": {
       ".read": true,
@@ -20,7 +20,7 @@
     },
     "gallery": {
       ".read": true,
-      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^pdd(\\s.*)?$/))"
     },
     "testimonials": {
       ".read": true,
@@ -38,6 +38,13 @@
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
         ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+      }
+    },
+    "financialReports": {
+      ".read": "auth != null",
+      "$reportId": {
+        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || ((newData.exists() ? newData.child('userId').val() : data.child('userId').val()) == auth.uid && root.child('userProfiles').child(auth.uid).child('division').val().matches(/^bendahara(\\s.*)?$/)))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['id', 'userId', 'name', 'division', 'week', 'entries', 'reportType']) && newData.child('id').val() == $reportId && (newData.child('reportType').val() == 'treasurerOutput' || newData.child('reportType').val() == 'treasurerIncome'))"
       }
     },
     "liveLocations": {
@@ -59,6 +66,20 @@
       "$messageId": {
         ".write": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (!data.exists() && newData.exists())",
         ".validate": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (newData.hasChildren(['id', 'name', 'email', 'message', 'date', 'status']) && newData.child('id').isString() && newData.child('id').val() == $messageId && newData.child('name').isString() && newData.child('name').val().length >= 2 && newData.child('name').val().length <= 100 && newData.child('email').isString() && newData.child('email').val().length >= 5 && newData.child('email').val().length <= 120 && newData.child('message').isString() && newData.child('message').val().length >= 1 && newData.child('message').val().length <= 1000 && newData.child('status').val() == 'unread')"
+      }
+    },
+    "competitions": {
+      ".read": true,
+      "$competitionId": {
+        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['id', 'title', 'category', 'description', 'requirements', 'prizes', 'registrationStart', 'registrationEnd', 'maxParticipants', 'fee', 'iconName', 'color', 'isOpen']) && newData.child('id').val() == $competitionId && newData.child('title').isString() && newData.child('category').isString() && newData.child('description').isString() && newData.child('isOpen').isBoolean())"
+      }
+    },
+    "competitionRegistrations": {
+      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))",
+      "$registrationId": {
+        ".write": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))) || (!data.exists() && newData.exists())",
+        ".validate": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))) || (newData.hasChildren(['id', 'competitionId', 'competitionTitle', 'name', 'phone', 'address', 'age', 'notes', 'status', 'date']) && newData.child('id').val() == $registrationId && newData.child('competitionId').isString() && newData.child('competitionTitle').isString() && newData.child('name').isString() && newData.child('name').val().length >= 3 && newData.child('name').val().length <= 80 && newData.child('phone').isString() && newData.child('phone').val().matches(/^(08|628)[0-9]{8,12}$/) && newData.child('status').val() == 'pending')"
       }
     }
   }
