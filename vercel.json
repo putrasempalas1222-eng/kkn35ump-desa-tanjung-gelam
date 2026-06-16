@@ -5,23 +5,23 @@
   "rewrites": [
     {
       "source": "/auth/:path*",
-      "destination": "/api/server"
+      "destination": "/api/auth/:path*"
     },
     {
       "source": "/admin/:path*",
-      "destination": "/api/server"
+      "destination": "/api/admin/:path*"
     },
     {
       "source": "/division-chat/:path*",
-      "destination": "/api/server"
+      "destination": "/api/division-chat/:path*"
     },
     {
       "source": "/api-proxy/:path*",
-      "destination": "/api/server"
+      "destination": "/api/api-proxy/:path*"
     },
     {
       "source": "/putra-ai-proxy/:path*",
-      "destination": "/api/server"
+      "destination": "/api/putra-ai-proxy/:path*"
     },
     {
       "source": "/(.*)",

@@ -18,6 +18,12 @@ import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 
 const app = express();
+app.use((req, _res, next) => {
+  if (process.env.VERCEL && req.url.startsWith('/api/')) {
+    req.url = req.url.slice('/api'.length) || '/';
+  }
+  next();
+});
 app.use((req, res, next) => {
   const origin = req.get('origin') || '';
   if (/^http:\/\/(localhost|127\.0\.0\.1):5173$/i.test(origin)) {
