@@ -1,8 +1,28 @@
 {
   "installCommand": "npm install",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
+    {
+      "source": "/auth/:path*",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/division-chat/:path*",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/api-proxy/:path*",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/putra-ai-proxy/:path*",
+      "destination": "/api/server"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

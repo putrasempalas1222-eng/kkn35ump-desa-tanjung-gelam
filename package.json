@@ -1,5 +1,6 @@
 {
   "name": "kkn-kelompok-35-ump",
+  "type": "module",
   "workspaces": ["frontend", "backend"], 
   "scripts": {
     "build": "npm run build --prefix frontend",

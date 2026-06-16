@@ -629,7 +629,7 @@ export const storage = {
       return () => undefined;
     }
 
-    return subscribeList<DivisionChatMessage>(`${COLLECTIONS.divisionChats}/private`, (messages) =>
+    return subscribeList<DivisionChatMessage>(`${COLLECTIONS.divisionChats}/privateByUser/${uid}`, (messages) =>
       callback(
         messages
           .filter((message) => message.senderUid === uid || message.recipientUid === uid)

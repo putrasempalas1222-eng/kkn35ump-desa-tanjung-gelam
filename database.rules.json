@@ -1,0 +1,104 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "siteContent": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^pdd(\\s.*)?$/))"
+    },
+    "eventContent": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))"
+    },
+    "team": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^pdd(\\s.*)?$/))"
+    },
+    "programs": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+    },
+    "gallery": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^pdd(\\s.*)?$/))"
+    },
+    "testimonials": {
+      ".read": true,
+      ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+    },
+    "userProfiles": {
+      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+        ".validate": "newData.hasChildren(['id', 'uid', 'email', 'name', 'division', 'role']) && newData.child('id').val() == $uid && newData.child('uid').val() == $uid && newData.child('email').isString() && newData.child('name').isString() && newData.child('name').val().length >= 2 && newData.child('division').isString() && (newData.child('role').val() == 'admin' || newData.child('role').val() == 'division')"
+      }
+    },
+    "weeklyReports": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+        ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
+      }
+    },
+    "financialReports": {
+      ".read": "auth != null",
+      "$reportId": {
+        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || ((newData.exists() ? newData.child('userId').val() : data.child('userId').val()) == auth.uid && root.child('userProfiles').child(auth.uid).child('division').val().matches(/^bendahara(\\s.*)?$/)))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['id', 'userId', 'name', 'division', 'week', 'entries', 'reportType']) && newData.child('id').val() == $reportId && (newData.child('reportType').val() == 'treasurerOutput' || newData.child('reportType').val() == 'treasurerIncome'))"
+      }
+    },
+    "liveLocations": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'name', 'email', 'division', 'lat', 'lng', 'updatedAt']) && newData.child('uid').val() == $uid && newData.child('name').isString() && newData.child('email').isString() && newData.child('division').isString() && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180 && newData.child('updatedAt').isNumber())"
+      }
+    },
+    "reviewSubmissions": {
+      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$reviewId": {
+        ".write": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (!data.exists() && newData.exists())",
+        ".validate": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (newData.hasChildren(['id', 'name', 'role', 'quote', 'date', 'status']) && newData.child('id').isString() && newData.child('id').val() == $reviewId && newData.child('name').isString() && newData.child('name').val().length >= 3 && newData.child('name').val().length <= 80 && newData.child('role').isString() && newData.child('role').val().length <= 80 && newData.child('quote').isString() && newData.child('quote').val().length >= 20 && newData.child('quote').val().length <= 500 && newData.child('status').val() == 'pending' && (!newData.child('avatar').exists() || newData.child('avatar').isString()))"
+      }
+    },
+    "messages": {
+      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$messageId": {
+        ".write": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (!data.exists() && newData.exists())",
+        ".validate": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')) || (newData.hasChildren(['id', 'name', 'email', 'message', 'date', 'status']) && newData.child('id').isString() && newData.child('id').val() == $messageId && newData.child('name').isString() && newData.child('name').val().length >= 2 && newData.child('name').val().length <= 100 && newData.child('email').isString() && newData.child('email').val().length >= 5 && newData.child('email').val().length <= 120 && newData.child('message').isString() && newData.child('message').val().length >= 1 && newData.child('message').val().length <= 1000 && newData.child('status').val() == 'unread')"
+      }
+    },
+    "competitions": {
+      ".read": true,
+      "$competitionId": {
+        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['id', 'title', 'category', 'description', 'requirements', 'prizes', 'registrationStart', 'registrationEnd', 'maxParticipants', 'fee', 'iconName', 'color', 'isOpen']) && newData.child('id').val() == $competitionId && newData.child('title').isString() && newData.child('category').isString() && newData.child('description').isString() && newData.child('isOpen').isBoolean())"
+      }
+    },
+    "competitionRegistrations": {
+      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))",
+      "$registrationId": {
+        ".write": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))) || (!data.exists() && newData.exists())",
+        ".validate": "(auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^acara(\\s.*)?$/))) || (newData.hasChildren(['id', 'competitionId', 'competitionTitle', 'name', 'phone', 'address', 'age', 'notes', 'status', 'date']) && newData.child('id').val() == $registrationId && newData.child('competitionId').isString() && newData.child('competitionTitle').isString() && newData.child('name').isString() && newData.child('name').val().length >= 3 && newData.child('name').val().length <= 80 && newData.child('phone').isString() && newData.child('phone').val().matches(/^(08|628)[0-9]{8,12}$/) && newData.child('status').val() == 'pending')"
+      }
+    },
+    "divisionChats": {
+      "public": {
+        ".read": "auth != null",
+        ".write": false
+      },
+      "privateByUser": {
+        "$uid": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": false
+        }
+      }
+    },
+    "notificationTokens": {
+      "$uid": {
+        ".read": false,
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    }
+  }
+}

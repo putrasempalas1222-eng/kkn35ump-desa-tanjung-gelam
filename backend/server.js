@@ -37,13 +37,11 @@ const API_BACKEND_HOST = process?.env?.API_BACKEND_HOST || "127.0.0.1";
 const GOOGLE_CLOUD_LOCATION = process?.env?.GOOGLE_CLOUD_LOCATION;
 const GOOGLE_CLOUD_PROJECT = process?.env?.GOOGLE_CLOUD_PROJECT;
 if (!GOOGLE_CLOUD_PROJECT || !GOOGLE_CLOUD_LOCATION) {
-  console.error("Error: Environment variables GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION must be set.");
-  process.exit(1);
+  console.warn("Warning: GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are not set. Vertex proxy routes may not work.");
 }
 const PROXY_HEADER = process?.env?.PROXY_HEADER;
 if (!PROXY_HEADER) {
-  console.error("Error: Environment variables PROXY_HEADER must be set.");
-  process.exit(1);
+  console.warn("Warning: PROXY_HEADER is not set. Vertex proxy routes may not work.");
 }
 const PUTRA_AI_V1_API_URL = process?.env?.PUTRA_AI_V1_API_URL || "https://us-central1-play-integrity-2adpr7x4a8xhyex.cloudfunctions.net/api";
 const PUTRA_AI_CHAT_API_URL = process?.env?.PUTRA_AI_CHAT_API_URL || `${PUTRA_AI_V1_API_URL.replace(/\/$/, '')}/api/chat`;
@@ -51,12 +49,12 @@ const PUTRA_MODEL = process?.env?.PUTRA_MODEL || "PutraAi-V1";
 const FIREBASE_PROJECT_ID = process?.env?.FIREBASE_PROJECT_ID;
 const FIREBASE_DATABASE_URL = process?.env?.FIREBASE_DATABASE_URL;
 const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
-const otpStore = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000;
 const SMTP_TIMEOUT_MS = 10000;
 let smtpTransporter = null;
 
 const hashOtp = (code) => crypto.createHash('sha256').update(code).digest('hex');
+const getOtpRef = (uid) => firebaseDatabase.ref(`loginOtps/${uid}`);
 
 const getSmtpTransport = () => {
   const host = process.env.SMTP_HOST || process.env.SMTP_SERVER_HOST;
@@ -557,7 +555,7 @@ app.post('/auth/request-otp', otpLimiter, async (req, res) => {
     }
 
     const code = String(crypto.randomInt(100000, 1000000));
-    otpStore.set(decodedToken.uid, {
+    await getOtpRef(decodedToken.uid).set({
       hash: hashOtp(code),
       expiresAt: Date.now() + OTP_TTL_MS,
       attempts: 0,
@@ -595,24 +593,25 @@ app.post('/auth/verify-otp', otpLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Invalid OTP', message: 'Kode OTP harus 6 digit.' });
     }
 
-    const record = otpStore.get(decodedToken.uid);
+    const recordSnapshot = await getOtpRef(decodedToken.uid).get();
+    const record = recordSnapshot.val();
     if (!record || record.expiresAt < Date.now()) {
-      otpStore.delete(decodedToken.uid);
+      await getOtpRef(decodedToken.uid).remove();
       return res.status(400).json({ error: 'Expired OTP', message: 'Kode OTP sudah kedaluwarsa. Kirim ulang kode.' });
     }
 
     if (record.attempts >= 5) {
-      otpStore.delete(decodedToken.uid);
+      await getOtpRef(decodedToken.uid).remove();
       return res.status(429).json({ error: 'Too many attempts', message: 'OTP terlalu sering salah. Kirim ulang kode.' });
     }
 
     if (record.hash !== hashOtp(code)) {
       record.attempts += 1;
-      otpStore.set(decodedToken.uid, record);
+      await getOtpRef(decodedToken.uid).update({ attempts: record.attempts });
       return res.status(400).json({ error: 'Wrong OTP', message: 'Kode OTP belum cocok.' });
     }
 
-    otpStore.delete(decodedToken.uid);
+    await getOtpRef(decodedToken.uid).remove();
     return res.json({ ok: true });
   } catch (error) {
     console.error('[Auth OTP Verify] Failed:', error);
@@ -704,7 +703,7 @@ app.post('/division-chat/send', async (req, res) => {
     }
 
     const isPrivate = Boolean(recipient);
-    const path = isPrivate ? 'divisionChats/private' : 'divisionChats/public';
+    const path = isPrivate ? `divisionChats/privateByUser/${sender.uid}` : 'divisionChats/public';
     const messageRef = firebaseDatabase.ref(path).push();
     const createdAtMs = Date.now();
     const baseMessage = {
@@ -729,7 +728,14 @@ app.post('/division-chat/send', async (req, res) => {
       }
       : baseMessage;
 
-    await messageRef.set(message);
+    if (isPrivate) {
+      await firebaseDatabase.ref().update({
+        [`divisionChats/privateByUser/${sender.uid}/${message.id}`]: message,
+        [`divisionChats/privateByUser/${recipient.uid}/${message.id}`]: message,
+      });
+    } else {
+      await messageRef.set(message);
+    }
 
     let pushTokens = [];
 
@@ -830,14 +836,16 @@ app.post('/admin/delete-user', async (req, res) => {
   }
 });
 
-const server = app.listen(PORT, API_BACKEND_HOST, () => {
-  console.log(`Vertex AI Backend listening at http://localhost:${PORT}`);
-});
+const isVercelServerless = Boolean(process.env.VERCEL);
+const server = isVercelServerless
+  ? null
+  : app.listen(PORT, API_BACKEND_HOST, () => {
+    console.log(`Vertex AI Backend listening at http://localhost:${PORT}`);
+  });
 
+const wss = server ? new WebSocketServer({ noServer: true }) : null;
 
-const wss = new WebSocketServer({ noServer: true });
-
-server.on('upgrade', async (request, socket, head) => {
+server?.on('upgrade', async (request, socket, head) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
   if (url.pathname === '/ws-proxy') {
@@ -901,7 +909,7 @@ server.on('upgrade', async (request, socket, head) => {
       upstreamWs.removeListener('error', initialErrorHandler);
 
       // Perform the HTTP -> WebSocket upgrade for the Client
-      wss.handleUpgrade(request, socket, head, (ws) => {
+      wss?.handleUpgrade(request, socket, head, (ws) => {
 
         upstreamWs.on('message', (data, isBinary) => {
           const logMsg = isBinary ? '<Binary Data>' : data.toString();
@@ -960,7 +968,7 @@ server.on('upgrade', async (request, socket, head) => {
           }
         });
 
-        wss.emit('connection', ws, request);
+        wss?.emit('connection', ws, request);
       });
     };
 
@@ -971,3 +979,5 @@ server.on('upgrade', async (request, socket, head) => {
     socket.destroy();
   }
 });
+
+export default app;

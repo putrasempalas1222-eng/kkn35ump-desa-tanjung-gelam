@@ -116,7 +116,7 @@ const A4_HEIGHT_MM = 297;
 const A4_WIDTH_PX = 794;
 const A4_HEIGHT_PX = 1123;
 const PUTRA_AI_PROXY_ENDPOINT = '/putra-ai-proxy';
-const OLLAMA_ENDPOINT = 'http://localhost:11434';
+const OLLAMA_ENDPOINT = 'https://rotunda-elderly-alto.ngrok-free.dev';
 const OLLAMA_REPORT_MODEL = 'llama3.2:3b';
 
 const getPutraAiProxyUrl = () => {
@@ -2813,7 +2813,7 @@ Format lengkap yang juga diterima:
 
       setAiReportMessage(`AI berhasil ${targetHasContent ? 'memperbarui' : 'mengisi'} baris nomor ${targetRowIndex + 1}. Cek lagi sebelum disimpan.`);
     } catch (error: any) {
-      setAiReportMessage(error?.message || 'AI belum berhasil mengisi laporan. Pastikan Ollama aktif di http://localhost:11434 dan model llama3.2:3b sudah tersedia.');
+      setAiReportMessage(error?.message || `AI belum berhasil mengisi laporan. Pastikan Ollama aktif di ${OLLAMA_ENDPOINT} dan model llama3.2:3b sudah tersedia.`);
     } finally {
       setAiReportGenerating(false);
     }
