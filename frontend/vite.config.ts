@@ -10,7 +10,8 @@ export default defineConfig(({ mode }) => {
         'process.env.API_KEY' : JSON.stringify('api-key-this-is-not-used-can-be-ignored!'),
       },
       server: {
-        host: '127.0.0.1',
+        host: '0.0.0.0',
+        port: 5173,
         proxy: {
           //Target your Node.js backend
           '/api-proxy': 'http://127.0.0.1:5000',

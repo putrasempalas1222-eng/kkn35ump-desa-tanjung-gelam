@@ -10,6 +10,7 @@ import { Gallery } from './components/Gallery';
 import { Stats } from './components/Stats';
 import { Video } from './components/Video';
 import { Testimonials } from './components/Testimonials';
+import { Competition } from './components/Competition';
 import { Contact } from './components/Contact';
 import { Footer } from './components/Footer';
 import { ScrollToTop } from './components/ScrollToTop';
@@ -239,6 +240,7 @@ const App: React.FC = () => {
         <Team />
         <Programs />
         <Event />
+        <Competition />
         <Gallery />
         <Stats />
         <Video />
