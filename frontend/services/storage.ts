@@ -58,29 +58,17 @@ const DEFAULT_FIREBASE_ENV: Record<string, string> = {
   VITE_FIREBASE_MEASUREMENT_ID: 'G-YL95DFEMDK',
 };
 
-const getRequiredEnv = (key: string) => {
-  const value = import.meta.env[key];
-  if (value) {
-    return value;
-  }
-
-  const fallback = DEFAULT_FIREBASE_ENV[key];
-  if (!fallback) {
-    throw new Error(`Missing required environment variable: ${key}`);
-  }
-
-  return fallback;
-};
+const getFirebaseEnv = (key: string) => import.meta.env[key] || DEFAULT_FIREBASE_ENV[key] || '';
 
 const firebaseConfig = {
-  apiKey: getRequiredEnv('VITE_FIREBASE_API_KEY'),
-  authDomain: getRequiredEnv('VITE_FIREBASE_AUTH_DOMAIN'),
-  databaseURL: getRequiredEnv('VITE_FIREBASE_DATABASE_URL'),
-  projectId: getRequiredEnv('VITE_FIREBASE_PROJECT_ID'),
-  storageBucket: getRequiredEnv('VITE_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: getRequiredEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: getRequiredEnv('VITE_FIREBASE_APP_ID'),
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || DEFAULT_FIREBASE_ENV.VITE_FIREBASE_MEASUREMENT_ID || '',
+  apiKey: getFirebaseEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: getFirebaseEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  databaseURL: getFirebaseEnv('VITE_FIREBASE_DATABASE_URL'),
+  projectId: getFirebaseEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: getFirebaseEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getFirebaseEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: getFirebaseEnv('VITE_FIREBASE_APP_ID'),
+  measurementId: getFirebaseEnv('VITE_FIREBASE_MEASUREMENT_ID'),
 };
 
 const app = initializeApp(firebaseConfig);
