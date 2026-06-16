@@ -45,23 +45,15 @@ export interface ContactMessage {
   createdAt?: number | object;
 }
 
-const getRequiredEnv = (key: string) => {
-  const value = import.meta.env[key];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${key}`);
-  }
-  return value;
-};
-
 const firebaseConfig = {
-  apiKey: getRequiredEnv('VITE_FIREBASE_API_KEY'),
-  authDomain: getRequiredEnv('VITE_FIREBASE_AUTH_DOMAIN'),
-  databaseURL: getRequiredEnv('VITE_FIREBASE_DATABASE_URL'),
-  projectId: getRequiredEnv('VITE_FIREBASE_PROJECT_ID'),
-  storageBucket: getRequiredEnv('VITE_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: getRequiredEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: getRequiredEnv('VITE_FIREBASE_APP_ID'),
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
+  apiKey: 'AIzaSyCxFcWI6vLfGNcQMnTVRsRtXsDJfzqiWEw',
+  authDomain: 'project-3dfa8c97-bc93-4195-a5a.firebaseapp.com',
+  databaseURL: 'https://project-3dfa8c97-bc93-4195-a5a-default-rtdb.firebaseio.com',
+  projectId: 'project-3dfa8c97-bc93-4195-a5a',
+  storageBucket: 'project-3dfa8c97-bc93-4195-a5a.firebasestorage.app',
+  messagingSenderId: '275478991025',
+  appId: '1:275478991025:web:80d97124eb119cc039d290',
+  measurementId: 'G-YL95DFEMDK',
 };
 
 const app = initializeApp(firebaseConfig);
