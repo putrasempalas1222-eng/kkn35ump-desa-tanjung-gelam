@@ -323,7 +323,7 @@ const fetchJsonWithTimeout = async (url: string, options: RequestInit, timeoutMs
     return { response, payload };
   } catch (error: any) {
     if (error?.name === 'AbortError') {
-      throw new Error('Kirim OTP terlalu lama. Coba tekan Kirim ulang OTP, lalu cek Inbox/Spam email.');
+      throw new Error('Kirim OTP terlalu lama. Cek backend/Vercel env SMTP dan Firebase, lalu tekan Kirim ulang OTP.');
     }
     throw error;
   } finally {
@@ -352,13 +352,17 @@ export const storage = {
     const token = await auth.currentUser?.getIdToken();
     if (!token) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
 
-    const { response, payload } = await fetchJsonWithTimeout('/auth/request-otp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+    const { response, payload } = await fetchJsonWithTimeout(
+      '/auth/request-otp',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
       },
-    });
+      60000
+    );
     if (!response.ok) throw new Error(payload?.message || 'Kode OTP belum berhasil dikirim.');
     return payload as { ok: boolean; skipped?: boolean; email?: string; expiresInSeconds?: number };
   },
@@ -375,6 +379,63 @@ export const storage = {
       body: JSON.stringify({ code }),
     });
     if (!response.ok) throw new Error(payload?.message || 'Kode OTP belum cocok.');
+    return payload as { ok: boolean; skipped?: boolean };
+  },
+  getLoginTotpStatus: async () => {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+
+    const { response, payload } = await fetchJsonWithTimeout('/auth/totp/status', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) throw new Error(payload?.message || 'Status Google Authenticator belum bisa dicek.');
+    return payload as { ok: boolean; enabled: boolean; skipped?: boolean };
+  },
+  startLoginTotpSetup: async () => {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+
+    const { response, payload } = await fetchJsonWithTimeout('/auth/totp/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) throw new Error(payload?.message || 'Setup Google Authenticator belum bisa dimulai.');
+    return payload as { ok: boolean; enabled?: boolean; skipped?: boolean; secret?: string; otpauthUrl?: string };
+  },
+  confirmLoginTotpSetup: async (code: string) => {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+
+    const { response, payload } = await fetchJsonWithTimeout('/auth/totp/confirm', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ code }),
+    });
+    if (!response.ok) throw new Error(payload?.message || 'Kode Google Authenticator belum cocok.');
+    return payload as { ok: boolean; enabled?: boolean; skipped?: boolean };
+  },
+  verifyLoginTotp: async (code: string) => {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+
+    const { response, payload } = await fetchJsonWithTimeout('/auth/totp/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ code }),
+    });
+    if (!response.ok) throw new Error(payload?.message || 'Kode Google Authenticator belum cocok.');
     return payload as { ok: boolean; skipped?: boolean };
   },
   sendPasswordReset: (email: string) =>

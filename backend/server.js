@@ -26,7 +26,7 @@ app.use((req, _res, next) => {
 });
 app.use((req, res, next) => {
   const origin = req.get('origin') || '';
-  if (/^http:\/\/(localhost|127\.0\.0\.1):5173$/i.test(origin)) {
+  if (/^http:\/\/(localhost|127\.0\.0\.1):5173$/i.test(origin) || /^https:\/\/kkn35ump-desa-gelam\.vercel\.app$/i.test(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -58,9 +58,167 @@ const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
 const OTP_TTL_MS = 10 * 60 * 1000;
 const SMTP_TIMEOUT_MS = 10000;
 let smtpTransporter = null;
+const memoryOtpStore = new Map();
+const memoryTotpStore = new Map();
+const memoryTotpSetupStore = new Map();
+const shouldUseFirebaseOtpStore = Boolean(
+  process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+    process.env.VERCEL
+);
+if (!shouldUseFirebaseOtpStore) {
+  console.warn('[Auth OTP] FIREBASE_SERVICE_ACCOUNT_JSON tidak ada. OTP lokal disimpan di memori backend.');
+}
 
 const hashOtp = (code) => crypto.createHash('sha256').update(code).digest('hex');
 const getOtpRef = (uid) => firebaseDatabase.ref(`loginOtps/${uid}`);
+const getTotpRef = (uid) => firebaseDatabase.ref(`loginTotpSecrets/${uid}`);
+const getTotpSetupRef = (uid) => firebaseDatabase.ref(`loginTotpSetups/${uid}`);
+const withTimeout = (promise, timeoutMs, message) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
+
+const saveOtpRecord = async (uid, record) => {
+  if (!shouldUseFirebaseOtpStore) {
+    memoryOtpStore.set(uid, record);
+    return 'memory';
+  }
+
+  await withTimeout(
+    getOtpRef(uid).set(record),
+    8000,
+    'Simpan OTP ke Firebase terlalu lama. Cek FIREBASE_SERVICE_ACCOUNT_JSON dan DATABASE_URL.'
+  );
+  return 'firebase';
+};
+
+const readOtpRecord = async (uid) => {
+  const memoryRecord = memoryOtpStore.get(uid);
+  if (memoryRecord) return { record: memoryRecord, source: 'memory' };
+
+  if (!shouldUseFirebaseOtpStore) return { record: null, source: 'memory' };
+
+  const recordSnapshot = await withTimeout(
+    getOtpRef(uid).get(),
+    8000,
+    'Ambil OTP dari Firebase terlalu lama. Kirim ulang kode OTP.'
+  );
+  return { record: recordSnapshot.val(), source: 'firebase' };
+};
+
+const removeOtpRecord = async (uid, source) => {
+  memoryOtpStore.delete(uid);
+  if (source === 'firebase' || shouldUseFirebaseOtpStore) {
+    await withTimeout(getOtpRef(uid).remove(), 8000, 'Reset OTP terlalu lama. Cek koneksi Firebase.');
+  }
+};
+
+const updateOtpRecord = async (uid, source, updates) => {
+  const currentMemoryRecord = memoryOtpStore.get(uid);
+  if (source === 'memory' || currentMemoryRecord) {
+    memoryOtpStore.set(uid, { ...(currentMemoryRecord || {}), ...updates });
+    return;
+  }
+
+  await getOtpRef(uid).update(updates);
+};
+
+const base32Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+const generateBase32Secret = (length = 20) => {
+  const bytes = crypto.randomBytes(length);
+  let bits = '';
+  let secret = '';
+  for (const byte of bytes) bits += byte.toString(2).padStart(8, '0');
+  for (let i = 0; i + 5 <= bits.length; i += 5) {
+    secret += base32Alphabet[parseInt(bits.slice(i, i + 5), 2)];
+  }
+  return secret;
+};
+
+const decodeBase32Secret = (secret) => {
+  const cleanSecret = String(secret || '').toUpperCase().replace(/[^A-Z2-7]/g, '');
+  let bits = '';
+  for (const char of cleanSecret) {
+    const value = base32Alphabet.indexOf(char);
+    if (value === -1) continue;
+    bits += value.toString(2).padStart(5, '0');
+  }
+
+  const bytes = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) {
+    bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  }
+  return Buffer.from(bytes);
+};
+
+const generateTotpCode = (secret, step = Math.floor(Date.now() / 30000)) => {
+  const key = decodeBase32Secret(secret);
+  const counter = Buffer.alloc(8);
+  counter.writeUInt32BE(Math.floor(step / 0x100000000), 0);
+  counter.writeUInt32BE(step >>> 0, 4);
+  const hmac = crypto.createHmac('sha1', key).update(counter).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const binary =
+    ((hmac[offset] & 0x7f) << 24) |
+    ((hmac[offset + 1] & 0xff) << 16) |
+    ((hmac[offset + 2] & 0xff) << 8) |
+    (hmac[offset + 3] & 0xff);
+  return String(binary % 1000000).padStart(6, '0');
+};
+
+const verifyTotpCode = (secret, code) => {
+  const cleanCode = String(code || '').replace(/\D/g, '');
+  if (cleanCode.length !== 6) return false;
+  const currentStep = Math.floor(Date.now() / 30000);
+  for (let offset = -1; offset <= 1; offset += 1) {
+    if (generateTotpCode(secret, currentStep + offset) === cleanCode) return true;
+  }
+  return false;
+};
+
+const saveTotpSetupRecord = async (uid, record) => {
+  if (!shouldUseFirebaseOtpStore) {
+    memoryTotpSetupStore.set(uid, record);
+    return;
+  }
+  await withTimeout(getTotpSetupRef(uid).set(record), 8000, 'Simpan setup Authenticator terlalu lama.');
+};
+
+const readTotpSetupRecord = async (uid) => {
+  const memoryRecord = memoryTotpSetupStore.get(uid);
+  if (memoryRecord) return { record: memoryRecord, source: 'memory' };
+  if (!shouldUseFirebaseOtpStore) return { record: null, source: 'memory' };
+  const snapshot = await withTimeout(getTotpSetupRef(uid).get(), 8000, 'Ambil setup Authenticator terlalu lama.');
+  return { record: snapshot.val(), source: 'firebase' };
+};
+
+const removeTotpSetupRecord = async (uid, source) => {
+  memoryTotpSetupStore.delete(uid);
+  if (source === 'firebase' || shouldUseFirebaseOtpStore) {
+    await withTimeout(getTotpSetupRef(uid).remove(), 8000, 'Hapus setup Authenticator terlalu lama.');
+  }
+};
+
+const saveTotpRecord = async (uid, record) => {
+  if (!shouldUseFirebaseOtpStore) {
+    memoryTotpStore.set(uid, record);
+    return;
+  }
+  await withTimeout(getTotpRef(uid).set(record), 8000, 'Simpan kunci Authenticator terlalu lama.');
+};
+
+const readTotpRecord = async (uid) => {
+  const memoryRecord = memoryTotpStore.get(uid);
+  if (memoryRecord) return { record: memoryRecord, source: 'memory' };
+  if (!shouldUseFirebaseOtpStore) return { record: null, source: 'memory' };
+  const snapshot = await withTimeout(getTotpRef(uid).get(), 8000, 'Ambil kunci Authenticator terlalu lama.');
+  return { record: snapshot.val(), source: 'firebase' };
+};
 
 const getSmtpTransport = () => {
   const host = process.env.SMTP_HOST || process.env.SMTP_SERVER_HOST;
@@ -100,54 +258,52 @@ const sendOtpEmail = async ({ email, name, code }) => {
   const from = process.env.SMTP_FROM || process.env.SMTP_SENDER_ADDRESS || process.env.SMTP_USER;
   const startedAt = Date.now();
   const displayName = name || 'Divisi KKN 35';
+  const publicBaseUrl = (process.env.PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL || 'https://kkn35ump-desa-gelam.vercel.app').replace(/\/$/, '');
+  const logoUrl = `${publicBaseUrl}/report-assets/logokknv1.png`;
+  const cautionText =
+    'Informasi: Email ini dikirim otomatis oleh sistem KKN 35 UMP untuk proses keamanan akun. ' +
+    'Kode OTP bersifat rahasia, hanya ditujukan untuk pemilik akun yang tertera, dan tidak boleh dibagikan kepada siapa pun. ' +
+    'Jika Anda tidak sedang melakukan proses login, abaikan email ini dan segera ubah password akun Anda.';
 
   const info = await Promise.race([
     transporter.sendMail({
       from,
       to: email,
-      subject: 'Kode OTP Login KKN 35',
-      text: `Halo ${displayName},\n\nKode OTP login kamu adalah: ${code}\n\nKode ini berlaku 10 menit. Jangan bagikan kode ini kepada siapa pun.\n\nKKN 35 UMP`,
+      subject: `Verifikasi OTP Login KKN 35 - ${code}`,
+      text: `Verifikasi OTP Login KKN 35\n\nHalo ${displayName},\n\nAnda menerima email ini karena sedang melakukan proses verifikasi login pada dashboard KKN 35 UMP. Gunakan kode berikut untuk menyelesaikan proses verifikasi:\n\n${code}\n\nKode ini berlaku selama 10 menit. Jangan bagikan kode ini kepada siapa pun.\n\n${cautionText}`,
       html: `
-        <div style="margin:0;padding:28px 0;background:#f6f9fc;font-family:Arial,Helvetica,sans-serif;color:#111827">
-          <div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e5edf7;border-radius:24px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08)">
-            <div style="padding:28px 30px;background:linear-gradient(135deg,#e8f0fe 0%,#ffffff 70%);border-bottom:1px solid #eef2f7">
-              <div style="display:inline-block;padding:6px 10px;border-radius:999px;background:#1a73e8;color:#ffffff;font-size:12px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase">
-                KKN 35 UMP
-              </div>
-              <h1 style="margin:16px 0 6px;font-size:26px;line-height:1.2;font-weight:900;color:#0f172a">
-                Verifikasi Login
+        <div style="margin:0;padding:0;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+          <div style="max-width:720px;margin:0 auto;padding:32px 16px">
+            <div style="background:#ffffff;border-radius:10px;padding:36px 36px 30px;box-shadow:0 8px 28px rgba(15,23,42,0.08)">
+              <img src="${logoUrl}" alt="Logo KKN 35" width="96" style="display:block;width:96px;max-width:96px;height:auto;margin:0 0 34px" />
+
+              <h1 style="margin:0 0 22px;font-size:31px;line-height:1.18;font-weight:800;color:#020617">
+                Verifikasi OTP Login KKN 35
               </h1>
-              <p style="margin:0;font-size:15px;line-height:1.6;color:#475569">
-                Gunakan kode OTP berikut untuk masuk ke dashboard divisi.
-              </p>
-            </div>
 
-            <div style="padding:30px">
-              <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#334155">
-                Halo <strong style="color:#0f172a">${displayName}</strong>,
+              <p style="margin:0 0 8px;font-size:20px;line-height:1.6;color:#334155">
+                Halo <strong style="color:#1e293b">${displayName}</strong>,
+              </p>
+              <p style="margin:0;font-size:20px;line-height:1.6;color:#334155">
+                Anda menerima email ini karena sedang melakukan proses verifikasi pada
+                <strong style="color:#1e293b">dashboard KKN 35 UMP</strong>. Gunakan kode di bawah ini untuk
+                menyelesaikan proses verifikasi. Kode ini berlaku selama <strong style="color:#1e293b">10 menit</strong>.
               </p>
 
-              <div style="margin:0 0 20px;padding:24px;border-radius:22px;background:#f8fafc;border:1px solid #dbe7f5;text-align:center">
-                <p style="margin:0 0 10px;font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#64748b">
-                  Kode OTP 6 Digit
-                </p>
-                <div style="font-size:38px;line-height:1;font-weight:900;letter-spacing:10px;color:#0f172a">
-                  ${code}
+              <div style="margin:56px 0 48px;padding:32px 18px;border-radius:14px;background:#fff7ed;text-align:center">
+                <div style="font-size:40px;line-height:1;font-weight:700;letter-spacing:18px;color:#f97316">
+                  ${code.split('').join(' ')}
                 </div>
               </div>
 
-              <div style="margin:0 0 18px;padding:14px 16px;border-radius:16px;background:#ecfdf5;border:1px solid #bbf7d0;color:#047857;font-size:14px;line-height:1.6;font-weight:700">
-                Kode berlaku selama 10 menit.
-              </div>
-
-              <p style="margin:0;font-size:14px;line-height:1.7;color:#64748b">
-                Jangan bagikan kode ini kepada siapa pun. Jika kamu tidak meminta kode ini, abaikan email ini.
+              <p style="margin:0;font-size:16px;line-height:1.7;color:#94a3b8">
+                Jika Anda tidak meminta kode ini, silakan abaikan email ini. Terima kasih atas perhatian Anda.
               </p>
             </div>
 
-            <div style="padding:18px 30px;background:#f8fafc;border-top:1px solid #eef2f7;text-align:center">
-              <p style="margin:0;font-size:12px;color:#94a3b8">
-                Email otomatis dari sistem KKN 35 Universitas Muhammadiyah Palembang.
+            <div style="margin-top:20px;padding:22px 8px 0;border-top:1px solid #9ca3af">
+              <p style="margin:0;font-size:15px;line-height:1.55;color:#111827">
+                ${cautionText}
               </p>
             </div>
           </div>
@@ -166,6 +322,9 @@ function getFirebaseAdminApp() {
   if (getApps().length) return getApp();
 
   const serviceAccountJson = process?.env?.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (process.env.VERCEL && !serviceAccountJson) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON belum diatur di Environment Variables Vercel.');
+  }
   const credential = serviceAccountJson
     ? cert(JSON.parse(serviceAccountJson))
     : applicationDefault();
@@ -561,14 +720,17 @@ app.post('/auth/request-otp', otpLimiter, async (req, res) => {
     }
 
     const code = String(crypto.randomInt(100000, 1000000));
-    await getOtpRef(decodedToken.uid).set({
+    const otpStore = await saveOtpRecord(decodedToken.uid, {
       hash: hashOtp(code),
       expiresAt: Date.now() + OTP_TTL_MS,
       attempts: 0,
       email: accountEmail,
+      createdAt: Date.now(),
     });
 
     await sendOtpEmail({ email: accountEmail, name: decodedToken.name, code });
+
+    console.log(`[Auth OTP Request] OTP baru dibuat di ${otpStore} dan email dikirim ke ${accountEmail}.`);
 
     return res.json({
       ok: true,
@@ -580,6 +742,23 @@ app.post('/auth/request-otp', otpLimiter, async (req, res) => {
     return res.status(500).json({
       error: 'OTP request failed',
       message: error?.message || 'Kode OTP belum berhasil dikirim.',
+    });
+  }
+});
+
+app.post('/auth/reset-otp', otpLimiter, async (req, res) => {
+  try {
+    const authContext = await getAuthenticatedUser(req, res);
+    if (!authContext) return;
+
+    await removeOtpRecord(authContext.decodedToken.uid);
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('[Auth OTP Reset] Failed:', error);
+    return res.status(500).json({
+      error: 'OTP reset failed',
+      message: error?.message || 'OTP lama belum berhasil direset.',
     });
   }
 });
@@ -599,31 +778,156 @@ app.post('/auth/verify-otp', otpLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Invalid OTP', message: 'Kode OTP harus 6 digit.' });
     }
 
-    const recordSnapshot = await getOtpRef(decodedToken.uid).get();
-    const record = recordSnapshot.val();
+    const { record, source } = await readOtpRecord(decodedToken.uid);
     if (!record || record.expiresAt < Date.now()) {
-      await getOtpRef(decodedToken.uid).remove();
+      await removeOtpRecord(decodedToken.uid, source);
       return res.status(400).json({ error: 'Expired OTP', message: 'Kode OTP sudah kedaluwarsa. Kirim ulang kode.' });
     }
 
     if (record.attempts >= 5) {
-      await getOtpRef(decodedToken.uid).remove();
+      await removeOtpRecord(decodedToken.uid, source);
       return res.status(429).json({ error: 'Too many attempts', message: 'OTP terlalu sering salah. Kirim ulang kode.' });
     }
 
     if (record.hash !== hashOtp(code)) {
       record.attempts += 1;
-      await getOtpRef(decodedToken.uid).update({ attempts: record.attempts });
+      await updateOtpRecord(decodedToken.uid, source, { attempts: record.attempts });
       return res.status(400).json({ error: 'Wrong OTP', message: 'Kode OTP belum cocok.' });
     }
 
-    await getOtpRef(decodedToken.uid).remove();
+    await removeOtpRecord(decodedToken.uid, source);
     return res.json({ ok: true });
   } catch (error) {
     console.error('[Auth OTP Verify] Failed:', error);
     return res.status(500).json({
       error: 'OTP verify failed',
       message: error?.message || 'Kode OTP belum berhasil diverifikasi.',
+    });
+  }
+});
+
+app.get('/auth/totp/status', otpLimiter, async (req, res) => {
+  try {
+    const authContext = await getAuthenticatedUser(req, res);
+    if (!authContext) return;
+
+    const { decodedToken, accountEmail } = authContext;
+    if (accountEmail === ADMIN_EMAIL) {
+      return res.json({ ok: true, enabled: true, skipped: true });
+    }
+
+    const { record } = await readTotpRecord(decodedToken.uid);
+    return res.json({ ok: true, enabled: Boolean(record?.secret) });
+  } catch (error) {
+    console.error('[Auth TOTP Status] Failed:', error);
+    return res.status(500).json({
+      error: 'TOTP status failed',
+      message: error?.message || 'Status Google Authenticator belum bisa dicek.',
+    });
+  }
+});
+
+app.post('/auth/totp/start', otpLimiter, async (req, res) => {
+  try {
+    const authContext = await getAuthenticatedUser(req, res);
+    if (!authContext) return;
+
+    const { decodedToken, accountEmail } = authContext;
+    if (accountEmail === ADMIN_EMAIL) {
+      return res.json({ ok: true, skipped: true });
+    }
+
+    const existing = await readTotpRecord(decodedToken.uid);
+    if (existing.record?.secret) {
+      return res.json({ ok: true, enabled: true });
+    }
+
+    const secret = generateBase32Secret();
+    const label = encodeURIComponent(`KKN 35:${accountEmail}`);
+    const issuer = encodeURIComponent('KKN 35 UMP');
+    const otpauthUrl = `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
+
+    await saveTotpSetupRecord(decodedToken.uid, {
+      secret,
+      email: accountEmail,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    });
+
+    return res.json({ ok: true, enabled: false, secret, otpauthUrl });
+  } catch (error) {
+    console.error('[Auth TOTP Start] Failed:', error);
+    return res.status(500).json({
+      error: 'TOTP start failed',
+      message: error?.message || 'Setup Google Authenticator belum bisa dimulai.',
+    });
+  }
+});
+
+app.post('/auth/totp/confirm', otpLimiter, async (req, res) => {
+  try {
+    const authContext = await getAuthenticatedUser(req, res);
+    if (!authContext) return;
+
+    const { decodedToken, accountEmail } = authContext;
+    if (accountEmail === ADMIN_EMAIL) {
+      return res.json({ ok: true, skipped: true });
+    }
+
+    const code = String(req.body?.code || '').replace(/\D/g, '');
+    const { record, source } = await readTotpSetupRecord(decodedToken.uid);
+    if (!record?.secret || record.expiresAt < Date.now()) {
+      await removeTotpSetupRecord(decodedToken.uid, source);
+      return res.status(400).json({ error: 'Expired setup', message: 'Setup Google Authenticator kedaluwarsa. Buat kunci baru.' });
+    }
+
+    if (!verifyTotpCode(record.secret, code)) {
+      return res.status(400).json({ error: 'Wrong TOTP', message: 'Kode Google Authenticator belum cocok.' });
+    }
+
+    await saveTotpRecord(decodedToken.uid, {
+      secret: record.secret,
+      email: accountEmail,
+      enabledAt: Date.now(),
+    });
+    await removeTotpSetupRecord(decodedToken.uid, source);
+
+    return res.json({ ok: true, enabled: true });
+  } catch (error) {
+    console.error('[Auth TOTP Confirm] Failed:', error);
+    return res.status(500).json({
+      error: 'TOTP confirm failed',
+      message: error?.message || 'Google Authenticator belum berhasil dikonfirmasi.',
+    });
+  }
+});
+
+app.post('/auth/totp/verify', otpLimiter, async (req, res) => {
+  try {
+    const authContext = await getAuthenticatedUser(req, res);
+    if (!authContext) return;
+
+    const { decodedToken, accountEmail } = authContext;
+    if (accountEmail === ADMIN_EMAIL) {
+      return res.json({ ok: true, skipped: true });
+    }
+
+    const code = String(req.body?.code || '').replace(/\D/g, '');
+    const { record } = await readTotpRecord(decodedToken.uid);
+    if (!record?.secret) {
+      return res.status(400).json({ error: 'TOTP not configured', message: 'Google Authenticator belum dibuat. Setup dulu atau pakai OTP email.' });
+    }
+
+    if (!verifyTotpCode(record.secret, code)) {
+      return res.status(400).json({ error: 'Wrong TOTP', message: 'Kode Google Authenticator belum cocok.' });
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('[Auth TOTP Verify] Failed:', error);
+    return res.status(500).json({
+      error: 'TOTP verify failed',
+      message: error?.message || 'Kode Google Authenticator belum berhasil diverifikasi.',
     });
   }
 });

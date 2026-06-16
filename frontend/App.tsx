@@ -94,6 +94,11 @@ const hasMaintenanceLoginToken = () => {
   return window.location.search.includes('kknlogin35');
 };
 
+const shouldOpenAdminRoute = () => {
+  if (typeof window === 'undefined') return false;
+  return window.location.hash === '#admin' || hasMaintenanceLoginToken();
+};
+
 const isStandaloneApp = () => {
   if (typeof window === 'undefined') return false;
   return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
@@ -292,17 +297,17 @@ const App: React.FC = () => {
     applyThemePreference(initialTheme);
     saveThemePreference(initialTheme);
 
-    // Check hash for direct admin access
-    const handleHashChange = () => {
-      if (window.location.hash === '#admin') {
+    const handleAdminRouteChange = () => {
+      if (shouldOpenAdminRoute()) {
         setView('admin');
       } else {
         setView('public');
       }
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    handleHashChange(); // Check on initial load
+    window.addEventListener('hashchange', handleAdminRouteChange);
+    window.addEventListener('popstate', handleAdminRouteChange);
+    handleAdminRouteChange();
 
     // Simulate loading screen
     const timer = setTimeout(() => {
@@ -316,7 +321,8 @@ const App: React.FC = () => {
       clearInterval(clock);
       unsubscribeSite();
       unsubscribeAuth();
-      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('hashchange', handleAdminRouteChange);
+      window.removeEventListener('popstate', handleAdminRouteChange);
     };
   }, []);
 

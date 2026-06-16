@@ -15,6 +15,7 @@ import {
   EyeOff,
   FileText,
   Image as ImageIcon,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -36,6 +37,7 @@ import {
   X,
   Trophy,
   ClipboardList,
+  ShieldCheck,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { auth, storage, ContactMessage } from '../services/storage';
@@ -66,6 +68,7 @@ type Tab = 'overview' | 'accounts' | 'content' | 'maintenance' | 'event' | 'team
 type EditableType = 'team' | 'programs' | 'gallery' | 'testimonials';
 type EditableItem = TeamMember | Program | GalleryImage | Testimonial;
 type DivisionDashboardView = 'home' | 'maps' | 'notes' | 'chat' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput' | 'treasurerIncome';
+type TwoFactorView = 'select' | 'email' | 'authenticator' | 'authenticatorSetup';
 
 const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
 
@@ -108,9 +111,11 @@ const getChatSenderLabel = (name: string, division: DivisionName) =>
 const REPORT_LOGO_UMP = '/report-assets/logo-ump.png';
 const REPORT_LOGO_KKN = '/report-assets/logo-kkn.png';
 const LOGIN_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 4 * 60 * 1000;
 const getSessionActivityKey = (uid: string) => `kkn_session_last_active_${uid}`;
 const getOtpVerifiedKey = (uid: string) => `kkn_login_otp_verified_${uid}`;
+const getQrCodeUrl = (value: string) =>
+  value ? `https://quickchart.io/qr?size=240&margin=1&text=${encodeURIComponent(value)}` : '';
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const A4_WIDTH_PX = 794;
@@ -5294,6 +5299,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [loginError, setLoginError] = useState('');
   const [resetMessage, setResetMessage] = useState('');
   const [resetSending, setResetSending] = useState(false);
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpMessage, setOtpMessage] = useState('');
   const [otpMessageType, setOtpMessageType] = useState<'info' | 'success'>('info');
@@ -5304,6 +5310,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [otpSendStartedAt, setOtpSendStartedAt] = useState(0);
   const [otpResendAvailableAt, setOtpResendAvailableAt] = useState(0);
   const [otpCooldownNow, setOtpCooldownNow] = useState(Date.now());
+  const [twoFactorView, setTwoFactorView] = useState<TwoFactorView>('select');
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
+  const [totpSecret, setTotpSecret] = useState('');
+  const [totpOtpauthUrl, setTotpOtpauthUrl] = useState('');
+  const [totpLoading, setTotpLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [saving, setSaving] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -5334,6 +5346,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         setOtpMessage('');
         setOtpEmail('');
         setOtpResendAvailableAt(0);
+        setTwoFactorView('select');
+        setTotpEnabled(false);
+        setTotpCode('');
+        setTotpSecret('');
+        setTotpOtpauthUrl('');
       }
       setCheckingAuth(false);
     });
@@ -5466,6 +5483,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const otpResendRemainingSeconds = Math.max(0, Math.ceil((otpResendAvailableAt - otpCooldownNow) / 1000));
   const canResendOtp = !otpSending && otpResendRemainingSeconds <= 0;
 
+  const markTwoFactorVerified = () => {
+    if (currentUid) {
+      localStorage.setItem(getOtpVerifiedKey(currentUid), String(Date.now()));
+      localStorage.setItem(getSessionActivityKey(currentUid), String(Date.now()));
+      setOtpVerifiedUid(currentUid);
+    }
+    setOtpCode('');
+    setTotpCode('');
+    setOtpMessage('');
+    setOtpResendAvailableAt(0);
+  };
+
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoginError('');
@@ -5482,22 +5511,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
       const profile = await storage.getUserProfile(credential.user.uid);
       if (profile?.role === 'division') {
-        setOtpSending(true);
-        setOtpSendStartedAt(Date.now());
-        setOtpCooldownNow(Date.now());
-        setOtpResendAvailableAt(Date.now() + OTP_RESEND_COOLDOWN_MS);
         try {
-          const otp = await storage.requestLoginOtp();
-          setOtpEmail(otp.email || credential.user.email || email.trim());
-          setOtpMessageType('success');
-          setOtpMessage(`Kode OTP sudah dikirim ke ${otp.email || credential.user.email || email.trim()}. Cek inbox atau spam.`);
+          const status = await storage.getLoginTotpStatus();
+          setTotpEnabled(Boolean(status.enabled));
         } catch (error: any) {
-          setOtpMessage('');
-          setLoginError(error?.message || 'Kode OTP belum berhasil dikirim. Cek SMTP Gmail dan coba kirim ulang.');
-        } finally {
-          setOtpSending(false);
-          setOtpSendStartedAt(0);
+          setTotpEnabled(false);
         }
+        setOtpEmail(credential.user.email || email.trim());
+        setTwoFactorView('select');
       } else {
         setOtpVerifiedUid(credential.user.uid);
       }
@@ -5542,6 +5563,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     }
   };
 
+  const startEmailOtpVerification = async () => {
+    if (!canResendOtp && otpResendAvailableAt) {
+      setTwoFactorView('email');
+      return;
+    }
+
+    setTwoFactorView('email');
+    setLoginError('');
+    setOtpMessage('');
+    setOtpMessageType('info');
+    setOtpSending(true);
+    setOtpSendStartedAt(Date.now());
+    setOtpCooldownNow(Date.now());
+    setOtpResendAvailableAt(Date.now() + OTP_RESEND_COOLDOWN_MS);
+
+    try {
+      const otp = await storage.requestLoginOtp();
+      setOtpEmail(otp.email || otpEmail || email.trim());
+      setOtpMessageType('success');
+      setOtpMessage(`Kode OTP sudah dikirim ke ${otp.email || otpEmail || email.trim()}. Cek inbox atau spam.`);
+    } catch (error: any) {
+      setOtpMessage('');
+      setLoginError(error?.message || 'Kode OTP belum berhasil dikirim. Cek SMTP Gmail dan coba kirim ulang.');
+    } finally {
+      setOtpSending(false);
+      setOtpSendStartedAt(0);
+    }
+  };
+
+  const startAuthenticatorVerification = async () => {
+    setLoginError('');
+    setOtpMessage('');
+    setOtpMessageType('info');
+    setTotpCode('');
+    setTotpLoading(true);
+
+    try {
+      if (totpEnabled) {
+        setTwoFactorView('authenticator');
+        return;
+      }
+
+      const setup = await storage.startLoginTotpSetup();
+      if (setup.skipped || setup.enabled) {
+        setTotpEnabled(true);
+        setTwoFactorView('authenticator');
+        return;
+      }
+
+      setTotpSecret(setup.secret || '');
+      setTotpOtpauthUrl(setup.otpauthUrl || '');
+      setTwoFactorView('authenticatorSetup');
+    } catch (error: any) {
+      setLoginError(error?.message || 'Setup Google Authenticator belum bisa dimulai.');
+    } finally {
+      setTotpLoading(false);
+    }
+  };
+
+  const verifyLoginTotp = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoginError('');
+    setOtpMessage('');
+
+    const cleanCode = totpCode.replace(/\D/g, '');
+    if (cleanCode.length !== 6) {
+      setLoginError('Masukkan kode Google Authenticator 6 digit.');
+      return;
+    }
+
+    setTotpLoading(true);
+    try {
+      if (twoFactorView === 'authenticatorSetup') {
+        await storage.confirmLoginTotpSetup(cleanCode);
+        setTotpEnabled(true);
+      } else {
+        await storage.verifyLoginTotp(cleanCode);
+      }
+      markTwoFactorVerified();
+    } catch (error: any) {
+      setLoginError(error?.message || 'Kode Google Authenticator belum cocok.');
+    } finally {
+      setTotpLoading(false);
+    }
+  };
+
   const verifyLoginOtp = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoginError('');
@@ -5557,14 +5664,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     setOtpVerifying(true);
     try {
       await storage.verifyLoginOtp(cleanCode);
-      if (currentUid) {
-        localStorage.setItem(getOtpVerifiedKey(currentUid), String(Date.now()));
-        localStorage.setItem(getSessionActivityKey(currentUid), String(Date.now()));
-        setOtpVerifiedUid(currentUid);
-      }
-      setOtpCode('');
-      setOtpMessage('');
-      setOtpResendAvailableAt(0);
+      markTwoFactorVerified();
     } catch (error: any) {
       setLoginError(error?.message || 'Kode OTP belum cocok.');
     } finally {
@@ -5619,6 +5719,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     setOtpCode('');
     setOtpMessage('');
     setOtpResendAvailableAt(0);
+    setTwoFactorView('select');
+    setTotpEnabled(false);
+    setTotpCode('');
+    setTotpSecret('');
+    setTotpOtpauthUrl('');
     await storage.logout();
   };
 
@@ -5742,35 +5847,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               </div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">Admin KKN 35</p>
-                <h1 className="text-2xl font-black text-slate-900 dark:text-white">Login</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Masuk untuk melanjutkan.</p>
+                <h1 className="text-2xl font-black text-slate-900 dark:text-white">{forgotPasswordMode ? 'Lupa Password' : 'Login'}</h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {forgotPasswordMode ? 'Masukkan email akun yang terdaftar.' : 'Masuk untuk melanjutkan.'}
+                </p>
               </div>
             </div>
           </div>
 
-          <form onSubmit={login} className="space-y-4 px-8 pt-7">
+          <form
+            onSubmit={(event) => {
+              if (forgotPasswordMode) {
+                event.preventDefault();
+                sendPasswordReset();
+                return;
+              }
+              login(event);
+            }}
+            className="space-y-4 px-8 pt-7"
+          >
             <Field label="Email" type="email" value={email} onChange={setEmail} />
-            <label className="block">
-              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                Password
-              </span>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className={`${googleInputClass} pr-12`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((current) => !current)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
-                  aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </label>
+            {!forgotPasswordMode && (
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                  Password
+                </span>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className={`${googleInputClass} pr-12`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
+                    aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotPasswordMode(true);
+                      setLoginError('');
+                      setResetMessage('');
+                      setPassword('');
+                    }}
+                    className="text-sm font-black text-[#1a73e8] transition-colors hover:text-[#1765cc] dark:text-[#8ab4f8] dark:hover:text-[#aecbfa]"
+                  >
+                    Lupa password?
+                  </button>
+                </div>
+              </label>
+            )}
 
             {loginError && (
               <p className="rounded-lg bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-300">
@@ -5784,18 +5917,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               </p>
             )}
 
-            <button className={`${googlePrimaryButtonClass} w-full py-3`}>
-              Masuk
+            <button className={`${googlePrimaryButtonClass} w-full py-3`} disabled={forgotPasswordMode && resetSending}>
+              {forgotPasswordMode
+                ? resetSending ? 'Mengirim link reset...' : 'Kirim Link Reset'
+                : 'Masuk'}
             </button>
 
-            <button
-              type="button"
-              onClick={sendPasswordReset}
-              disabled={resetSending}
-              className="w-full rounded-full px-4 py-2 text-sm font-bold text-[#1a73e8] transition-colors hover:bg-[#e8f0fe] disabled:cursor-not-allowed disabled:opacity-60 dark:text-[#8ab4f8] dark:hover:bg-[#1a73e8]/15"
-            >
-              {resetSending ? 'Mengirim link reset...' : 'Lupa password? Kirim link reset'}
-            </button>
+            {forgotPasswordMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotPasswordMode(false);
+                  setLoginError('');
+                  setResetMessage('');
+                }}
+                className="w-full rounded-full px-4 py-2 text-sm font-black text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+              >
+                Kembali ke login
+              </button>
+            )}
           </form>
 
           <button
@@ -5811,75 +5951,220 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   }
 
   if (requiresDivisionOtp) {
+    const isAuthenticatorView = twoFactorView === 'authenticator' || twoFactorView === 'authenticatorSetup';
+    const twoFactorTitle =
+      twoFactorView === 'select'
+        ? 'Pilih Keamanan'
+        : isAuthenticatorView
+          ? 'Google Authenticator'
+          : 'Cek Email';
+    const twoFactorSubtitle =
+      twoFactorView === 'select'
+        ? 'Pilih salah satu metode verifikasi untuk akun divisi.'
+        : twoFactorView === 'authenticatorSetup'
+          ? 'Tambahkan key ke aplikasi Authenticator, lalu masukkan kode 6 digit pertama.'
+          : isAuthenticatorView
+            ? 'Masukkan kode 6 digit dari aplikasi Authenticator.'
+            : 'Masukkan kode OTP yang dikirim ke email akun divisi.';
+
     return (
       <div className="min-h-screen bg-[#f8fafd] dark:bg-[#0b0f19] flex items-center justify-center p-4">
         <div className={`${googleSurfaceClass} w-full max-w-lg overflow-hidden`}>
           <div className="border-b border-slate-100 bg-gradient-to-br from-[#e8f0fe] via-white to-white px-6 py-6 dark:border-slate-800 dark:from-[#1a73e8]/15 dark:via-[#111827] dark:to-[#111827] sm:px-8 sm:py-7">
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] border border-white/80 bg-white p-2 shadow-[0_4px_18px_rgba(60,64,67,0.16)] dark:border-slate-700 dark:bg-slate-950">
-                <Mail size={30} className="text-[#1a73e8] dark:text-[#8ab4f8]" />
+                {twoFactorView === 'email' ? (
+                  <Mail size={30} className="text-[#1a73e8] dark:text-[#8ab4f8]" />
+                ) : (
+                  <ShieldCheck size={30} className="text-[#1a73e8] dark:text-[#8ab4f8]" />
+                )}
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">Verifikasi OTP</p>
-                <h1 className="text-3xl font-black tracking-normal text-slate-900 dark:text-white">Cek Email</h1>
+                <p className="text-xs font-bold uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">Verifikasi 2FA</p>
+                <h1 className="text-3xl font-black tracking-normal text-slate-900 dark:text-white">{twoFactorTitle}</h1>
                 <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">
-                  Akun divisi wajib verifikasi kode sebelum masuk.
+                  {twoFactorSubtitle}
                 </p>
               </div>
             </div>
           </div>
 
-          <form onSubmit={verifyLoginOtp} className="space-y-5 px-6 pt-7 sm:px-8">
-            <label className="block">
-              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                Kode OTP 6 Digit
-              </span>
-              <input
-                value={otpCode}
-                onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="123456"
-                className={`${googleInputClass} h-16 rounded-2xl text-center text-2xl font-black tracking-[0.45em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
-              />
-              <p className="mt-2 text-xs font-semibold text-slate-400 dark:text-slate-500">
-                Masukkan 6 angka dari email. Kode berlaku 10 menit.
-              </p>
-            </label>
+          <div className="space-y-5 px-6 pt-7 sm:px-8">
+            {twoFactorView === 'select' && (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={startAuthenticatorVerification}
+                  disabled={totpLoading}
+                  className="flex w-full items-center gap-4 rounded-3xl border border-[#1a73e8]/20 bg-[#e8f0fe] p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[#1a73e8]/40 hover:bg-[#dbe9ff] disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#8ab4f8]/20 dark:bg-[#1a73e8]/15 dark:hover:bg-[#1a73e8]/20"
+                >
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-[#1a73e8] shadow-sm dark:bg-slate-950 dark:text-[#8ab4f8]">
+                    <KeyRound size={24} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-base font-black text-slate-950 dark:text-white">Google Authenticator</span>
+                    <span className="mt-1 block text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">
+                      {totpEnabled ? 'Masuk pakai kode kunci dari aplikasi.' : 'Setup sekali pakai key kunci, lalu login berikutnya cukup kode aplikasi.'}
+                    </span>
+                  </span>
+                </button>
 
-            {otpMessage && (
-              <p className={`rounded-2xl px-4 py-3 text-sm font-semibold leading-6 ${
-                otpMessageType === 'success'
-                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
-                  : 'bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]'
-              }`}>
-                {otpMessage}
-              </p>
+                <button
+                  type="button"
+                  onClick={startEmailOtpVerification}
+                  disabled={otpSending}
+                  className="flex w-full items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[#1a73e8]/30 hover:bg-[#f8fafd] disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
+                >
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-[#1a73e8] dark:bg-slate-950 dark:text-[#8ab4f8]">
+                    <Mail size={24} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-base font-black text-slate-950 dark:text-white">Kirim OTP ke Email</span>
+                    <span className="mt-1 block text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">
+                      Kode dikirim ke {otpEmail || email.trim() || 'email akun'}.
+                    </span>
+                  </span>
+                </button>
+              </div>
             )}
 
-            {loginError && (
-              <p className="rounded-2xl bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm font-semibold leading-6 text-red-600 dark:text-red-300">
-                {loginError}
-              </p>
+            {isAuthenticatorView && (
+              <form onSubmit={verifyLoginTotp} className="space-y-5">
+                {twoFactorView === 'authenticatorSetup' && (
+                  <div className="space-y-3 rounded-3xl border border-[#1a73e8]/15 bg-[#f8fafd] p-4 dark:border-[#8ab4f8]/20 dark:bg-slate-900">
+                    {totpOtpauthUrl && (
+                      <div className="rounded-3xl bg-white p-4 text-center shadow-sm dark:bg-slate-950">
+                        <p className="mb-3 text-xs font-black uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">
+                          Scan QR Authenticator
+                        </p>
+                        <img
+                          src={getQrCodeUrl(totpOtpauthUrl)}
+                          alt="QR Google Authenticator"
+                          className="mx-auto h-56 w-56 rounded-2xl border border-slate-100 bg-white p-2 object-contain dark:border-slate-800"
+                        />
+                        <p className="mt-3 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
+                          Buka Google Authenticator, tekan tambah akun, lalu pilih Scan kode QR.
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-xs font-black uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">
+                      Key Kunci Awal
+                    </p>
+                    <p className="break-all rounded-2xl bg-white px-4 py-3 text-center font-mono text-lg font-black tracking-[0.18em] text-slate-950 shadow-sm dark:bg-slate-950 dark:text-white">
+                      {totpSecret || 'MEMBUAT KEY...'}
+                    </p>
+                    {totpOtpauthUrl && (
+                      <a
+                        href={totpOtpauthUrl}
+                        className="block rounded-2xl bg-[#e8f0fe] px-4 py-3 text-center text-sm font-black text-[#1a73e8] transition-colors hover:bg-[#dbe9ff] dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]"
+                      >
+                        Buka di Google Authenticator
+                      </a>
+                    )}
+                    <p className="text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
+                      Di Google Authenticator pilih tambah akun, masukkan setup key ini secara manual, lalu isi kode 6 digit yang muncul.
+                    </p>
+                  </div>
+                )}
+
+                <label className="block">
+                  <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                    Kode Google Authenticator
+                  </span>
+                  <input
+                    value={totpCode}
+                    onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="123456"
+                    className={`${googleInputClass} h-16 rounded-2xl text-center text-2xl font-black tracking-[0.45em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
+                  />
+                </label>
+
+                {loginError && (
+                  <p className="rounded-2xl bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm font-semibold leading-6 text-red-600 dark:text-red-300">
+                    {loginError}
+                  </p>
+                )}
+
+                <button className={`${googlePrimaryButtonClass} w-full py-4 text-base`} disabled={totpLoading || totpCode.length !== 6}>
+                  {totpLoading ? 'Memverifikasi...' : twoFactorView === 'authenticatorSetup' ? 'Simpan Key & Masuk' : 'Verifikasi'}
+                </button>
+              </form>
             )}
 
-            <button className={`${googlePrimaryButtonClass} w-full py-4 text-base`} disabled={otpVerifying || otpCode.length !== 6}>
-              {otpVerifying ? 'Memverifikasi...' : 'Verifikasi & Masuk'}
-            </button>
+            {twoFactorView === 'email' && (
+              <form onSubmit={verifyLoginOtp} className="space-y-5">
+                <label className="block">
+                  <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                    Kode OTP 6 Digit
+                  </span>
+                  <input
+                    value={otpCode}
+                    onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="123456"
+                    className={`${googleInputClass} h-16 rounded-2xl text-center text-2xl font-black tracking-[0.45em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
+                  />
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                      Masukkan 6 angka dari email. Kode berlaku 10 menit.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={resendLoginOtp}
+                      disabled={!canResendOtp}
+                      className="self-end text-xs font-black text-[#1a73e8] transition-colors hover:text-[#1765cc] disabled:cursor-not-allowed disabled:text-slate-400 dark:text-[#8ab4f8] dark:hover:text-[#aecbfa] dark:disabled:text-slate-500"
+                    >
+                      {otpSending
+                        ? 'Mengirim OTP...'
+                        : otpResendRemainingSeconds > 0
+                          ? `Kirim ulang dalam ${Math.ceil(otpResendRemainingSeconds / 60)} menit`
+                          : 'Kirim ulang OTP'}
+                    </button>
+                  </div>
+                </label>
 
-            <button
-              type="button"
-              onClick={resendLoginOtp}
-              disabled={!canResendOtp}
-              className="w-full rounded-full border border-[#1a73e8]/15 bg-white px-4 py-3 text-sm font-black text-[#1a73e8] transition-all hover:bg-[#e8f0fe] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400 dark:border-[#8ab4f8]/20 dark:bg-slate-900 dark:text-[#8ab4f8] dark:hover:bg-[#1a73e8]/15 dark:disabled:border-slate-800 dark:disabled:bg-slate-900/60 dark:disabled:text-slate-500"
-            >
-              {otpSending
-                ? 'Mengirim OTP...'
-                : otpResendRemainingSeconds > 0
-                  ? `Kirim ulang dalam ${otpResendRemainingSeconds} detik`
-                  : 'Kirim ulang kode OTP'}
-            </button>
-          </form>
+                {otpMessage && (
+                  <p className={`rounded-2xl px-4 py-3 text-sm font-semibold leading-6 ${
+                    otpMessageType === 'success'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                      : 'bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]'
+                  }`}>
+                    {otpMessage}
+                  </p>
+                )}
+
+                {loginError && (
+                  <p className="rounded-2xl bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm font-semibold leading-6 text-red-600 dark:text-red-300">
+                    {loginError}
+                  </p>
+                )}
+
+                <button className={`${googlePrimaryButtonClass} w-full py-4 text-base`} disabled={otpVerifying || otpCode.length !== 6}>
+                  {otpVerifying ? 'Memverifikasi...' : 'Verifikasi'}
+                </button>
+
+              </form>
+            )}
+
+            {twoFactorView !== 'select' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTwoFactorView('select');
+                  setLoginError('');
+                  setOtpMessage('');
+                  setOtpCode('');
+                  setTotpCode('');
+                }}
+                className="w-full rounded-full px-4 py-2 text-sm font-black text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+              >
+                Pilih metode lain
+              </button>
+            )}
+          </div>
 
           <button
             onClick={logout}
