@@ -629,6 +629,9 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   const allDivisions = useMemo(() => [...DIVISIONS, ...customDivisions], [customDivisions]);
   const visibleDivisions = useMemo(() => allDivisions.filter((item) => !hiddenDivisions.includes(item.value)), [allDivisions, hiddenDivisions]);
   const restorableDivisions = useMemo(() => allDivisions.filter((item) => hiddenDivisions.includes(item.value)), [allDivisions, hiddenDivisions]);
+  const getProfilesByDivision = (value: DivisionName) => profiles.filter((profile) => profile.role === 'division' && profile.division === value);
+  const selectedDivisionProfiles = getProfilesByDivision(division);
+  const selectedDivisionHasAccount = selectedDivisionProfiles.length > 0;
 
   useEffect(() => {
     localStorage.setItem('hidden_division_slots', JSON.stringify(hiddenDivisions));
@@ -653,8 +656,15 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
 
   const createAccount = async (event: React.FormEvent) => {
     event.preventDefault();
-    setSaving(true);
     setMessage('');
+
+    if (selectedDivisionHasAccount) {
+      const selectedDivision = allDivisions.find((item) => item.value === division);
+      setMessage(`Divisi ${selectedDivision?.label || division} sudah punya akun. Hapus akun lama dulu kalau mau mengganti akun.`);
+      return;
+    }
+
+    setSaving(true);
 
     try {
       await storage.createDivisionAccount({ email, password, name, division });
@@ -680,6 +690,17 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
 
   const prepareCreateForDivision = (value: DivisionName) => {
     const selectedDivision = allDivisions.find((item) => item.value === value);
+    const divisionProfiles = getProfilesByDivision(value);
+
+    if (divisionProfiles.length > 0) {
+      setDivision(value);
+      setName(divisionProfiles[0].name || selectedDivision?.defaultName || '');
+      setEmail('');
+      setPassword('');
+      setMessage(`Divisi ${selectedDivision?.label || value} sudah punya akun. Setiap divisi hanya boleh memiliki satu akun.`);
+      return;
+    }
+
     setDivision(value);
     setName(selectedDivision?.defaultName || '');
     setEmail('');
@@ -705,6 +726,18 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
     setMessage('');
 
     try {
+      const duplicateDivisionProfile = profiles.find((item) => (
+        item.role === 'division' &&
+        item.uid !== profile.uid &&
+        item.division === editingProfileDivision
+      ));
+
+      if (duplicateDivisionProfile) {
+        const targetDivision = allDivisions.find((item) => item.value === editingProfileDivision);
+        setMessage(`Divisi ${targetDivision?.label || editingProfileDivision} sudah punya akun. Hapus akun lama dulu sebelum memindahkan akun ke divisi itu.`);
+        return;
+      }
+
       await storage.updateUserProfile({ ...profile, name: nextName, division: editingProfileDivision });
       setEditingProfileId('');
       setEditingProfileName('');
@@ -853,6 +886,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#1a73e8] dark:text-[#8ab4f8]">Manajemen Akun</p>
               <h2 className="mt-1 text-xl font-black text-slate-950 dark:text-white">Buat Akun Baru</h2>
+              <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Setiap divisi hanya boleh memiliki satu akun aktif.</p>
             </div>
             <span className="w-fit border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-[#111827] dark:text-slate-300">
               {profiles.filter((profile) => profile.role === 'division').length}/{visibleDivisions.length} akun aktif
@@ -870,6 +904,11 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
               <Field label="Email Login" type="email" value={email} onChange={setEmail} />
               <Field label="Password Awal" type="password" value={password} onChange={setPassword} />
             </div>
+            {selectedDivisionHasAccount && (
+              <p className="mt-3 border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                Divisi ini sudah punya akun: {selectedDivisionProfiles.map((profile) => profile.email).join(', ')}. Hapus akun lama dulu jika ingin membuat akun baru.
+              </p>
+            )}
           </div>
           {message && (
             <p className="border border-slate-200 bg-[#f8fafd] px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200">
@@ -881,11 +920,11 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
           </p>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || selectedDivisionHasAccount}
             className={`${googlePrimaryButtonClass} w-full py-3 lg:w-auto lg:px-8`}
           >
             <Plus size={16} />
-            {saving ? 'Membuat akun...' : 'Buat Akun'}
+            {saving ? 'Membuat akun...' : selectedDivisionHasAccount ? 'Divisi Sudah Punya Akun' : 'Buat Akun'}
           </button>
         </div>
       </form>
@@ -937,20 +976,22 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
               <span className="text-right">Aksi</span>
             </div>
             {visibleDivisions.map((item) => {
-              const divisionProfiles = profiles.filter((candidate) => candidate.division === item.value);
+              const divisionProfiles = getProfilesByDivision(item.value);
+              const hasDuplicateAccounts = divisionProfiles.length > 1;
               return (
                 <div key={item.value} className="grid gap-3 border-b border-slate-200 px-4 py-2.5 last:border-b-0 hover:bg-[#f4f8ff] dark:border-slate-800 dark:hover:bg-[#111827] lg:grid-cols-[220px_110px_minmax(0,1fr)_150px] lg:items-center">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-black uppercase tracking-wide text-slate-950 dark:text-white">{item.label}</p>
                     <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
                       {divisionProfiles.length ? `${divisionProfiles.length} akun terdaftar` : 'Slot belum punya akun'}
+                      {hasDuplicateAccounts ? ' - hapus salah satu akun' : ''}
                     </p>
                   </div>
 
                   <div>
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-black ${divisionProfiles.length ? 'bg-[#e6f4ea] text-[#137333] dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-[#fef7e0] text-[#b06000] dark:bg-amber-950/40 dark:text-amber-300'}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${divisionProfiles.length ? 'bg-[#34a853]' : 'bg-[#fbbc04]'}`} />
-                      {divisionProfiles.length ? 'Aktif' : 'Kosong'}
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-black ${hasDuplicateAccounts ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300' : divisionProfiles.length ? 'bg-[#e6f4ea] text-[#137333] dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-[#fef7e0] text-[#b06000] dark:bg-amber-950/40 dark:text-amber-300'}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${hasDuplicateAccounts ? 'bg-red-500' : divisionProfiles.length ? 'bg-[#34a853]' : 'bg-[#fbbc04]'}`} />
+                      {hasDuplicateAccounts ? 'Duplikat' : divisionProfiles.length ? 'Aktif' : 'Kosong'}
                     </span>
                   </div>
 
@@ -1016,6 +1057,15 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
                                 <Mail size={12} />
                                 {resettingProfileId === profile.uid ? 'Mengirim...' : 'Reset Password'}
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteProfile(profile)}
+                                disabled={deletingProfileId === profile.uid}
+                                className={`${adminMiniDangerButtonClass} shrink-0`}
+                              >
+                                <Trash2 size={12} />
+                                {deletingProfileId === profile.uid ? 'Menghapus...' : 'Hapus akun'}
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1042,10 +1092,11 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
                     <button
                       type="button"
                       onClick={() => prepareCreateForDivision(item.value)}
+                      disabled={divisionProfiles.length > 0}
                       className={adminMiniPrimaryButtonClass}
                     >
                       <Plus size={12} />
-                      Tambah
+                      {divisionProfiles.length > 0 ? 'Sudah ada' : 'Tambah'}
                     </button>
                     <button
                       type="button"

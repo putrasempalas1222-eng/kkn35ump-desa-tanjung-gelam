@@ -19,6 +19,7 @@ import {
   remove,
   push,
   serverTimestamp,
+  get,
 } from 'firebase/database';
 import {
   DivisionName,
@@ -335,6 +336,14 @@ export const storage = {
   }) => {
     const creatorAuth = getAccountCreatorAuth();
     const email = account.email.trim();
+    const profilesSnapshot = await get(ref(database, COLLECTIONS.userProfiles));
+    const existingProfiles = Object.values((profilesSnapshot.val() || {}) as Record<string, UserProfile>);
+    const existingDivisionProfile = existingProfiles.find((profile) => profile.role === 'division' && profile.division === account.division);
+
+    if (existingDivisionProfile) {
+      throw new Error('Divisi ini sudah punya akun. Setiap divisi hanya boleh memiliki satu akun.');
+    }
+
     let credential;
 
     try {
