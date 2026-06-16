@@ -47,12 +47,29 @@ export interface ContactMessage {
   createdAt?: number | object;
 }
 
+const DEFAULT_FIREBASE_ENV: Record<string, string> = {
+  VITE_FIREBASE_API_KEY: 'AIzaSyCxFcWI6vLfGNcQMnTVRsRtXsDJfzqiWEw',
+  VITE_FIREBASE_AUTH_DOMAIN: 'project-3dfa8c97-bc93-4195-a5a.firebaseapp.com',
+  VITE_FIREBASE_DATABASE_URL: 'https://project-3dfa8c97-bc93-4195-a5a-default-rtdb.firebaseio.com',
+  VITE_FIREBASE_PROJECT_ID: 'project-3dfa8c97-bc93-4195-a5a',
+  VITE_FIREBASE_STORAGE_BUCKET: 'project-3dfa8c97-bc93-4195-a5a.firebasestorage.app',
+  VITE_FIREBASE_MESSAGING_SENDER_ID: '275478991025',
+  VITE_FIREBASE_APP_ID: '1:275478991025:web:80d97124eb119cc039d290',
+  VITE_FIREBASE_MEASUREMENT_ID: 'G-YL95DFEMDK',
+};
+
 const getRequiredEnv = (key: string) => {
   const value = import.meta.env[key];
-  if (!value) {
+  if (value) {
+    return value;
+  }
+
+  const fallback = DEFAULT_FIREBASE_ENV[key];
+  if (!fallback) {
     throw new Error(`Missing required environment variable: ${key}`);
   }
-  return value;
+
+  return fallback;
 };
 
 const firebaseConfig = {
@@ -63,7 +80,7 @@ const firebaseConfig = {
   storageBucket: getRequiredEnv('VITE_FIREBASE_STORAGE_BUCKET'),
   messagingSenderId: getRequiredEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
   appId: getRequiredEnv('VITE_FIREBASE_APP_ID'),
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || DEFAULT_FIREBASE_ENV.VITE_FIREBASE_MEASUREMENT_ID || '',
 };
 
 const app = initializeApp(firebaseConfig);
