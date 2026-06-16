@@ -18,6 +18,45 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { storage } from './services/storage';
 import { SiteContent } from './types';
 
+type ThemeMode = 'light' | 'dark';
+
+const THEME_COOKIE_NAME = 'kkn_theme';
+const THEME_STORAGE_KEY = 'kkn_theme';
+
+const getCookieValue = (name: string) => {
+  if (typeof document === 'undefined') return '';
+
+  return document.cookie
+    .split('; ')
+    .find((item) => item.startsWith(`${name}=`))
+    ?.split('=')
+    .slice(1)
+    .join('=') || '';
+};
+
+const saveThemePreference = (theme: ThemeMode) => {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }
+
+  if (typeof document !== 'undefined') {
+    document.cookie = `${THEME_COOKIE_NAME}=${theme}; path=/; max-age=31536000; SameSite=Lax`;
+  }
+};
+
+const applyThemePreference = (theme: ThemeMode) => {
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+};
+
+const getInitialThemePreference = (): ThemeMode => {
+  if (typeof window === 'undefined') return 'light';
+
+  const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY) || getCookieValue(THEME_COOKIE_NAME);
+  if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+};
+
 const formatSchedule = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Belum diatur';
@@ -46,83 +85,73 @@ const getPublicGateStatus = (content: SiteContent, now: number) => {
   return 'maintenance';
 };
 
+const hasMaintenanceLoginToken = () => {
+  if (typeof window === 'undefined') return false;
+  return window.location.search.includes('kknlogin35');
+};
+
 const StatusPage = ({ content, status }: { content: SiteContent; status: 'maintenance' | 'not-started' }) => {
-  const title = status === 'not-started' ? 'Website belum dimulai' : content.maintenanceTitle || 'Website sedang maintenance';
+  const title = status === 'not-started' ? 'Belum dibuka' : content.maintenanceTitle || 'Segera kembali';
   const message =
     status === 'not-started'
       ? 'Website akan dibuka sesuai jadwal yang sudah ditentukan.'
-      : content.maintenanceMessage || 'Silakan kembali lagi beberapa saat lagi.';
+      : content.maintenanceMessage || 'Kami sedang merapikan beberapa bagian agar website bisa digunakan dengan lebih baik.';
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050814] text-white flex items-center justify-center px-4 py-10">
-      <div className="absolute inset-0 opacity-80">
-        <div className="absolute -top-32 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-m-blue/30 blur-3xl"></div>
-        <div className="absolute bottom-0 left-10 h-72 w-72 rounded-full bg-m-green/20 blur-3xl"></div>
-        <div className="absolute right-0 top-1/3 h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
-      </div>
-
-      <div className="relative w-full max-w-4xl">
-        <div className="absolute inset-x-10 -top-8 h-20 rounded-full bg-white/20 blur-3xl"></div>
-
-        <div className="relative overflow-hidden rounded-[32px] border border-white/14 bg-white/[0.08] shadow-2xl backdrop-blur-2xl">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/18 via-white/[0.06] to-transparent"></div>
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
-
-          <div className="relative grid lg:grid-cols-[0.9fr_1.1fr] gap-0">
-            <div className="min-h-[320px] p-8 md:p-10 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-white/10">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-white/80">
-                  <span className="h-2 w-2 rounded-full bg-m-green shadow-[0_0_18px_rgba(52,168,83,0.9)]"></span>
-                  {status === 'not-started' ? 'Belum Dibuka' : 'Maintenance'}
-                </div>
-
-                <div className="mt-10 h-28 w-28 rounded-[28px] bg-gradient-to-br from-white/22 to-white/5 border border-white/16 p-3 shadow-2xl">
-                  <div className="h-full w-full rounded-[22px] bg-m-blue flex items-center justify-center text-4xl font-black shadow-[0_20px_60px_rgba(26,115,232,0.45)]">
-                    35
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-10">
-                <p className="text-sm font-bold text-white/55">KKN Kelompok 35 UMP</p>
-                <p className="mt-2 text-sm leading-relaxed text-white/70">
-                  Sistem sedang disiapkan agar pengalaman akses website tetap lancar dan rapi.
-                </p>
-              </div>
+    <div className="min-h-screen bg-[#f8fafd] text-slate-950 dark:bg-[#0b0f19] dark:text-white">
+      <div className="mx-auto grid min-h-screen w-full max-w-6xl grid-rows-[auto_1fr_auto] px-5 py-6 md:px-8 lg:px-10">
+        <header className="flex items-center justify-between border-b border-slate-200 pb-4 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <img
+              src="/report-assets/logokknv1.png"
+              alt="Logo KKN Kelompok 35"
+              className="h-10 w-10 object-contain"
+            />
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-950 dark:text-white">
+                KKN Kelompok 35
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Universitas Muhammadiyah Palembang
+              </p>
             </div>
+          </div>
+        </header>
 
-            <div className="p-8 md:p-10">
-              <h1 className="text-4xl md:text-6xl font-black leading-[1.02] tracking-normal">
-                {title}
-              </h1>
-              <p className="mt-5 max-w-xl text-base md:text-lg leading-relaxed text-white/72">{message}</p>
+        <main className="flex items-center py-10 md:py-12">
+          <div className="w-full">
+            <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
+              {status === 'not-started' ? 'Belum dibuka' : 'Maintenance'}
+            </p>
+            <h1 className="mt-4 max-w-4xl text-4xl font-extrabold leading-[1.08] tracking-normal text-slate-950 dark:text-white md:text-5xl lg:text-6xl">
+              {title}
+            </h1>
+            <p className="mt-5 max-w-2xl text-base font-normal leading-8 text-slate-600 dark:text-slate-300 md:text-lg">
+              {message}
+            </p>
 
-              <div className="mt-10 grid sm:grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-white/12 bg-black/18 p-5">
-                  <p className="text-xs font-black uppercase tracking-widest text-white/40">Dibuka</p>
-                  <p className="mt-3 text-base font-bold leading-snug">{formatSchedule(content.maintenanceStart)}</p>
-                </div>
-                <div className="rounded-2xl border border-white/12 bg-black/18 p-5">
-                  <p className="text-xs font-black uppercase tracking-widest text-white/40">Selesai</p>
-                  <p className="mt-3 text-base font-bold leading-snug">{formatSchedule(content.maintenanceEnd)}</p>
-                </div>
+            <div className="mt-9 h-px w-full bg-slate-200 dark:bg-slate-800" />
+
+            <div className="mt-7 grid max-w-4xl gap-6 text-sm text-slate-600 dark:text-slate-400 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Dimulai
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-900 dark:text-white">{formatSchedule(content.maintenanceStart)}</p>
               </div>
-
-              <div className="mt-8 h-2 rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-m-blue via-m-green to-g-yellow animate-pulse"></div>
-              </div>
-
-              <div className="mt-10 flex flex-col sm:flex-row gap-3">
-                <a
-                  href="#admin"
-                  className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 font-black text-slate-950 hover:bg-slate-100"
-                >
-                  Login
-                </a>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Selesai
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-900 dark:text-white">{formatSchedule(content.maintenanceEnd)}</p>
               </div>
             </div>
           </div>
-        </div>
+        </main>
+
+        <footer className="border-t border-slate-200 pt-4 text-xs font-semibold text-slate-400 dark:border-slate-800 dark:text-slate-500">
+          Website sedang disiapkan. Terima kasih sudah menunggu.
+        </footer>
       </div>
     </div>
   );
@@ -147,12 +176,10 @@ const App: React.FC = () => {
       setIsLoggedIn(!!user);
     });
 
-    // Check system preference or local storage for dark mode
-    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(isDark);
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    }
+    const initialTheme = getInitialThemePreference();
+    setDarkMode(initialTheme === 'dark');
+    applyThemePreference(initialTheme);
+    saveThemePreference(initialTheme);
 
     // Check hash for direct admin access
     const handleHashChange = () => {
@@ -183,8 +210,12 @@ const App: React.FC = () => {
   }, []);
 
   const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    document.documentElement.classList.toggle('dark');
+    setDarkMode((current) => {
+      const nextTheme: ThemeMode = current ? 'light' : 'dark';
+      applyThemePreference(nextTheme);
+      saveThemePreference(nextTheme);
+      return nextTheme === 'dark';
+    });
   };
 
   if (loading) {
@@ -221,19 +252,32 @@ const App: React.FC = () => {
     );
   }
 
+  const closeAdmin = () => {
+    if (hasMaintenanceLoginToken()) {
+      window.history.replaceState(null, '', '/');
+    } else {
+      window.location.hash = '';
+    }
+    setView('public');
+  };
+
   if (view === 'admin') {
-    return <AdminDashboard onClose={() => { window.location.hash = ''; setView('public'); }} />;
+    return <AdminDashboard onClose={closeAdmin} />;
   }
 
   const gateStatus = getPublicGateStatus(siteContent, now);
+  if (gateStatus && hasMaintenanceLoginToken()) {
+    return <AdminDashboard onClose={closeAdmin} />;
+  }
+
   if (gateStatus) {
     return <StatusPage content={siteContent} status={gateStatus} />;
   }
 
   return (
-    <div className="min-h-screen font-sans selection:bg-m-blue selection:text-white">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden font-sans selection:bg-m-blue selection:text-white">
       <Navbar darkMode={darkMode} toggleDarkMode={toggleDarkMode} isLoggedIn={isLoggedIn} />
-      <main>
+      <main className="w-full max-w-full overflow-x-hidden">
         <Hero />
         <About />
         <VillageProfile />

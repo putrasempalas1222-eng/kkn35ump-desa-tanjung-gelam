@@ -33,6 +33,7 @@ import {
   WeeklyReport,
   CompetitionItem,
   CompetitionRegistration,
+  DivisionNote,
 } from '../types';
 
 export interface ContactMessage {
@@ -87,6 +88,7 @@ const COLLECTIONS = {
   messages: 'messages',
   userProfiles: 'userProfiles',
   weeklyReports: 'weeklyReports',
+  divisionNotes: 'divisionNotes',
   liveLocations: 'liveLocations',
   competitions: 'competitions',
   competitionRegistrations: 'competitionRegistrations',
@@ -427,6 +429,27 @@ export const storage = {
     return id;
   },
   deleteWeeklyReport: (uid: string, id: string) => remove(ref(database, `${COLLECTIONS.weeklyReports}/${uid}/${id}`)),
+
+  subscribeDivisionNotes: (uid: string, callback: (data: DivisionNote[]) => void) => {
+    if (!uid) {
+      callback([]);
+      return () => undefined;
+    }
+
+    return subscribeList<DivisionNote>(`${COLLECTIONS.divisionNotes}/${uid}`, (notes) =>
+      callback(notes.sort((a, b) => String(b.updatedAt || b.date).localeCompare(String(a.updatedAt || a.date))))
+    );
+  },
+  saveDivisionNote: async (note: DivisionNote) => {
+    const id = note.id || `note_${Date.now()}`;
+    await set(ref(database, `${COLLECTIONS.divisionNotes}/${note.userId}/${id}`), {
+      ...note,
+      id,
+      updatedAt: serverTimestamp(),
+    });
+    return id;
+  },
+  deleteDivisionNote: (uid: string, id: string) => remove(ref(database, `${COLLECTIONS.divisionNotes}/${uid}/${id}`)),
 
   subscribeLiveLocations: (callback: (data: LiveLocation[]) => void) =>
     subscribeList<LiveLocation>(COLLECTIONS.liveLocations, (locations) =>

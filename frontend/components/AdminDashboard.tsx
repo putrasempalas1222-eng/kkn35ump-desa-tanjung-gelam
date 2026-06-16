@@ -3,12 +3,14 @@ import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowLeft,
+  ClipboardCheck,
   Briefcase,
   CalendarClock,
   Check,
   ChevronLeft,
   ChevronRight,
   Download,
+  Edit,
   Eye,
   EyeOff,
   FileText,
@@ -16,8 +18,13 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  MapPin,
   Menu,
   MessageSquare,
+  MapPinned,
+  Home,
+  Globe,
+  StickyNote,
   Plus,
   Printer,
   Save,
@@ -33,6 +40,7 @@ import * as LucideIcons from 'lucide-react';
 import { auth, storage, ContactMessage } from '../services/storage';
 import {
   DivisionName,
+  DivisionNote,
   EventContent,
   GalleryImage,
   LiveLocation,
@@ -144,6 +152,24 @@ const emptyItem = (type: EditableType): EditableItem => {
   return { id, name: '', role: '', quote: '', avatar: '' };
 };
 
+const googleInputClass =
+  'w-full rounded-md border border-slate-200 bg-[#f8fafd] px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-all duration-200 placeholder:text-slate-400 hover:bg-white hover:border-slate-300 focus:bg-white focus:border-[#1a73e8] focus:ring-4 focus:ring-[#1a73e8]/10 dark:border-slate-800 dark:bg-[#111827] dark:text-white dark:hover:bg-[#151c2c] dark:focus:border-[#8ab4f8] dark:focus:ring-[#8ab4f8]/15';
+
+const googlePrimaryButtonClass =
+  'inline-flex items-center justify-center gap-2 rounded-full bg-[#1a73e8] px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-[#1a73e8]/20 transition-all hover:bg-[#1765cc] hover:shadow-md hover:shadow-[#1a73e8]/25 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60';
+
+const googleSurfaceClass =
+  'rounded-[28px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(60,64,67,0.12),0_2px_8px_rgba(60,64,67,0.08)] dark:border-slate-800/80 dark:bg-[#111827] dark:shadow-none';
+
+const adminMiniPrimaryButtonClass =
+  'inline-flex items-center justify-center gap-1.5 rounded-full border border-[#1a73e8]/20 bg-[#e8f0fe] px-3 py-1.5 text-xs font-black text-[#1a73e8] shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#1a73e8] hover:text-white hover:shadow-md hover:shadow-[#1a73e8]/20 active:translate-y-0 dark:border-[#8ab4f8]/20 dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]';
+
+const adminMiniNeutralButtonClass =
+  'inline-flex items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-[#f1f3f4] hover:text-slate-900 active:translate-y-0 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white';
+
+const adminMiniDangerButtonClass =
+  'inline-flex items-center justify-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-black text-red-600 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-red-600 hover:text-white hover:shadow-md hover:shadow-red-500/15 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300';
+
 const Field = ({
   label,
   value,
@@ -166,7 +192,7 @@ const Field = ({
         value={value}
         rows={rows}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200 resize-none"
+        className={`${googleInputClass} resize-none`}
       />
     ) : (
       <input
@@ -185,7 +211,7 @@ const Field = ({
           }
         }}
         lang="id-ID"
-        className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200 dark:[color-scheme:dark]"
+        className={`${googleInputClass} dark:[color-scheme:dark]`}
       />
     )}
   </label>
@@ -209,7 +235,7 @@ const SelectField = <T extends string>({
     <select
       value={value}
       onChange={(event) => onChange(event.target.value as T)}
-      className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200"
+      className={googleInputClass}
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
@@ -311,7 +337,7 @@ const ImageField = ({
   return (
     <div className="space-y-3">
       <Field label={label} value={value} onChange={onChange} />
-      <label className="block rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-4 py-4 cursor-pointer hover:border-m-blue transition-colors">
+      <label className="block cursor-pointer rounded-md border border-dashed border-slate-300 bg-[#f8fafd] px-4 py-4 transition-colors hover:border-[#1a73e8] hover:bg-white dark:border-slate-700 dark:bg-[#111827] dark:hover:bg-[#151c2c]">
         <input type="file" accept="image/*" onChange={handleFile} className="sr-only" />
         <span className="block text-sm font-bold text-slate-700 dark:text-slate-200">Upload gambar dari perangkat</span>
         <span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -322,7 +348,7 @@ const ImageField = ({
         <img
           src={value}
           alt={label}
-          className="h-32 w-full rounded-lg object-cover border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
+          className="h-32 w-full rounded-md object-cover border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
         />
       )}
       {error && <p className="text-sm font-semibold text-red-600 dark:text-red-300">{error}</p>}
@@ -426,7 +452,7 @@ const DateField = ({
           (event.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
         }}
         lang="id-ID"
-        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-m-blue dark:[color-scheme:dark]"
+        className={`${googleInputClass} dark:[color-scheme:dark]`}
       />
     </label>
   );
@@ -700,25 +726,44 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
     }
   };
 
-  const hideDivisionSlot = (value: DivisionName) => {
+  const hideDivisionSlot = async (value: DivisionName) => {
     const selectedDivision = allDivisions.find((item) => item.value === value);
-    const hasProfile = profiles.some((profile) => profile.division === value);
-
-    if (hasProfile) {
-      setMessage(`Hapus akun di ${selectedDivision?.label || value} dulu sebelum menghapus slot divisinya.`);
-      return;
-    }
+    const divisionProfiles = profiles.filter((profile) => profile.division === value);
 
     if (visibleDivisions.length <= 1) {
       setMessage('Minimal harus ada satu divisi di daftar.');
       return;
     }
 
-    if (!window.confirm(`Hapus slot divisi ${selectedDivision?.label || value} dari daftar? Slot ini bisa ditambahkan lagi nanti.`)) return;
+    const confirmText = divisionProfiles.length
+      ? `Hapus divisi ${selectedDivision?.label || value} dan ${divisionProfiles.length} akun di dalamnya? Slot ini bisa ditambahkan lagi nanti.`
+      : `Hapus slot divisi ${selectedDivision?.label || value} dari daftar? Slot ini bisa ditambahkan lagi nanti.`;
 
-    setHiddenDivisions((current) => (current.includes(value) ? current : [...current, value]));
-    setRestoreDivision(value);
-    setMessage(`Slot divisi ${selectedDivision?.label || value} sudah dihapus dari daftar.`);
+    if (!window.confirm(confirmText)) return;
+
+    const deleteKey = `division:${value}`;
+    setDeletingProfileId(deleteKey);
+    setMessage('');
+
+    try {
+      await Promise.all(divisionProfiles.map((profile) => storage.deleteUserProfile(profile.uid)));
+
+      if (divisionProfiles.some((profile) => profile.uid === editingProfileId)) {
+        setEditingProfileId('');
+        setEditingProfileName('');
+        setEditingProfileDivision('ketua');
+      }
+
+      setHiddenDivisions((current) => (current.includes(value) ? current : [...current, value]));
+      setRestoreDivision(value);
+      setMessage(divisionProfiles.length
+        ? `Divisi ${selectedDivision?.label || value} dan akunnya sudah dihapus dari daftar.`
+        : `Slot divisi ${selectedDivision?.label || value} sudah dihapus dari daftar.`);
+    } catch (error: any) {
+      setMessage(error?.message || 'Divisi belum berhasil dihapus.');
+    } finally {
+      setDeletingProfileId('');
+    }
   };
 
   const restoreDivisionSlot = () => {
@@ -763,107 +808,121 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Manajemen</p>
-        <h1 className="text-3xl font-black text-slate-900 dark:text-white">Akun Divisi</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Buat akun anggota dan arahkan mereka ke dashboard laporan masing-masing.</p>
-      </div>
-
-      <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-5">
-        <form onSubmit={createAccount} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4 shadow-sm">
-          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="h-1.5 w-1.5 rounded-full bg-m-blue" />
-            <h2 className="font-black text-base text-slate-900 dark:text-white">Buat Akun Baru</h2>
+    <div className="w-full space-y-3">
+      <form onSubmit={createAccount} className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+        <div className="w-full space-y-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#1a73e8] dark:text-[#8ab4f8]">Manajemen Akun</p>
+              <h2 className="mt-1 text-xl font-black text-slate-950 dark:text-white">Buat Akun Baru</h2>
+            </div>
+            <span className="w-fit border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-[#111827] dark:text-slate-300">
+              {profiles.filter((profile) => profile.role === 'division').length}/{visibleDivisions.length} akun aktif
+            </span>
           </div>
-          <SelectField
-            label="Divisi"
-            value={division}
-            onChange={changeDivision}
-            options={visibleDivisions.map((item) => ({ value: item.value, label: item.label }))}
-          />
-          <Field label="Nama Anggota" value={name} onChange={setName} />
-          <Field label="Email Login" type="email" value={email} onChange={setEmail} />
-          <Field label="Password Awal" type="password" value={password} onChange={setPassword} />
+          <div className="border border-slate-200 bg-[#f8fafd] p-4 shadow-none dark:border-slate-800 dark:bg-[#111827]">
+            <div className="grid gap-4 lg:grid-cols-4">
+              <SelectField
+                label="Divisi"
+                value={division}
+                onChange={changeDivision}
+                options={visibleDivisions.map((item) => ({ value: item.value, label: item.label }))}
+              />
+              <Field label="Nama Anggota" value={name} onChange={setName} />
+              <Field label="Email Login" type="email" value={email} onChange={setEmail} />
+              <Field label="Password Awal" type="password" value={password} onChange={setPassword} />
+            </div>
+          </div>
           {message && (
-            <p className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <p className="border border-slate-200 bg-[#f8fafd] px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200">
               {message}
             </p>
           )}
           <button
             type="submit"
             disabled={saving}
-            className="w-full rounded-xl bg-m-blue hover:bg-m-blue-dark disabled:opacity-60 text-white py-3 font-bold flex items-center justify-center gap-2 shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-[0.98]"
+            className={`${googlePrimaryButtonClass} w-full py-3 lg:w-auto lg:px-8`}
           >
             <Plus size={16} />
             {saving ? 'Membuat akun...' : 'Buat Akun'}
           </button>
-        </form>
+        </div>
+      </form>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
-            <div className="h-1.5 w-1.5 rounded-full bg-m-blue" />
-            <h2 className="font-black text-base text-slate-900 dark:text-white">Daftar Divisi</h2>
-            <span className="ml-auto text-xs font-bold text-slate-400">
-              {profiles.filter((profile) => profile.role === 'division').length}/{visibleDivisions.length} akun
+      <div className="border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#0d1320]">
+        <div className="w-full p-4">
+          <div className="flex flex-col gap-3 border-b border-slate-300/70 pb-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-1 bg-[#1a73e8]" />
+              <div>
+                <h2 className="font-black text-lg text-slate-950 dark:text-white">Daftar Divisi</h2>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Kelola slot divisi, akun aktif, dan akun kosong.</p>
+              </div>
+            </div>
+            <span className="w-fit border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-[#111827] dark:text-slate-300">
+              {visibleDivisions.length} slot
             </span>
           </div>
 
-          <div className="mb-4 rounded-xl border border-dashed border-m-blue/30 bg-m-blue/5 dark:bg-m-blue/10 p-3">
-            <p className="text-xs font-black uppercase tracking-wider text-m-blue dark:text-[#7fcfff]">Tambah Lagi Divisi</p>
-            <div className="mt-2 grid sm:grid-cols-[1fr_auto] gap-2">
+          <div className="my-4 border border-[#d2e3fc] bg-[#f4f8ff] p-4 shadow-none dark:border-[#1a73e8]/30 dark:bg-[#0d1830]">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider text-[#1a73e8] dark:text-[#8ab4f8]">Tambah Lagi Divisi</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Tulis nama divisi baru atau slot yang pernah dihapus.</p>
+              </div>
+            </div>
+            <div className="mt-3 grid sm:grid-cols-[1fr_auto] gap-2">
               <input
                 value={restoreDivisionInput}
                 onChange={(event) => setRestoreDivisionInput(event.target.value)}
                 placeholder="Contoh: PERLENGKAPAN 3"
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10"
+                className={googleInputClass}
               />
               <button
                 type="button"
                 onClick={restoreDivisionSlot}
-                className="rounded-lg bg-m-blue px-4 py-2 text-sm font-black text-white hover:bg-m-blue-dark transition-colors"
+                className={googlePrimaryButtonClass}
               >
                 Buat Divisi
               </button>
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="border border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+            <div className="hidden grid-cols-[220px_110px_minmax(0,1fr)_150px] gap-4 border-b border-slate-200 bg-[#f8fafd] px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-400 lg:grid">
+              <span>Divisi</span>
+              <span>Status</span>
+              <span>Akun</span>
+              <span className="text-right">Aksi</span>
+            </div>
             {visibleDivisions.map((item) => {
               const divisionProfiles = profiles.filter((candidate) => candidate.division === item.value);
               return (
-                <div key={item.value} className="rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 p-4 transition-colors">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-black uppercase tracking-wider text-m-blue dark:text-[#7fcfff] truncate">{item.label}</p>
-                      <p className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                        {divisionProfiles.length ? `${divisionProfiles.length} akun terdaftar` : 'Belum ada akun'}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => prepareCreateForDivision(item.value)}
-                        className="rounded-full bg-m-blue/10 dark:bg-m-blue/20 px-2.5 py-1 text-[10px] font-black text-m-blue dark:text-[#7fcfff] hover:bg-m-blue hover:text-white transition-colors"
-                      >
-                        Tambah
-                      </button>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${divisionProfiles.length ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'}`}>
-                        {divisionProfiles.length ? 'Aktif' : 'Kosong'}
-                      </span>
-                    </div>
+                <div key={item.value} className="grid gap-3 border-b border-slate-200 px-4 py-2.5 last:border-b-0 hover:bg-[#f4f8ff] dark:border-slate-800 dark:hover:bg-[#111827] lg:grid-cols-[220px_110px_minmax(0,1fr)_150px] lg:items-center">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black uppercase tracking-wide text-slate-950 dark:text-white">{item.label}</p>
+                    <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {divisionProfiles.length ? `${divisionProfiles.length} akun terdaftar` : 'Slot belum punya akun'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-black ${divisionProfiles.length ? 'bg-[#e6f4ea] text-[#137333] dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-[#fef7e0] text-[#b06000] dark:bg-amber-950/40 dark:text-amber-300'}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${divisionProfiles.length ? 'bg-[#34a853]' : 'bg-[#fbbc04]'}`} />
+                      {divisionProfiles.length ? 'Aktif' : 'Kosong'}
+                    </span>
                   </div>
 
                   {divisionProfiles.length > 0 ? (
-                    <div className="mt-2 space-y-2">
+                    <div className="space-y-1.5">
                       {divisionProfiles.map((profile) => (
                         <div key={profile.uid}>
                           {editingProfileId === profile.uid ? (
-                            <div className="space-y-2">
+                            <div className="space-y-2 border border-[#d2e3fc] bg-[#f8fbff] p-3 dark:border-[#1a73e8]/30 dark:bg-slate-950/60">
                               <input
                                 value={editingProfileName}
                                 onChange={(event) => setEditingProfileName(event.target.value)}
-                                className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20"
+                                className={googleInputClass}
                                 autoFocus
                               />
                               <SelectField
@@ -877,8 +936,9 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
                                   type="button"
                                   onClick={() => saveProfileName(profile)}
                                   disabled={savingProfileId === profile.uid}
-                                  className="rounded-lg bg-m-blue px-3 py-2 text-xs font-bold text-white disabled:opacity-60 transition-colors hover:bg-m-blue-dark"
+                                  className={adminMiniPrimaryButtonClass}
                                 >
+                                  <Save size={12} />
                                   {savingProfileId === profile.uid ? 'Menyimpan...' : 'Simpan'}
                                 </button>
                                 <button
@@ -888,34 +948,23 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
                                     setEditingProfileName('');
                                     setEditingProfileDivision('ketua');
                                   }}
-                                  className="rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
+                                  className={adminMiniNeutralButtonClass}
                                 >
+                                  <X size={12} />
                                   Batal
                                 </button>
                               </div>
                             </div>
                           ) : (
-                            <div className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 dark:bg-slate-950/60 px-3 py-2">
-                              <div className="min-w-0">
-                                <p className="font-black text-slate-900 dark:text-white truncate">{profile.name || item.defaultName || 'Belum diisi'}</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{profile.email}</p>
-                              </div>
-                              <div className="shrink-0 flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => startEditProfileName(profile)}
-                                  className="rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => deleteProfile(profile)}
-                                  disabled={deletingProfileId === profile.uid}
-                                  className="rounded-lg bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-100 dark:border-red-900/40 px-2.5 py-1.5 text-xs font-bold text-red-600 dark:text-red-300 disabled:opacity-60 transition-colors"
-                                >
-                                  {deletingProfileId === profile.uid ? '...' : 'Hapus'}
-                                </button>
+                            <div className="flex items-center justify-between gap-3 bg-transparent py-1">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-[#e8f0fe] text-xs font-black text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]">
+                                  {(profile.name || profile.email || item.label).slice(0, 1).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-black text-slate-900 dark:text-white">{profile.name || item.defaultName || 'Belum diisi'}</p>
+                                  <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{profile.email}</p>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -923,25 +972,41 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/40 p-3">
-                      <p className="font-black text-slate-900 dark:text-white truncate">{item.defaultName || 'Belum diisi'}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Akun belum dibuat untuk slot ini.</p>
-                      <button
-                        type="button"
-                        onClick={() => prepareCreateForDivision(item.value)}
-                        className="mt-3 w-full rounded-lg bg-m-blue/10 dark:bg-m-blue/20 text-m-blue dark:text-[#7fcfff] hover:bg-m-blue hover:text-white px-3 py-2 text-xs font-black transition-colors"
-                      >
-                        Buat akun slot ini
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => hideDivisionSlot(item.value)}
-                        className="mt-2 w-full rounded-lg bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-300 hover:bg-red-600 hover:text-white px-3 py-2 text-xs font-black transition-colors"
-                      >
-                        Hapus divisi
-                      </button>
+                    <div className="py-1">
+                      <p className="truncate text-sm font-black text-slate-800 dark:text-white">{item.defaultName || 'Belum diisi'}</p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Akun belum dibuat untuk slot ini.</p>
                     </div>
                   )}
+
+                  <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+                    {divisionProfiles[0] && (
+                      <button
+                        type="button"
+                        onClick={() => startEditProfileName(divisionProfiles[0])}
+                        className={adminMiniNeutralButtonClass}
+                      >
+                        <Edit size={12} />
+                        Edit akun
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => prepareCreateForDivision(item.value)}
+                      className={adminMiniPrimaryButtonClass}
+                    >
+                      <Plus size={12} />
+                      Tambah
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => hideDivisionSlot(item.value)}
+                      disabled={deletingProfileId === `division:${item.value}`}
+                      className={adminMiniDangerButtonClass}
+                    >
+                      <Trash2 size={12} />
+                      {deletingProfileId === `division:${item.value}` ? 'Menghapus...' : 'Hapus divisi'}
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1161,7 +1226,7 @@ const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation
 
   return (
     <div
-      className="relative h-[360px] overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 cursor-grab active:cursor-grabbing touch-none"
+      className="relative h-[360px] cursor-grab touch-none overflow-hidden border border-slate-200 bg-slate-100 active:cursor-grabbing dark:border-slate-800 dark:bg-slate-950"
       onPointerDown={(event) => {
         didDrag.current = false;
         dragState.current = { x: event.clientX, y: event.clientY, center };
@@ -1243,7 +1308,7 @@ const LiveLocationsMap = ({ locations, currentUid, selectedUid, onSelectLocation
       })}
       {usableLocations.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-          <p className="rounded-2xl bg-white/90 dark:bg-slate-950/90 px-4 py-3 text-sm font-bold text-slate-600 dark:text-slate-300 shadow-sm">
+          <p className="border border-slate-200 bg-white/90 px-4 py-3 text-sm font-bold text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
             Belum ada lokasi aktif. Aktifkan Live Maps untuk mulai berbagi lokasi.
           </p>
         </div>
@@ -1943,13 +2008,14 @@ const generateWeeklyReportPdf = async (report: WeeklyReport) => {
 
 const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfile; onLogout: () => void; onClose?: () => void }) => {
   const [reports, setReports] = useState<WeeklyReport[]>([]);
+  const [notes, setNotes] = useState<DivisionNote[]>([]);
   const [liveLocations, setLiveLocations] = useState<LiveLocation[]>([]);
   const [isLocationTracking, setIsLocationTracking] = useState(false);
   const [isLocationPermissionRequesting, setIsLocationPermissionRequesting] = useState(false);
   const [locationStatus, setLocationStatus] = useState('Live Maps belum aktif.');
   const [locationError, setLocationError] = useState('');
   const [selectedLocationUid, setSelectedLocationUid] = useState('');
-  const [dashboardView, setDashboardView] = useState<'home' | 'maps' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput'>('home');
+  const [dashboardView, setDashboardView] = useState<'home' | 'maps' | 'notes' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput'>('home');
   const reportPageType: WeeklyReport['reportType'] =
     dashboardView === 'individualMatrix'
       ? 'individualMatrix'
@@ -1997,7 +2063,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     }
   };
 
-  const openReportPage = (view: 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput', sectionId = 'form-laporan') => {
+  const openReportPage = (view: 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput', sectionId?: string) => {
     const targetType: WeeklyReport['reportType'] =
       view === 'groupMatrix' ? 'matrix' : view === 'treasurerOutput' ? 'treasurerOutput' : view;
     const matchingReport = [editing, ...reports].find((report) => getNormalizedReportType(report) === targetType);
@@ -2021,7 +2087,16 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     }
     return createEmptyReport(profile);
   });
+  const [editingNote, setEditingNote] = useState<DivisionNote>(() => ({
+    id: `note_${Date.now()}`,
+    userId: profile.uid,
+    division: profile.division,
+    title: '',
+    content: '',
+    date: new Date().toLocaleString('id-ID'),
+  }));
   const [saving, setSaving] = useState(false);
+  const [noteSaving, setNoteSaving] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [printReport, setPrintReport] = useState<WeeklyReport | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
@@ -2042,6 +2117,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
   const editingIsTreasurerOutput = isTreasurerOutputReport(editing);
 
   useEffect(() => storage.subscribeWeeklyReports(profile.uid, setReports), [profile.uid]);
+  useEffect(() => storage.subscribeDivisionNotes(profile.uid, setNotes), [profile.uid]);
   useEffect(() => storage.subscribeLiveLocations(setLiveLocations), []);
 
   useEffect(() => {
@@ -2134,6 +2210,45 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
       setEditing(createEmptyReport(profile, getNextReportWeek([...reports, editing]), reportType));
       setAutoSaveStatus('idle');
     }
+  };
+
+  const resetNoteForm = () => {
+    setEditingNote({
+      id: `note_${Date.now()}`,
+      userId: profile.uid,
+      division: profile.division,
+      title: '',
+      content: '',
+      date: new Date().toLocaleString('id-ID'),
+    });
+  };
+
+  const saveNote = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingNote.title.trim() && !editingNote.content.trim()) return;
+
+    setNoteSaving(true);
+    await storage.saveDivisionNote({
+      ...editingNote,
+      userId: profile.uid,
+      division: profile.division,
+      title: editingNote.title.trim() || 'Catatan tanpa judul',
+      content: editingNote.content.trim(),
+      date: editingNote.date || new Date().toLocaleString('id-ID'),
+    });
+    resetNoteForm();
+    setNoteSaving(false);
+  };
+
+  const editNote = (note: DivisionNote) => {
+    setEditingNote(note);
+    openDashboardView('notes');
+  };
+
+  const deleteNote = async (note: DivisionNote) => {
+    if (!window.confirm(`Hapus catatan "${note.title}"?`)) return;
+    await storage.deleteDivisionNote(profile.uid, note.id);
+    if (editingNote.id === note.id) resetNoteForm();
   };
 
   const saveReport = async (event: React.FormEvent) => {
@@ -2425,20 +2540,30 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
         : reportPageType === 'treasurerOutput'
           ? 'Laporan Pengeluaran Bendahara'
           : 'Laporan Mingguan';
+  const divisionNavItems = [
+    { label: 'Home', icon: Home, active: dashboardView === 'home', action: () => openDashboardView('home') },
+    { label: 'Live Maps', icon: MapPinned, active: dashboardView === 'maps', action: () => openDashboardView('maps') },
+    { label: 'Catatan', icon: StickyNote, active: dashboardView === 'notes', action: () => openDashboardView('notes') },
+    { label: 'Laporan Mingguan', icon: FileText, active: dashboardView === 'weekly', action: () => openReportPage('weekly') },
+    { label: 'Matriks Individu', icon: ClipboardCheck, active: dashboardView === 'individualMatrix', action: () => openReportPage('individualMatrix') },
+    ...(isSecretary ? [{ label: 'Matriks Kelompok', icon: ClipboardList, active: dashboardView === 'groupMatrix', action: () => openReportPage('groupMatrix') }] : []),
+    ...(isTreasurer ? [{ label: 'Laporan Pengeluaran', icon: Briefcase, active: dashboardView === 'treasurerOutput', action: () => openReportPage('treasurerOutput') }] : []),
+    ...(onClose ? [{ label: 'Lihat Website', icon: Globe, active: false, action: () => { closeNav(); onClose(); } }] : []),
+  ];
 
   const mobileNavDrawer = typeof document !== 'undefined' && isNavOpen
     ? createPortal(
       <>
         <div
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300 animate-fadeIn cursor-pointer"
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[85] lg:hidden transition-opacity duration-300 animate-fadeIn cursor-pointer"
           onClick={closeNav}
         />
 
-        <aside className="fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-[#0f1322] border-r border-slate-200/60 dark:border-slate-800/60 p-6 flex flex-col justify-between overflow-hidden lg:hidden transition-transform duration-300 ease-in-out translate-x-0">
+        <aside className="fixed inset-y-0 left-0 z-[90] flex w-72 translate-x-0 flex-col justify-between overflow-hidden border-r border-slate-200 bg-white p-5 transition-transform duration-300 ease-in-out dark:border-slate-800 dark:bg-[#111827] lg:hidden">
           <div>
             <div className="flex items-center justify-between mb-6 px-1">
               <div>
-                <span className="text-[9px] bg-m-blue/10 text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                <span className="bg-[#e8f0fe] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff]">
                   Divisi {getDivisionLabel(profile.division)}
                 </span>
                 <h2 className="font-bold text-lg text-slate-800 dark:text-white mt-1">Dashboard Divisi</h2>
@@ -2446,7 +2571,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
               <button
                 type="button"
                 onClick={closeNav}
-                className="p-2.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-all duration-200 cursor-pointer flex items-center justify-center min-w-[40px] min-h-[40px]"
+                className="flex min-h-[40px] min-w-[40px] cursor-pointer items-center justify-center border border-transparent p-2.5 text-slate-500 transition-all duration-200 hover:border-slate-200 hover:bg-[#f8fafd] dark:text-slate-400 dark:hover:border-slate-800 dark:hover:bg-slate-800"
                 aria-label="Tutup navigasi"
               >
                 <X size={22} />
@@ -2454,69 +2579,29 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             </div>
 
             <nav className="space-y-1">
-              <button
-                type="button"
-                onClick={() => openDashboardView('home')}
-                className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
-              >
-                Home
-              </button>
-              <button
-                type="button"
-                onClick={() => openDashboardView('maps', 'live-maps')}
-                className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
-              >
-                Live Maps
-              </button>
-              <button
-                type="button"
-                onClick={() => openReportPage('weekly')}
-                className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
-              >
-                Laporan Mingguan
-              </button>
-              <button
-                type="button"
-                onClick={() => openReportPage('individualMatrix')}
-                className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
-              >
-                Matriks Individu
-              </button>
-              {isSecretary && (
-                <button
-                  type="button"
-                  onClick={() => openReportPage('groupMatrix')}
-                  className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
-                >
-                  Matriks Kelompok
-                </button>
-              )}
-              {isTreasurer && (
-                <button
-                  type="button"
-                  onClick={() => openReportPage('treasurerOutput')}
-                  className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
-                >
-                  Laporan Pengeluaran
-                </button>
-              )}
-              {onClose && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeNav();
-                    onClose();
-                  }}
-                  className="w-full rounded-full px-4 py-2.5 text-sm font-bold flex items-center gap-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#151c30] transition-colors text-left"
-                >
-                  Lihat Website
-                </button>
-              )}
+              {divisionNavItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={item.action}
+                    className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-bold transition-colors ${
+                      item.active
+                        ? 'bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]'
+                        : 'text-slate-600 hover:bg-[#f1f3f4] hover:text-[#1a73e8] dark:text-slate-300 dark:hover:bg-[#151c30] dark:hover:text-[#8ab4f8]'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                );
+              })}
             </nav>
           </div>
 
           <div className="mt-8 border-t border-slate-100 dark:border-slate-800/80 pt-6">
-            <div className="flex items-center gap-3 bg-slate-50 dark:bg-[#151c30] border border-slate-200/60 dark:border-slate-800/60 rounded-full pl-2 pr-3 py-1.5 shadow-sm">
+            <div className="flex items-center gap-3 border border-slate-200 bg-[#f8fafd] py-1.5 pl-2 pr-3 shadow-sm dark:border-slate-800 dark:bg-[#151c30]">
               <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-m-blue to-blue-500 text-white flex items-center justify-center font-bold text-sm shadow-sm select-none shrink-0">
                 {profile.name ? profile.name[0].toUpperCase() : 'U'}
               </div>
@@ -2528,7 +2613,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             <button
               type="button"
               onClick={onLogout}
-              className="w-full mt-3 rounded-full bg-[#fce8e6] text-[#c5221f] dark:bg-red-950/20 dark:text-red-400 hover:bg-[#f9d2ce] dark:hover:bg-red-900/60 py-2.5 text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200"
+              className="mt-3 flex w-full items-center justify-center gap-2 border border-red-200 bg-[#fce8e6] py-2.5 text-sm font-bold text-[#c5221f] transition-all duration-200 hover:bg-[#f9d2ce] dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-900/60"
             >
               <LogOut size={16} />
               Keluar
@@ -2640,10 +2725,61 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
     : null;
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white">
+    <div className="min-h-screen bg-[#f8fafd] text-slate-900 dark:bg-[#0b0f19] dark:text-white lg:flex lg:h-dvh lg:overflow-hidden">
       {mobileNavDrawer}
-      {aiChatWidget}
-      <header className="no-print sticky top-0 z-20 border-b border-slate-200/60 dark:border-slate-800/60 bg-white/90 dark:bg-[#0f1322]/90 backdrop-blur px-4 md:px-8 py-3.5 flex flex-row items-center justify-between gap-3">
+      <aside className="no-print hidden h-dvh w-72 shrink-0 flex-col justify-between overflow-y-auto overscroll-contain border-r border-slate-200/80 bg-white p-5 dark:border-slate-800/80 dark:bg-[#111827] lg:flex">
+        <div>
+          <div className="mb-6 px-1">
+            <span className="inline-flex bg-[#e8f0fe] px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff]">
+              Divisi {getDivisionLabel(profile.division)}
+            </span>
+            <h2 className="mt-2 text-2xl font-black leading-tight text-slate-950 dark:text-white">Dashboard Divisi</h2>
+          </div>
+
+          <nav className="space-y-1">
+            {divisionNavItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.action}
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-bold transition-colors ${
+                    item.active
+                      ? 'bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]'
+                      : 'text-slate-600 hover:bg-[#f1f3f4] hover:text-[#1a73e8] dark:text-slate-300 dark:hover:bg-[#151c30] dark:hover:text-[#8ab4f8]'
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span className="truncate">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="mt-8 border-t border-slate-100 pt-6 dark:border-slate-800/80">
+          <div className="flex items-center gap-3 border border-slate-200 bg-[#f8fafd] py-2 pl-2 pr-3 shadow-sm dark:border-slate-800 dark:bg-[#151c30]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-m-blue to-blue-500 text-sm font-black text-white shadow-sm">
+              {profile.name ? profile.name[0].toUpperCase() : 'U'}
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="truncate text-sm font-black leading-tight text-slate-900 dark:text-white">{profile.name}</p>
+              <p className="mt-0.5 truncate text-[11px] font-medium leading-tight text-slate-500 dark:text-slate-400">{profile.email}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="mt-3 flex w-full items-center justify-center gap-2 border border-red-200 bg-[#fce8e6] py-2.5 text-sm font-bold text-[#c5221f] transition-all duration-200 hover:bg-[#f9d2ce] dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-900/60"
+          >
+            <LogOut size={16} />
+            Keluar
+          </button>
+        </div>
+      </aside>
+
+      <header className="no-print fixed left-0 right-0 top-0 z-[80] flex flex-row items-center justify-between gap-3 border-b border-slate-200/80 bg-white/92 px-4 py-3.5 shadow-[0_10px_34px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:border-slate-800/90 dark:bg-[#111827]/95 dark:shadow-[0_10px_34px_rgba(0,0,0,0.36)] md:sticky md:left-auto md:right-auto md:z-30 md:px-8 lg:hidden">
         <div className="flex items-center gap-2">
           <button
             onClick={(e) => {
@@ -2651,14 +2787,14 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
               e.stopPropagation();
               setIsNavOpen(true);
             }}
-            className="lg:hidden p-2.5 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all duration-200 shrink-0 flex items-center justify-center min-w-[40px] min-h-[40px]"
+            className="-ml-2 flex min-h-[40px] min-w-[40px] shrink-0 items-center justify-center border border-transparent p-2.5 text-slate-600 transition-all duration-200 hover:border-slate-200 hover:bg-[#f8fafd] dark:text-slate-300 dark:hover:border-slate-800 dark:hover:bg-slate-800 lg:hidden"
             title="Buka Navigasi"
           >
             <Menu size={22} />
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[9px] md:text-[10px] bg-m-blue/10 text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+              <span className="bg-[#e8f0fe] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff] md:text-[10px]">
                 Divisi {getDivisionLabel(profile.division)}
               </span>
             </div>
@@ -2679,7 +2815,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
           </button>
           <button
             type="button"
-            onClick={() => openDashboardView('maps', 'live-maps')}
+            onClick={() => openDashboardView('maps')}
             className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${dashboardView === 'maps' ? 'bg-m-blue text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
           >
             Live Maps
@@ -2732,7 +2868,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             <button
               type="button"
               onClick={onClose}
-              className="lg:hidden flex items-center gap-1.5 text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-3 py-2 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              className="lg:hidden flex items-center gap-1.5 text-xs font-bold bg-[#f8fafd] dark:bg-[#0d1320] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-full shadow-sm hover:bg-white dark:hover:bg-[#111827] transition-all cursor-pointer"
               title="Kembali ke Web"
             >
               <ArrowLeft size={14} />
@@ -2740,7 +2876,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             </button>
           )}
 
-          <div className="flex items-center gap-3 bg-slate-50 dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-full pl-2 pr-3 py-1.5 shadow-sm hover:shadow transition-all duration-200 shrink-0">
+          <div className="flex shrink-0 items-center gap-2 py-1.5">
             <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-m-blue to-blue-500 text-white flex items-center justify-center font-bold text-sm shadow-sm select-none shrink-0">
               {profile.name ? profile.name[0].toUpperCase() : 'U'}
             </div>
@@ -2748,33 +2884,28 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
               <p className="text-xs font-bold leading-tight text-slate-800 dark:text-slate-200 truncate">{profile.name}</p>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight truncate mt-0.5">{profile.email}</p>
             </div>
-            <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block mx-1"></div>
-            <button
-              onClick={onLogout}
-              className="text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 p-1.5 rounded-full transition-all duration-200 cursor-pointer"
-              title="Keluar"
-            >
-              <LogOut size={16} />
-            </button>
           </div>
         </div>
       </header>
 
-      <main className="no-print p-4 md:p-8 flex flex-col lg:grid lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_400px] gap-6">
+      <div className="h-[89px] shrink-0 md:hidden" />
+
+      <main className="no-print flex min-w-0 flex-1 flex-col gap-3 p-0 lg:h-dvh lg:overflow-y-auto lg:overscroll-contain lg:grid lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_400px]">
         {dashboardView === 'home' && (
-          <section className="order-1 lg:col-span-2 overflow-hidden rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-[#0f1322] shadow-sm">
-            <div className="bg-gradient-to-br from-m-blue via-blue-600 to-emerald-500 px-6 py-8 md:px-8 text-white">
-              <p className="text-xs font-black uppercase tracking-widest text-white/80">Home Divisi</p>
-              <h2 className="mt-2 max-w-3xl text-3xl md:text-4xl font-black leading-tight">
+          <section className="order-1 overflow-hidden border border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-[#0d1320] lg:col-span-2">
+            <div className="border-b border-slate-200 bg-[#f8fafd] px-4 py-5 dark:border-slate-800 dark:bg-[#111827] md:px-6">
+              <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Home Divisi</p>
+              <h2 className="mt-2 max-w-3xl text-2xl font-black leading-tight text-slate-950 dark:text-white md:text-3xl">
                 Selamat datang, {profile.name || getDivisionLabel(profile.division)}
               </h2>
-              <p className="mt-3 max-w-2xl text-sm md:text-base font-semibold text-white/85">
+              <p className="mt-2 max-w-2xl text-sm font-semibold text-slate-500 dark:text-slate-400 md:text-base">
                 Kelola laporan, pantau lokasi divisi secara realtime, dan akses dokumen tersimpan dari satu tempat.
               </p>
             </div>
-            <div className="grid gap-4 p-5 md:p-6 lg:grid-cols-4">
+            <div className="grid gap-3 p-4 md:p-5 lg:grid-cols-4">
               {[
                 { title: 'Live Maps', desc: `${liveLocations.length} divisi sedang berbagi lokasi`, action: () => openDashboardView('maps', 'live-maps'), tone: 'emerald' },
+                { title: 'Catatan Divisi', desc: `${notes.length} catatan tersimpan untuk divisi kamu`, action: () => openDashboardView('notes'), tone: 'amber' },
                 { title: 'Laporan Mingguan', desc: 'Isi kegiatan mingguan dan bukti foto', action: () => openReportPage('weekly'), tone: 'blue' },
                 { title: 'Matriks Individu', desc: 'Program kerja individu semua divisi', action: () => openReportPage('individualMatrix'), tone: 'slate' },
                 ...(isSecretary ? [{ title: 'Matriks Kelompok', desc: 'Khusus sekretaris untuk program kerja kelompok', action: () => openReportPage('groupMatrix'), tone: 'emerald' }] : []),
@@ -2784,7 +2915,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                   key={item.title}
                   type="button"
                   onClick={item.action}
-                  className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4 text-left hover:-translate-y-0.5 hover:border-m-blue/40 hover:shadow-lg hover:shadow-slate-950/10 transition-all"
+                  className="group border border-slate-200 bg-white p-4 text-left transition-colors hover:border-m-blue/40 hover:bg-[#f8fafd] dark:border-slate-800 dark:bg-[#0d1320] dark:hover:bg-[#111827]"
                 >
                   <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl text-white font-black ${item.tone === 'emerald' ? 'bg-emerald-500' : item.tone === 'amber' ? 'bg-amber-500' : item.tone === 'blue' ? 'bg-m-blue' : 'bg-slate-700'}`}>
                     {item.title[0]}
@@ -2801,7 +2932,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
         )}
 
         {dashboardView === 'maps' && (
-        <section id="live-maps" className="order-1 lg:col-span-2 bg-white dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-2xl p-5 md:p-6 shadow-sm space-y-5">
+        <section id="live-maps" className="order-1 space-y-4 border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5 lg:col-span-2">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Live Maps Divisi</p>
@@ -2838,7 +2969,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
               onSelectLocation={setSelectedLocationUid}
             />
 
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4">
+            <div className="border border-slate-200 bg-[#f8fafd] p-4 dark:border-slate-800 dark:bg-[#111827]">
               <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
                 <div>
                   <h3 className="font-black text-slate-900 dark:text-white">Status Lokasi</h3>
@@ -2869,7 +3000,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                       key={location.uid}
                       type="button"
                       onClick={() => setSelectedLocationUid(location.uid)}
-                      className={`w-full rounded-xl bg-white dark:bg-[#0f1322] border px-3 py-3 text-left transition-all hover:border-m-blue hover:shadow-sm ${selectedLocationUid === location.uid ? 'border-m-blue ring-4 ring-m-blue/10' : 'border-slate-200 dark:border-slate-800'}`}
+                      className={`w-full border bg-white px-3 py-3 text-left transition-colors hover:border-m-blue hover:bg-[#f8fafd] dark:bg-[#0d1320] dark:hover:bg-[#111827] ${selectedLocationUid === location.uid ? 'border-m-blue ring-4 ring-m-blue/10' : 'border-slate-200 dark:border-slate-800'}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -2908,9 +3039,122 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
         </section>
         )}
 
+        {dashboardView === 'notes' && (
+          <section className="order-1 grid gap-3 lg:col-span-2 xl:grid-cols-[340px_minmax(0,1fr)]">
+            <aside className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Daftar</p>
+                  <h3 className="mt-1 text-lg font-black text-slate-950 dark:text-white">{notes.length} catatan</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetNoteForm}
+                  className="shrink-0 border border-slate-200 bg-[#f8fafd] px-3 py-2 text-xs font-black text-slate-700 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200 dark:hover:bg-[#151c30]"
+                >
+                  Baru
+                </button>
+              </div>
+
+              {notes.length === 0 ? (
+                <div className="mt-4 flex min-h-[240px] flex-col items-center justify-center bg-[#f8fafd] px-4 text-center dark:bg-[#111827]">
+                  <StickyNote size={30} className="mb-3 text-slate-300 dark:text-slate-700" />
+                  <p className="text-sm font-black text-slate-700 dark:text-slate-300">Belum ada catatan</p>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500 dark:text-slate-500">
+                    Catatan yang disimpan akan muncul di sini.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-3 divide-y divide-slate-100 border border-slate-100 dark:divide-slate-800 dark:border-slate-800">
+                  {notes.map((note) => (
+                    <button
+                      key={note.id}
+                      type="button"
+                      onClick={() => editNote(note)}
+                      className={`group block w-full px-3 py-3 text-left transition-colors hover:bg-[#f8fafd] dark:hover:bg-[#111827] ${
+                        editingNote.id === note.id ? 'bg-[#e8f0fe] dark:bg-[#12325f]/45' : 'bg-white dark:bg-[#0d1320]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h4 className="truncate text-sm font-black text-slate-950 dark:text-white">{note.title || 'Tanpa judul'}</h4>
+                          <p className="mt-1 truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">{note.date}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteNote(note);
+                          }}
+                          className="shrink-0 px-2 py-1 text-[11px] font-black text-red-500 opacity-70 transition hover:bg-red-50 hover:opacity-100 dark:hover:bg-red-950/30"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-400">
+                        {note.content || 'Tidak ada isi catatan.'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </aside>
+
+            <form onSubmit={saveNote} className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5">
+              <div className="border-b border-slate-100 pb-4 dark:border-slate-800">
+                <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Catatan Divisi</p>
+                <h2 className="mt-2 text-2xl font-black text-slate-950 dark:text-white">Tulis Catatan</h2>
+                <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                  Simpan pengingat, agenda, ide program, atau poin penting divisi.
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-4">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Judul Catatan</span>
+                  <input
+                    value={editingNote.title}
+                    onChange={(event) => setEditingNote((current) => ({ ...current, title: event.target.value }))}
+                    placeholder="Contoh: Agenda koordinasi warga"
+                    className={googleInputClass}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Isi Catatan</span>
+                  <textarea
+                    value={editingNote.content}
+                    onChange={(event) => setEditingNote((current) => ({ ...current, content: event.target.value }))}
+                    placeholder="Tulis catatan divisi di sini..."
+                    rows={15}
+                    className={`${googleInputClass} min-h-[420px] resize-y leading-relaxed`}
+                  />
+                </label>
+              </div>
+
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="submit"
+                  disabled={noteSaving || (!editingNote.title.trim() && !editingNote.content.trim())}
+                  className={`${googlePrimaryButtonClass} w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <Save size={16} />
+                  {noteSaving ? 'Menyimpan...' : editingNote.id.startsWith('note_') && !notes.some((note) => note.id === editingNote.id) ? 'Simpan Catatan' : 'Update Catatan'}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetNoteForm}
+                  className="inline-flex min-h-[44px] items-center justify-center border border-slate-200 bg-[#f8fafd] px-5 py-2.5 text-sm font-black text-slate-700 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200 dark:hover:bg-[#151c30]"
+                >
+                  Catatan Baru
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
         {isReportDashboardView(dashboardView) && (
         <>
-        <form id="form-laporan" onSubmit={saveReport} className="order-2 lg:order-1 bg-white dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-2xl p-6 md:p-8 space-y-6 shadow-sm hover:shadow-md transition-all duration-200">
+        <form id="form-laporan" onSubmit={saveReport} className="order-2 space-y-5 border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5 lg:order-1">
           <div className="grid gap-5 border-b border-slate-100 dark:border-slate-800/60 pb-5">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0 max-w-2xl">
@@ -2991,7 +3235,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                 onClick={(event) => {
                   (event.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
                 }}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200 dark:[color-scheme:dark]"
+                className={`${googleInputClass} dark:[color-scheme:dark]`}
               />
               {editing.villageDate && (
                 <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium italic">
@@ -3016,7 +3260,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             <div className="space-y-4">
               {editing.entries.map((entry) => (
                 editingIsTreasurerOutput ? (
-                  <div key={entry.id} className="relative space-y-5 bg-slate-50/50 dark:bg-[#151a2d]/30 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 p-5 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200">
+                  <div key={entry.id} className="relative space-y-5 border border-slate-200 bg-[#f8fafd] p-4 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:hover:bg-[#0d1320]">
                     <div className="grid gap-5 md:grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)]">
                       <Field label="No" value={entry.dayNumber} onChange={(value) => updateEntry(entry.id, { dayNumber: value })} />
                       <Field label="Tanggal" value={entry.dateText} onChange={(value) => updateEntry(entry.id, { dateText: value })} />
@@ -3029,7 +3273,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                     </div>
                   </div>
                 ) : editingIsMatrix ? (
-                  <div key={entry.id} className="relative space-y-5 bg-slate-50/50 dark:bg-[#151a2d]/30 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 p-5 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200">
+                  <div key={entry.id} className="relative space-y-5 border border-slate-200 bg-[#f8fafd] p-4 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:hover:bg-[#0d1320]">
                     <div className="grid gap-5 md:grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)]">
                       <Field label="No" value={entry.dayNumber} onChange={(value) => updateEntry(entry.id, { dayNumber: value })} />
                       <Field label="Nama Kegiatan" rows={3} value={entry.activityName} onChange={(value) => updateEntry(entry.id, { activityName: value })} />
@@ -3044,7 +3288,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                     </div>
                   </div>
                 ) : (
-                  <div key={entry.id} className="relative grid md:grid-cols-[100px_1fr_1fr] gap-5 bg-slate-50/50 dark:bg-[#151a2d]/30 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 p-5 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200">
+                  <div key={entry.id} className="relative grid gap-5 border border-slate-200 bg-[#f8fafd] p-4 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:hover:bg-[#0d1320] md:grid-cols-[100px_1fr_1fr]">
                     <Field label="Hari Ke" value={entry.dayNumber} onChange={(value) => updateEntry(entry.id, { dayNumber: value })} />
                     <div className="block">
                       <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 transition-colors">
@@ -3065,7 +3309,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                         onClick={(event) => {
                           (event.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
                         }}
-                        className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200 dark:[color-scheme:dark]"
+                        className={`${googleInputClass} dark:[color-scheme:dark]`}
                       />
                       {entry.dateText && (
                         <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium italic">
@@ -3087,7 +3331,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                             updateEntry(entry.id, { activityTime: val });
                           }
                         }}
-                        className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200"
+                        className={googleInputClass}
                       >
                         <option value="">-- Pilih Waktu --</option>
                         {STANDARD_TIMES.map((time) => (
@@ -3101,7 +3345,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                           value={entry.activityTime}
                           onChange={(event) => updateEntry(entry.id, { activityTime: event.target.value })}
                           placeholder="Contoh: 08:00 - 10:00 WIB"
-                          className="w-full mt-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/20 transition-all duration-200"
+                          className={`${googleInputClass} mt-2`}
                         />
                       )}
                     </div>
@@ -3113,7 +3357,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                         Upload Bukti Foto/Screenshot
                       </span>
                       <div className="flex items-center gap-2">
-                        <label className="flex-1 block rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 cursor-pointer hover:border-m-blue transition-colors text-center shadow-sm">
+                        <label className="block flex-1 cursor-pointer border border-dashed border-slate-300 bg-white px-3 py-2 text-center shadow-none transition-colors hover:border-m-blue dark:border-slate-700 dark:bg-slate-900">
                           <input
                             type="file"
                             accept="image/*"
@@ -3139,14 +3383,14 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
                           <button
                             type="button"
                             onClick={() => updateEntry(entry.id, { evidenceUrl: '' })}
-                            className="rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 px-3 py-2 text-xs font-bold border border-red-200 dark:border-red-800/60 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors"
+                            className="border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-400 dark:hover:bg-red-900/60"
                           >
                             Hapus
                           </button>
                         )}
                       </div>
                       {entry.evidenceUrl && (
-                        <div className="mt-2 relative group overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900">
+                        <div className="group relative mt-2 overflow-hidden border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-900">
                           <img
                             src={entry.evidenceUrl}
                             alt="Preview bukti"
@@ -3162,12 +3406,12 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
           </div>
         </form>
 
-        <aside className="order-1 lg:order-2 space-y-6">
-          <div id="laporan-tersimpan" className="bg-white dark:bg-[#0f1322] border border-slate-200/60 dark:border-slate-800/60 rounded-2xl p-5 md:p-6 shadow-sm space-y-4">
+        <aside className="order-1 space-y-3 lg:order-2">
+          <div id="laporan-tersimpan" className="space-y-4 border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5">
             <h2 className="font-bold text-lg tracking-tight border-b border-slate-100 dark:border-slate-800/60 pb-3">{reportPageTitle} Tersimpan</h2>
             <div className="space-y-3">
               {pageReports.map((report) => (
-                <div key={report.id} className="bg-slate-50/60 dark:bg-[#151a2d]/40 rounded-xl border border-slate-100 dark:border-slate-800/80 p-4 hover:bg-slate-100/60 dark:hover:bg-[#151a2d]/80 transition-all duration-200">
+                <div key={report.id} className="border border-slate-200 bg-[#f8fafd] p-4 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:hover:bg-[#0d1320]">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-black text-slate-800 dark:text-white">
@@ -3223,7 +3467,7 @@ const DivisionDashboard = ({ profile, onLogout, onClose }: { profile: UserProfil
             <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 pl-1">
               Pratinjau Cetak PDF A4
             </span>
-            <div className="overflow-x-auto rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-200 dark:bg-slate-900 p-4 shadow-inner">
+            <div className="overflow-x-auto border border-slate-300 bg-slate-200 p-4 shadow-inner dark:border-slate-800 dark:bg-slate-900">
               <PreviewReportTemplate report={editing} />
             </div>
           </div>
@@ -4200,19 +4444,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
   if (!adminUser) {
     return (
-      <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-8 shadow-xl">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="h-12 w-12 rounded-lg bg-m-blue text-white flex items-center justify-center">
-              <User size={24} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Login</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Masuk untuk melanjutkan.</p>
+      <div className="min-h-screen bg-[#f8fafd] dark:bg-[#0b0f19] flex items-center justify-center p-4">
+        <div className={`${googleSurfaceClass} w-full max-w-md overflow-hidden`}>
+          <div className="border-b border-slate-100 bg-gradient-to-br from-[#e8f0fe] via-white to-white px-8 py-7 dark:border-slate-800 dark:from-[#1a73e8]/15 dark:via-[#111827] dark:to-[#111827]">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/80 bg-white p-2 shadow-[0_4px_18px_rgba(60,64,67,0.16)] dark:border-slate-700 dark:bg-slate-950">
+                <img
+                  src="/report-assets/logokknv1.png"
+                  alt="Logo KKN"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">Admin KKN 35</p>
+                <h1 className="text-2xl font-black text-slate-900 dark:text-white">Login</h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Masuk untuk melanjutkan.</p>
+              </div>
             </div>
           </div>
 
-          <form onSubmit={login} className="space-y-4">
+          <form onSubmit={login} className="space-y-4 px-8 pt-7">
             <Field label="Email" type="email" value={email} onChange={setEmail} />
             <label className="block">
               <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
@@ -4223,7 +4474,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 pr-12 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-m-blue"
+                  className={`${googleInputClass} pr-12`}
                 />
                 <button
                   type="button"
@@ -4242,14 +4493,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               </p>
             )}
 
-            <button className="w-full rounded-lg bg-m-blue hover:bg-m-blue-dark text-white py-3 font-bold transition-colors">
+            <button className={`${googlePrimaryButtonClass} w-full py-3`}>
               Masuk
             </button>
           </form>
 
           <button
             onClick={onClose}
-            className="mt-4 w-full rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 py-3 font-semibold flex items-center justify-center gap-2"
+            className="mx-8 mb-8 mt-4 w-[calc(100%-4rem)] rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 py-3 font-semibold flex items-center justify-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
           >
             <ArrowLeft size={16} />
             Kembali ke Website
@@ -4274,7 +4525,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   }
 
   return (
-    <div className="min-h-screen md:h-screen md:overflow-hidden bg-slate-50 dark:bg-[#070a13] text-slate-900 dark:text-slate-100 flex flex-col md:flex-row">
+    <div className="fixed inset-0 z-50 h-dvh w-screen overflow-hidden bg-[#f8fafd] text-slate-900 dark:bg-[#0b0f19] dark:text-slate-100 flex flex-col md:flex-row">
       {/* Backdrop for mobile drawer */}
       {isSidebarOpen && (
         <div
@@ -4285,30 +4536,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
       {/* Navigation Drawer (Sidebar) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-[#0f1322] border-r border-slate-200/60 dark:border-slate-800/60 p-6 flex flex-col justify-between overflow-y-auto shrink-0 transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-50 h-dvh w-72 bg-white dark:bg-[#111827] border-r border-slate-200/80 dark:border-slate-800/80 p-4 md:p-5 flex flex-col justify-between overflow-y-auto overscroll-contain shrink-0 transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
       >
         <div>
           {/* Drawer Header */}
-          <div className="flex items-center justify-between mb-8 px-2">
-            <div>
-              <h2 className="font-black text-2xl tracking-tight text-m-blue dark:text-[#7fcfff] flex items-center gap-2">
+          <div className="mb-6 flex items-start justify-between gap-3 px-1">
+            <div className="min-w-0 flex-1">
+              <p className="inline-flex bg-[#e8f0fe] px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]">
+                KKN 35
+              </p>
+              <h2 className="mt-2 truncate text-2xl font-black leading-tight tracking-normal text-slate-950 dark:text-white">
                 Admin Panel
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate max-w-[180px]">{adminUser}</p>
             </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsSidebarOpen(false);
-              }}
-              className="p-2.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden text-slate-500 dark:text-slate-400 transition-all duration-200 cursor-pointer flex items-center justify-center min-w-[40px] min-h-[40px]"
-              aria-label="Tutup panel admin"
-            >
-              <X size={22} />
-            </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsSidebarOpen(false);
+                }}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-500 transition-all duration-200 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white md:hidden"
+                aria-label="Tutup panel admin"
+              >
+                <X size={22} />
+              </button>
           </div>
 
           {/* Navigation Items */}
@@ -4326,9 +4579,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     setActiveTab(item.id);
                     setIsSidebarOpen(false); // Close drawer on mobile
                   }}
-                  className={`w-full rounded-full px-5 py-3 text-sm font-bold flex items-center justify-between transition-all ${selected
-                      ? 'bg-[#e8f0fe] text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff]'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#151c30]'
+                  className={`w-full rounded-full px-4 py-3 text-sm font-bold flex items-center justify-between transition-all ${selected
+                      ? 'bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-[#f1f3f4] dark:hover:bg-[#1f2937]'
                     }`}
                 >
                   <span className="flex items-center gap-3.5">
@@ -4345,7 +4598,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         </div>
 
         {/* Drawer Footer Actions */}
-        <div className="mt-8 space-y-1 border-t border-slate-100 dark:border-slate-800/80 pt-6">
+        <div className="mt-8 border-t border-slate-100 pt-6 dark:border-slate-800/80">
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -4353,14 +4606,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               onClose();
               setIsSidebarOpen(false);
             }}
-            className="w-full rounded-full px-5 py-3 text-sm font-bold flex items-center gap-3.5 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#151c30] transition-colors"
+            className="w-full rounded-full px-4 py-3 text-sm font-bold flex items-center gap-3.5 text-slate-600 dark:text-slate-300 hover:bg-[#f1f3f4] dark:hover:bg-[#1f2937] transition-colors"
           >
             <ArrowLeft size={18} />
             Lihat Website
           </button>
+          <div className="mt-3 flex items-center gap-3 border border-slate-200 bg-[#f8fafd] px-3 py-2.5 shadow-sm dark:border-slate-800 dark:bg-[#151c30]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-m-blue to-blue-500 text-sm font-black text-white shadow-sm">
+              {adminUser ? adminUser[0].toUpperCase() : 'A'}
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="truncate text-sm font-black leading-tight text-slate-900 dark:text-white">Admin</p>
+              <p className="mt-0.5 truncate text-[11px] font-medium leading-tight text-slate-500 dark:text-slate-400">{adminUser}</p>
+            </div>
+          </div>
           <button
             onClick={logout}
-            className="w-full rounded-full px-5 py-3 text-sm font-bold flex items-center gap-3.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+            className="mt-3 flex w-full items-center justify-center gap-2 border border-red-200 bg-[#fce8e6] px-4 py-3 text-sm font-black text-[#c5221f] transition-colors hover:bg-[#f9d2ce] dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-900/50"
           >
             <LogOut size={18} />
             Keluar
@@ -4369,9 +4631,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 min-h-0 md:h-full flex flex-col overflow-hidden">
+      <main className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
         {/* Google Style Fixed/Sticky App Bar */}
-        <header className="fixed top-0 left-0 right-0 md:sticky md:relative md:left-auto md:right-auto z-30 bg-white/80 dark:bg-[#0f1322]/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-800/50 px-6 py-4 flex items-center justify-between gap-4 shrink-0">
+        <header className="fixed top-0 left-0 right-0 md:sticky md:relative md:left-auto md:right-auto z-30 bg-white/90 dark:bg-[#111827]/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 px-4 md:px-6 py-3.5 flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={(e) => {
@@ -4391,14 +4653,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="flex items-center gap-1.5 text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-3 py-2 sm:px-4 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 text-xs font-bold bg-[#f1f3f4] dark:bg-[#1f2937] text-slate-700 dark:text-slate-300 border border-transparent px-3 py-2 sm:px-4 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
               title="Kembali ke Web"
             >
               <ArrowLeft size={14} />
               <span>Kembali</span>
               <span className="hidden sm:inline"> ke Web</span>
             </button>
-            <div className="h-8 w-8 rounded-full bg-m-blue/10 dark:bg-m-blue/20 text-m-blue dark:text-[#7fcfff] flex items-center justify-center font-bold text-sm border border-m-blue/20 select-none">
+            <div className="h-9 w-9 rounded-full bg-[#1a73e8] text-white flex items-center justify-center font-bold text-sm select-none shadow-sm shadow-[#1a73e8]/20">
               {adminUser ? adminUser[0].toUpperCase() : 'A'}
             </div>
           </div>
@@ -4408,25 +4670,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         <div className="h-[68px] shrink-0 md:hidden" />
 
         {/* Scrollable Content Container */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8">
+        <div
+          className={`flex-1 min-h-0 overflow-y-auto overscroll-contain ${
+            activeTab === 'accounts' ||
+            activeTab === 'content' ||
+            activeTab === 'maintenance' ||
+            activeTab === 'event' ||
+            activeTab === 'team' ||
+            activeTab === 'programs' ||
+            activeTab === 'gallery' ||
+            activeTab === 'testimonials' ||
+            activeTab === 'reviews' ||
+            activeTab === 'competitions' ||
+            activeTab === 'competition-registrations'
+              ? 'p-0'
+              : activeTab === 'overview'
+                ? 'p-2 md:p-3 lg:p-4'
+              : 'p-4 md:p-6 lg:p-8'
+          }`}
+        >
           {activeTab === 'overview' && (
-            <div className="space-y-8">
+            <div className="min-h-full space-y-3">
 
               {/* Page Header */}
-              <div className="flex items-end justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Dashboard</p>
-                  <h2 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">Monitoring Website</h2>
-                  <p className="text-slate-500 dark:text-slate-400 mt-1.5 text-sm">Data realtime dari Firebase Realtime Database.</p>
+              <div className="flex flex-col gap-3 border border-slate-200 bg-white px-4 py-3 shadow-none dark:border-slate-800 dark:bg-[#0d1320] sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#1a73e8] dark:text-[#8ab4f8]">Monitoring</p>
+                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white md:text-3xl">Ringkasan Operasional Website</h2>
+                  <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Pantau konten, akun divisi, ulasan, dan pesan pengunjung secara realtime.</p>
                 </div>
-                <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
-                  Live
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-2 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+                    LIVE DATABASE
+                  </div>
+                  <div className="inline-flex items-center gap-2 border border-slate-200 bg-[#f8fafd] px-3 py-2 text-xs font-black text-slate-600 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-300">
+                    {stats.reduce((total, stat) => total + stat.value, 0)} data terpantau
+                  </div>
                 </div>
               </div>
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
                 {stats.map((stat, i) => {
                   const Icon = stat.icon;
                   const colors = [
@@ -4442,57 +4727,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                   return (
                     <div
                       key={stat.label}
-                      className="relative rounded-2xl p-5 transition-all duration-300 hover:-translate-y-0.5 overflow-hidden group"
-                      style={{
-                        background: 'linear-gradient(145deg,rgba(255,255,255,0.06) 0%,rgba(255,255,255,0.02) 100%)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
-                        backdropFilter: 'blur(12px)',
-                      }}
+                      className="group relative overflow-hidden border border-slate-200 bg-white p-4 shadow-none transition-colors duration-200 hover:bg-[#f8fafd] dark:border-slate-800 dark:bg-[#0d1320] dark:hover:bg-[#111827]"
                     >
-                      {/* Glow bg */}
-                      <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                        style={{ background: `radial-gradient(circle at 30% 50%, ${c.glow} 0%, transparent 70%)` }} />
-
-                      <div className="relative z-10">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
+                      <div className="relative z-10 flex items-center gap-3">
+                        <div className="h-11 w-11 flex shrink-0 items-center justify-center"
                             style={{ background: c.bg, color: c.icon, boxShadow: `0 0 16px ${c.glow}` }}>
-                            <Icon size={20} />
-                          </div>
+                          <Icon size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-3xl font-black leading-none tracking-tight text-slate-950 dark:text-white">{stat.value}</div>
+                          <div className="mt-1 truncate text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">{stat.label}</div>
+                        </div>
+                        <div className="ml-auto">
                           {hasAlert && (
-                            <span className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)] mt-1" />
+                            <span className="block h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
                           )}
                         </div>
-                        <div className="text-3xl font-black tracking-tight text-white">{stat.value}</div>
-                        <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mt-1">{stat.label}</div>
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Bottom Cards */}
-              <div className="grid lg:grid-cols-5 gap-4">
+              {/* Monitoring Panels */}
+              <div className="grid gap-2 xl:grid-cols-[360px_minmax(0,1fr)]">
                 {/* Event Aktif — wider */}
-                <div
-                  className="lg:col-span-2 rounded-2xl p-6 relative overflow-hidden"
-                  style={{
-                    background: 'linear-gradient(145deg,rgba(59,130,246,0.18) 0%,rgba(37,99,235,0.08) 100%)',
-                    border: '1px solid rgba(59,130,246,0.20)',
-                    boxShadow: '0 4px 28px rgba(59,130,246,0.12)',
-                  }}
-                >
-                  <div className="absolute top-0 right-0 w-40 h-40 rounded-full opacity-10"
-                    style={{ background: 'radial-gradient(circle, #3b82f6 0%, transparent 70%)', transform: 'translate(30%, -30%)' }} />
+                <div className="relative overflow-hidden border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
                   <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-4">
-                      <CalendarClock size={15} className="text-blue-400" />
-                      <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Event Aktif</span>
+                    <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+                      <div className="flex items-center gap-2">
+                        <CalendarClock size={16} className="text-[#1a73e8] dark:text-[#8ab4f8]" />
+                        <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Event Aktif</span>
+                      </div>
+                      <span className="border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300">Website</span>
                     </div>
-                    <p className="text-xl font-black text-white leading-tight">{eventContent.title || '—'}</p>
+                    <p className="text-xl font-black text-slate-950 dark:text-white leading-tight">{eventContent.title || '—'}</p>
                     <p className="text-sm text-blue-300/80 mt-2 font-medium">{formatDateTimeDisplay(eventContent.date)}</p>
-                    <div className="mt-4 flex items-center gap-2 text-slate-300 text-sm">
+                    <div className="mt-4 flex items-center gap-2 text-slate-600 dark:text-slate-300 text-sm">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                       {eventContent.location || 'Lokasi belum diatur'}
                     </div>
@@ -4500,14 +4771,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 </div>
 
                 {/* Pesan Terbaru — wider */}
-                <div
-                  className="lg:col-span-3 rounded-2xl p-6 relative overflow-hidden"
-                  style={{
-                    background: 'linear-gradient(145deg,rgba(255,255,255,0.05) 0%,rgba(255,255,255,0.02) 100%)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    boxShadow: '0 4px 28px rgba(0,0,0,0.16)',
-                  }}
-                >
+                <div className="relative overflow-hidden border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
                   <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-2">
                       <Mail size={15} className="text-slate-400" />
@@ -4531,11 +4795,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                         <div key={message.id}
                           className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl transition-colors duration-150 hover:bg-white/5">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500/30 to-purple-500/20 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                            <div className="h-8 w-8 rounded-full bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8] flex items-center justify-center font-bold text-xs shrink-0">
                               {message.name.slice(0, 1).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-sm text-white truncate">{message.name}</p>
+                              <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{message.name}</p>
                               <p className="text-xs text-slate-500 truncate">{message.message}</p>
                             </div>
                           </div>
@@ -4556,124 +4820,203 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           )}
 
           {activeTab === 'content' && (
-            <div className="space-y-6 max-w-5xl">
-              <Header title="Konten Website" action={saveSite} saving={saving} />
-              <div className="grid lg:grid-cols-2 gap-5">
-                <Panel title="Hero Section">
-                  <Field label="Badge" value={siteContent.heroBadge} onChange={(value) => setSiteContent({ ...siteContent, heroBadge: value })} />
-                  <Field label="Judul" value={siteContent.heroTitle} onChange={(value) => setSiteContent({ ...siteContent, heroTitle: value })} />
-                  <Field label="Highlight Judul" value={siteContent.heroHighlight} onChange={(value) => setSiteContent({ ...siteContent, heroHighlight: value })} />
-                  <Field label="Subtitle" rows={3} value={siteContent.heroSubtitle} onChange={(value) => setSiteContent({ ...siteContent, heroSubtitle: value })} />
-                  <ImageField label="Gambar Hero" value={siteContent.heroImage} onChange={(value) => setSiteContent({ ...siteContent, heroImage: value })} />
-                </Panel>
-                <Panel title="Tentang & Visi">
-                  <Field label="Judul Tentang" value={siteContent.aboutTitle} onChange={(value) => setSiteContent({ ...siteContent, aboutTitle: value })} />
-                  <Field label="Highlight Tentang" value={siteContent.aboutHighlight} onChange={(value) => setSiteContent({ ...siteContent, aboutHighlight: value })} />
-                  <Field label="Deskripsi" rows={3} value={siteContent.aboutDescription} onChange={(value) => setSiteContent({ ...siteContent, aboutDescription: value })} />
-                  <Field label="Detail" rows={3} value={siteContent.aboutDetail} onChange={(value) => setSiteContent({ ...siteContent, aboutDetail: value })} />
-                  <ImageField label="Gambar Tentang" value={siteContent.aboutImage} onChange={(value) => setSiteContent({ ...siteContent, aboutImage: value })} />
-                  <Field label="Poin Highlight (pisahkan dengan enter)" rows={4} value={siteContent.aboutHighlights.join('\n')} onChange={(value) => setSiteContent({ ...siteContent, aboutHighlights: value.split('\n').filter(Boolean) })} />
-                  <Field label="Visi" value={siteContent.visionTitle} onChange={(value) => setSiteContent({ ...siteContent, visionTitle: value })} />
-                  <Field label="Deskripsi Visi" rows={2} value={siteContent.visionDescription} onChange={(value) => setSiteContent({ ...siteContent, visionDescription: value })} />
-                </Panel>
-                <Panel title="Profil Desa">
-                  <Field label="Judul Profil Desa" value={siteContent.villageTitle} onChange={(value) => setSiteContent({ ...siteContent, villageTitle: value })} />
-                  <Field label="Deskripsi Profil Desa" rows={2} value={siteContent.villageDescription} onChange={(value) => setSiteContent({ ...siteContent, villageDescription: value })} />
-                  <Field label="Gambaran Umum" rows={4} value={siteContent.villageOverview} onChange={(value) => setSiteContent({ ...siteContent, villageOverview: value })} />
-                  <Field label="Google Maps Embed URL" rows={3} value={siteContent.villageMapUrl} onChange={(value) => setSiteContent({ ...siteContent, villageMapUrl: value })} />
-                </Panel>
-                <Panel title="Kontak">
-                  <Field label="Alamat" rows={2} value={siteContent.contactAddress} onChange={(value) => setSiteContent({ ...siteContent, contactAddress: value })} />
-                  <Field label="Email" value={siteContent.contactEmail} onChange={(value) => setSiteContent({ ...siteContent, contactEmail: value })} />
-                  <Field label="Instagram" value={siteContent.contactInstagram} onChange={(value) => setSiteContent({ ...siteContent, contactInstagram: value })} />
-                  <Field label="WhatsApp" value={siteContent.contactWhatsapp} onChange={(value) => setSiteContent({ ...siteContent, contactWhatsapp: value })} />
-                </Panel>
-                <Panel title="Video Dokumentasi">
-                  <Field label="Judul Video" value={siteContent.videoTitle} onChange={(value) => setSiteContent({ ...siteContent, videoTitle: value })} />
-                  <Field label="Subtitle Video" value={siteContent.videoSubtitle} onChange={(value) => setSiteContent({ ...siteContent, videoSubtitle: value })} />
-                  <Field label="Deskripsi Section" rows={2} value={siteContent.videoDescription} onChange={(value) => setSiteContent({ ...siteContent, videoDescription: value })} />
-                  <ImageField label="Poster Video" value={siteContent.videoPoster} onChange={(value) => setSiteContent({ ...siteContent, videoPoster: value })} />
-                  <VideoField label="Link YouTube Video" value={siteContent.videoSrc} onChange={(value) => setSiteContent({ ...siteContent, videoSrc: value })} />
-                </Panel>
+            <div className="w-full">
+              <div className="space-y-3">
+                  <section className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+                    <div className="mb-4 border-b border-slate-100 pb-3 dark:border-slate-800">
+                      <p className="text-sm font-black text-slate-950 dark:text-white">Hero Section</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Konten utama di bagian pertama website.</p>
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Field label="Badge" value={siteContent.heroBadge} onChange={(value) => setSiteContent({ ...siteContent, heroBadge: value })} />
+                      <Field label="Judul" value={siteContent.heroTitle} onChange={(value) => setSiteContent({ ...siteContent, heroTitle: value })} />
+                      <Field label="Highlight Judul" value={siteContent.heroHighlight} onChange={(value) => setSiteContent({ ...siteContent, heroHighlight: value })} />
+                      <div className="lg:row-span-2">
+                        <ImageField label="Gambar Hero" value={siteContent.heroImage} onChange={(value) => setSiteContent({ ...siteContent, heroImage: value })} />
+                      </div>
+                      <div className="lg:col-span-2">
+                        <Field label="Subtitle" rows={3} value={siteContent.heroSubtitle} onChange={(value) => setSiteContent({ ...siteContent, heroSubtitle: value })} />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+                    <div className="mb-4 border-b border-slate-100 pb-3 dark:border-slate-800">
+                      <p className="text-sm font-black text-slate-950 dark:text-white">Tentang & Visi</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Narasi profil KKN dan visi kegiatan.</p>
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Field label="Judul Tentang" value={siteContent.aboutTitle} onChange={(value) => setSiteContent({ ...siteContent, aboutTitle: value })} />
+                      <Field label="Highlight Tentang" value={siteContent.aboutHighlight} onChange={(value) => setSiteContent({ ...siteContent, aboutHighlight: value })} />
+                      <Field label="Deskripsi" rows={3} value={siteContent.aboutDescription} onChange={(value) => setSiteContent({ ...siteContent, aboutDescription: value })} />
+                      <Field label="Detail" rows={3} value={siteContent.aboutDetail} onChange={(value) => setSiteContent({ ...siteContent, aboutDetail: value })} />
+                      <ImageField label="Gambar Tentang" value={siteContent.aboutImage} onChange={(value) => setSiteContent({ ...siteContent, aboutImage: value })} />
+                      <Field label="Poin Highlight (pisahkan dengan enter)" rows={4} value={siteContent.aboutHighlights.join('\n')} onChange={(value) => setSiteContent({ ...siteContent, aboutHighlights: value.split('\n').filter(Boolean) })} />
+                      <Field label="Visi" value={siteContent.visionTitle} onChange={(value) => setSiteContent({ ...siteContent, visionTitle: value })} />
+                      <Field label="Deskripsi Visi" rows={2} value={siteContent.visionDescription} onChange={(value) => setSiteContent({ ...siteContent, visionDescription: value })} />
+                    </div>
+                  </section>
+
+                  <section className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+                    <div className="mb-4 border-b border-slate-100 pb-3 dark:border-slate-800">
+                      <p className="text-sm font-black text-slate-950 dark:text-white">Profil Desa</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Informasi desa dan embed peta publik.</p>
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Field label="Judul Profil Desa" value={siteContent.villageTitle} onChange={(value) => setSiteContent({ ...siteContent, villageTitle: value })} />
+                      <Field label="Deskripsi Profil Desa" rows={2} value={siteContent.villageDescription} onChange={(value) => setSiteContent({ ...siteContent, villageDescription: value })} />
+                      <Field label="Gambaran Umum" rows={4} value={siteContent.villageOverview} onChange={(value) => setSiteContent({ ...siteContent, villageOverview: value })} />
+                      <Field label="Google Maps Embed URL" rows={4} value={siteContent.villageMapUrl} onChange={(value) => setSiteContent({ ...siteContent, villageMapUrl: value })} />
+                    </div>
+                  </section>
+
+                  <section className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+                    <div className="mb-4 border-b border-slate-100 pb-3 dark:border-slate-800">
+                      <p className="text-sm font-black text-slate-950 dark:text-white">Kontak</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Data kontak yang tampil di website.</p>
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Field label="Alamat" rows={2} value={siteContent.contactAddress} onChange={(value) => setSiteContent({ ...siteContent, contactAddress: value })} />
+                      <Field label="Email" value={siteContent.contactEmail} onChange={(value) => setSiteContent({ ...siteContent, contactEmail: value })} />
+                      <Field label="Instagram" value={siteContent.contactInstagram} onChange={(value) => setSiteContent({ ...siteContent, contactInstagram: value })} />
+                      <Field label="WhatsApp" value={siteContent.contactWhatsapp} onChange={(value) => setSiteContent({ ...siteContent, contactWhatsapp: value })} />
+                    </div>
+                  </section>
+
+                  <section className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+                    <div className="mb-4 border-b border-slate-100 pb-3 dark:border-slate-800">
+                      <p className="text-sm font-black text-slate-950 dark:text-white">Video Dokumentasi</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Poster dan tautan video dokumentasi kegiatan.</p>
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Field label="Judul Video" value={siteContent.videoTitle} onChange={(value) => setSiteContent({ ...siteContent, videoTitle: value })} />
+                      <Field label="Subtitle Video" value={siteContent.videoSubtitle} onChange={(value) => setSiteContent({ ...siteContent, videoSubtitle: value })} />
+                      <Field label="Deskripsi Section" rows={2} value={siteContent.videoDescription} onChange={(value) => setSiteContent({ ...siteContent, videoDescription: value })} />
+                      <ImageField label="Poster Video" value={siteContent.videoPoster} onChange={(value) => setSiteContent({ ...siteContent, videoPoster: value })} />
+                      <div className="lg:col-span-2">
+                        <VideoField label="Link YouTube Video" value={siteContent.videoSrc} onChange={(value) => setSiteContent({ ...siteContent, videoSrc: value })} />
+                      </div>
+                    </div>
+                  </section>
+
+                  <div className="sticky bottom-0 z-20 flex justify-end border-t border-slate-200 bg-[#f8fafd]/95 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-[#0b1220]/95">
+                    <button onClick={saveSite} className={`${googlePrimaryButtonClass} w-full min-w-[210px] md:w-auto`}>
+                      <Save size={16} />
+                      {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+                    </button>
+                  </div>
               </div>
             </div>
           )}
 
           {activeTab === 'maintenance' && (
-            <div className="space-y-6 max-w-3xl">
-              <Header title="Maintenance Website" action={saveMaintenance} saving={saving} />
-              <Panel title="Status Halaman Publik">
-                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-4">
-                  <div>
-                    <span className="block font-black text-slate-900 dark:text-white">Aktifkan halaman maintenance</span>
-                    <span className="block text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      Saat aktif, pengunjung akan diarahkan ke halaman status sesuai jadwal.
-                    </span>
+            <div className="w-full">
+              <div className="space-y-3">
+                <section className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+                  <div className="mb-4 border-b border-slate-100 pb-3 dark:border-slate-800">
+                    <p className="text-sm font-black text-slate-950 dark:text-white">Status Halaman Publik</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Atur halaman maintenance dan jadwal akses website publik.
+                    </p>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={siteContent.maintenanceEnabled}
-                    onChange={(event) => setSiteContent({ ...siteContent, maintenanceEnabled: event.target.checked })}
-                    className="h-5 w-5 accent-m-blue"
-                  />
-                </label>
 
-                <Field
-                  label="Judul Halaman"
-                  value={siteContent.maintenanceTitle}
-                  onChange={(value) => setSiteContent({ ...siteContent, maintenanceTitle: value })}
-                />
-                <Field
-                  label="Pesan Halaman"
-                  rows={3}
-                  value={siteContent.maintenanceMessage}
-                  onChange={(value) => setSiteContent({ ...siteContent, maintenanceMessage: value })}
-                />
+                  <label className="mb-5 flex items-center justify-between gap-4 border border-slate-200 bg-[#f8fafd] px-4 py-4 dark:border-slate-800 dark:bg-[#111827]">
+                    <div>
+                      <span className="block font-black text-slate-900 dark:text-white">Aktifkan halaman maintenance</span>
+                      <span className="mt-1 block text-sm text-slate-500 dark:text-slate-400">
+                        Saat aktif, pengunjung akan diarahkan ke halaman status sesuai jadwal.
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={siteContent.maintenanceEnabled}
+                      onChange={(event) => setSiteContent({ ...siteContent, maintenanceEnabled: event.target.checked })}
+                      className="h-5 w-5 shrink-0 accent-m-blue"
+                    />
+                  </label>
 
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <DateField
-                    label="Tanggal Mulai"
-                    value={getEventDateInputValue(siteContent.maintenanceStart).date}
-                    onChange={(value) => setSiteContent({ ...siteContent, maintenanceStart: setEventDatePart(siteContent.maintenanceStart, 'date', value) })}
-                  />
-                  <Field
-                    label="Jam Mulai"
-                    type="time"
-                    value={getEventDateInputValue(siteContent.maintenanceStart).time}
-                    onChange={(value) => setSiteContent({ ...siteContent, maintenanceStart: setEventDatePart(siteContent.maintenanceStart, 'time', value) })}
-                  />
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <Field
+                      label="Judul Halaman"
+                      value={siteContent.maintenanceTitle}
+                      onChange={(value) => setSiteContent({ ...siteContent, maintenanceTitle: value })}
+                    />
+                    <div className="lg:row-span-2">
+                      <Field
+                        label="Pesan Halaman"
+                        rows={5}
+                        value={siteContent.maintenanceMessage}
+                        onChange={(value) => setSiteContent({ ...siteContent, maintenanceMessage: value })}
+                      />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <DateField
+                        label="Tanggal Mulai"
+                        value={getEventDateInputValue(siteContent.maintenanceStart).date}
+                        onChange={(value) => setSiteContent({ ...siteContent, maintenanceStart: setEventDatePart(siteContent.maintenanceStart, 'date', value) })}
+                      />
+                      <Field
+                        label="Jam Mulai"
+                        type="time"
+                        value={getEventDateInputValue(siteContent.maintenanceStart).time}
+                        onChange={(value) => setSiteContent({ ...siteContent, maintenanceStart: setEventDatePart(siteContent.maintenanceStart, 'time', value) })}
+                      />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <DateField
+                        label="Tanggal Selesai"
+                        value={getEventDateInputValue(siteContent.maintenanceEnd).date}
+                        onChange={(value) => setSiteContent({ ...siteContent, maintenanceEnd: setEventDatePart(siteContent.maintenanceEnd, 'date', value) })}
+                      />
+                      <Field
+                        label="Jam Selesai"
+                        type="time"
+                        value={getEventDateInputValue(siteContent.maintenanceEnd).time}
+                        onChange={(value) => setSiteContent({ ...siteContent, maintenanceEnd: setEventDatePart(siteContent.maintenanceEnd, 'time', value) })}
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+                  <div className="grid gap-3 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Mulai</p>
+                      <p className="mt-1 font-bold text-slate-900 dark:text-white">{formatDateTimeDisplay(siteContent.maintenanceStart)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Selesai</p>
+                      <p className="mt-1 font-bold text-slate-900 dark:text-white">{formatDateTimeDisplay(siteContent.maintenanceEnd)}</p>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="sticky bottom-0 z-20 flex justify-end border-t border-slate-200 bg-[#f8fafd]/95 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-[#0b1220]/95">
+                  <button onClick={saveMaintenance} className={`${googlePrimaryButtonClass} w-full min-w-[210px] md:w-auto`}>
+                    <Save size={16} />
+                    {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  </button>
                 </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <DateField
-                    label="Tanggal Selesai"
-                    value={getEventDateInputValue(siteContent.maintenanceEnd).date}
-                    onChange={(value) => setSiteContent({ ...siteContent, maintenanceEnd: setEventDatePart(siteContent.maintenanceEnd, 'date', value) })}
-                  />
-                  <Field
-                    label="Jam Selesai"
-                    type="time"
-                    value={getEventDateInputValue(siteContent.maintenanceEnd).time}
-                    onChange={(value) => setSiteContent({ ...siteContent, maintenanceEnd: setEventDatePart(siteContent.maintenanceEnd, 'time', value) })}
-                  />
-                </div>
-
-                <div className="rounded-lg bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
-                  Mulai: <span className="font-bold">{formatDateTimeDisplay(siteContent.maintenanceStart)}</span>
-                  <br />
-                  Selesai: <span className="font-bold">{formatDateTimeDisplay(siteContent.maintenanceEnd)}</span>
-                </div>
-              </Panel>
+              </div>
             </div>
           )}
 
           {activeTab === 'event' && (
-            <div className="space-y-6 max-w-3xl">
-              <Header title="Event & Countdown" action={saveEvent} saving={saving} />
-              <Panel title="Data Event">
-                <Field label="Nama Event" value={eventContent.title} onChange={(value) => setEventContent({ ...eventContent, title: value })} />
-                <Field label="Deskripsi" rows={3} value={eventContent.description} onChange={(value) => setEventContent({ ...eventContent, description: value })} />
-                <div className="grid sm:grid-cols-2 gap-4">
+            <div className="w-full space-y-3">
+              <section className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+                <div className="mb-4 border-b border-slate-100 pb-3 dark:border-slate-800">
+                  <p className="text-sm font-black text-slate-950 dark:text-white">Data Event</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Atur event utama dan countdown yang tampil di website.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <Field label="Nama Event" value={eventContent.title} onChange={(value) => setEventContent({ ...eventContent, title: value })} />
+                  <Field label="Peserta" value={eventContent.audience} onChange={(value) => setEventContent({ ...eventContent, audience: value })} />
+                  <div className="lg:col-span-2">
+                    <Field label="Deskripsi" rows={3} value={eventContent.description} onChange={(value) => setEventContent({ ...eventContent, description: value })} />
+                  </div>
                   <DateField
                     label="Tanggal"
                     value={getEventDateInputValue(eventContent.date).date}
@@ -4685,11 +5028,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     value={getEventDateInputValue(eventContent.date).time}
                     onChange={(value) => setEventContent({ ...eventContent, date: setEventDatePart(eventContent.date, 'time', value) })}
                   />
+                  <div className="lg:col-span-2">
+                    <Field label="Lokasi" value={eventContent.location} onChange={(value) => setEventContent({ ...eventContent, location: value })} />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <ImageField label="Gambar Event" value={eventContent.image} onChange={(value) => setEventContent({ ...eventContent, image: value })} />
+                  </div>
                 </div>
-                <Field label="Lokasi" value={eventContent.location} onChange={(value) => setEventContent({ ...eventContent, location: value })} />
-                <Field label="Peserta" value={eventContent.audience} onChange={(value) => setEventContent({ ...eventContent, audience: value })} />
-                <ImageField label="Gambar Event" value={eventContent.image} onChange={(value) => setEventContent({ ...eventContent, image: value })} />
-              </Panel>
+              </section>
+
+              <section className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+                <div className="grid gap-3 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Jadwal Event</p>
+                    <p className="mt-1 font-bold text-slate-900 dark:text-white">{formatDateTimeDisplay(eventContent.date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Lokasi</p>
+                    <p className="mt-1 font-bold text-slate-900 dark:text-white">{eventContent.location || 'Belum diatur'}</p>
+                  </div>
+                </div>
+              </section>
+
+              <div className="sticky bottom-0 z-20 flex justify-end border-t border-slate-200 bg-[#f8fafd]/95 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-[#0b1220]/95">
+                <button onClick={saveEvent} className={`${googlePrimaryButtonClass} w-full min-w-[210px] md:w-auto`}>
+                  <Save size={16} />
+                  {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -4704,24 +5070,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           )}
 
           {activeTab === 'reviews' && (
-            <div className="space-y-6 max-w-4xl">
-              {/* Page Header */}
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Moderasi</p>
-                  <h1 className="text-3xl font-black text-slate-900 dark:text-white">Verifikasi Ulasan</h1>
-                  <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Ulasan dari pengunjung baru tampil di website setelah disetujui.</p>
-                </div>
-                {reviewSubmissions.length > 0 && (
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20 w-fit">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse inline-block" />
-                    {reviewSubmissions.length} menunggu
-                  </div>
-                )}
-              </div>
-
+            <div className="w-full space-y-3">
               {reviewSubmissions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
+                <div className="flex flex-col items-center justify-center border border-dashed border-slate-300 bg-white py-20 text-center shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
                   <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-4">
                     <Check size={32} />
                   </div>
@@ -4731,7 +5082,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               ) : (
                 <div className="grid gap-4">
                   {reviewSubmissions.map((review) => (
-                    <div key={review.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors shadow-sm">
+                    <div key={review.id} className="border border-slate-200 bg-white p-4 shadow-none transition-colors hover:bg-[#f8fafd] dark:border-slate-800 dark:bg-[#0d1320] dark:hover:bg-[#111827]">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                         <div className="flex gap-4 min-w-0">
                           {review.avatar ? (
@@ -4750,27 +5101,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                         <div className="flex flex-wrap gap-2 shrink-0">
                           <button
                             onClick={() => setEditingReview(review)}
-                            className="rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-bold transition-colors"
+                            className="rounded-full bg-[#f1f3f4] px-3 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200 dark:bg-[#1f2937] dark:text-slate-200 dark:hover:bg-slate-700"
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => approveReview(review)}
-                            className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
+                            className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
                           >
                             <Check size={15} />
                             Setujui
                           </button>
                           <button
                             onClick={() => rejectReview(review.id)}
-                            className="rounded-xl bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
+                            className="rounded-full bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
                           >
                             <Trash2 size={15} />
                             Hapus
                           </button>
                         </div>
                       </div>
-                      <blockquote className="mt-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border-l-4 border-m-blue/40 px-4 py-3 text-slate-700 dark:text-slate-300 text-sm italic leading-relaxed">
+                      <blockquote className="mt-4 rounded-2xl bg-[#f8fafd] dark:bg-[#0f172a]/70 border-l-4 border-[#1a73e8]/40 px-4 py-3 text-slate-700 dark:text-slate-300 text-sm italic leading-relaxed">
                         "{review.quote}"
                       </blockquote>
                     </div>
@@ -4781,39 +5132,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           )}
 
           {activeTab === 'messages' && (
-            <div className="space-y-6 max-w-4xl">
-              {/* Page Header */}
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Komunikasi</p>
-                  <h1 className="text-3xl font-black text-slate-900 dark:text-white">Pesan Masuk</h1>
-                  <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Pesan dari pengunjung melalui form kontak website.</p>
+            <div className="space-y-4 w-full">
+              {unreadMessages > 0 && (
+                <div className="flex justify-end">
+                  {unreadMessages > 0 && (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold border border-blue-500/20 w-fit">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse inline-block" />
+                      {unreadMessages} belum dibaca
+                    </div>
+                  )}
                 </div>
-                {unreadMessages > 0 && (
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold border border-blue-500/20 w-fit">
-                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse inline-block" />
-                    {unreadMessages} belum dibaca
-                  </div>
-                )}
-              </div>
+              )}
 
               {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
-                  <div className="h-16 w-16 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mb-4">
-                    <Mail size={32} />
-                  </div>
-                  <p className="font-black text-lg text-slate-700 dark:text-slate-300">Belum ada pesan masuk</p>
-                  <p className="text-sm text-slate-400 mt-1">Pesan dari pengunjung akan muncul di sini.</p>
+                <div className="-mx-4 -mt-4 md:-mx-6 md:-mt-6 lg:-mx-8 lg:-mt-8 flex min-h-[calc(100dvh-4.5rem)] w-auto flex-col items-center justify-center border-t border-slate-200 bg-[#f8fafd] text-center dark:border-slate-800 dark:bg-[#0b0f19]">
+                  <p className="font-black text-xl text-slate-800 dark:text-slate-100">Belum ada pesan masuk</p>
+                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Pesan dari pengunjung akan muncul di sini.</p>
                 </div>
               ) : (
                 <div className="grid gap-3">
                   {messages.map((message) => (
                     <div
                       key={message.id}
-                      className={`bg-white dark:bg-slate-900 border rounded-2xl p-5 shadow-sm transition-colors ${
+                      className={`border rounded-[24px] p-5 shadow-[0_1px_2px_rgba(60,64,67,0.10)] transition-colors ${
                         message.status === 'unread'
-                          ? 'border-blue-200 dark:border-blue-800/60 bg-blue-50/30 dark:bg-blue-950/10'
-                          : 'border-slate-200 dark:border-slate-800'
+                          ? 'border-blue-200 bg-blue-50/50 dark:border-blue-800/60 dark:bg-blue-950/10'
+                          : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-[#111827]'
                       }`}
                     >
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -4839,7 +5183,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                           {message.status === 'unread' && (
                             <button
                               onClick={() => storage.markMessageAsRead(message.id)}
-                              className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
+                              className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
                             >
                               <Check size={15} />
                               Dibaca
@@ -4847,14 +5191,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                           )}
                           <button
                             onClick={() => deleteItem('messages', message.id)}
-                            className="rounded-xl bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
+                            className="rounded-full bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 px-3 py-2 text-sm font-bold flex items-center gap-1.5 transition-colors"
                           >
                             <Trash2 size={15} />
                             Hapus
                           </button>
                         </div>
                       </div>
-                      <p className="mt-4 text-slate-700 dark:text-slate-300 text-sm leading-relaxed bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3">{message.message}</p>
+                      <p className="mt-4 text-slate-700 dark:text-slate-300 text-sm leading-relaxed bg-[#f8fafd] dark:bg-[#0f172a]/70 rounded-2xl px-4 py-3">{message.message}</p>
                     </div>
                   ))}
                 </div>
@@ -4992,22 +5336,16 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
   const PreviewIcon = (LucideIcons as Record<string, React.FC<{ size?: number; className?: string }>>)[form.iconName] ?? LucideIcons.Trophy;
 
   return (
-    <div className="space-y-8 max-w-5xl">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Manajemen</p>
-        <h1 className="text-3xl font-black text-slate-900 dark:text-white">Perlombaan</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Buat dan kelola daftar perlombaan yang tampil di website.</p>
-      </div>
-
+    <div className="w-full space-y-3">
       {/* Form */}
-      <div id="comp-form-top" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
+      <div id="comp-form-top" className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-5">
           <h2 className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2">
-            <Trophy size={17} className="text-m-blue" />
+            <Trophy size={17} className="text-[#1a73e8] dark:text-[#8ab4f8]" />
             {editingId ? 'Edit Lomba' : 'Tambah Lomba Baru'}
           </h2>
           {editingId && (
-            <button onClick={cancelEdit} className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white flex items-center gap-1">
+            <button onClick={cancelEdit} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white">
               <X size={14} /> Batal
             </button>
           )}
@@ -5022,7 +5360,7 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
               <select
                 value={form.category}
                 onChange={(e) => setF('category', e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                className={googleInputClass}
               >
                 {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -5039,8 +5377,8 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
           </div>
 
           {/* Tanggal pendaftaran */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 space-y-3">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Periode Pendaftaran</p>
+          <div className="space-y-3 border border-slate-200 bg-[#f8fafd] p-4 dark:border-slate-800 dark:bg-[#111827]">
+            <p className="text-xs font-black uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">Periode Pendaftaran</p>
             <div className="grid sm:grid-cols-2 gap-4">
               <label className="block">
                 <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Tanggal Mulai</span>
@@ -5051,7 +5389,7 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
                   onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
                   onKeyDown={(e) => e.preventDefault()}
                   lang="id-ID"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all dark:[color-scheme:dark]"
+                  className={`${googleInputClass} dark:[color-scheme:dark]`}
                 />
               </label>
               <label className="block">
@@ -5064,7 +5402,7 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
                   onKeyDown={(e) => e.preventDefault()}
                   min={form.registrationStart || undefined}
                   lang="id-ID"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all dark:[color-scheme:dark]"
+                  className={`${googleInputClass} dark:[color-scheme:dark]`}
                 />
               </label>
             </div>
@@ -5088,7 +5426,7 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
               <select
                 value={form.maxParticipants}
                 onChange={(e) => setF('maxParticipants', e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                className={googleInputClass}
               >
                 {MAX_PARTICIPANTS_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
               </select>
@@ -5098,7 +5436,7 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
               <select
                 value={form.fee}
                 onChange={(e) => setF('fee', e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                className={googleInputClass}
               >
                 {FEE_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
               </select>
@@ -5111,13 +5449,13 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
             <label className="block">
               <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Ikon</span>
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center bg-slate-50 dark:bg-slate-800 text-m-blue shrink-0">
+                <div className="w-10 h-10 rounded-2xl border border-slate-200 bg-[#e8f0fe] text-[#1a73e8] dark:border-slate-800 dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8] flex items-center justify-center shrink-0">
                   <PreviewIcon size={20} />
                 </div>
                 <select
                   value={form.iconName}
                   onChange={(e) => setF('iconName', e.target.value)}
-                  className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                  className={googleInputClass}
                 >
                   {ICON_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
                 </select>
@@ -5130,7 +5468,7 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
               <select
                 value={form.color}
                 onChange={(e) => setF('color', e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                className={googleInputClass}
               >
                 {COLOR_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
@@ -5143,12 +5481,12 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
                 <select
                   value={String(form.order ?? 0)}
                   onChange={(e) => setF('order', Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                  className={googleInputClass}
                 >
                   {[0,1,2,3,4,5,6,7,8,9,10].map((n) => <option key={n} value={n}>{n === 0 ? '0 (pertama)' : n}</option>)}
                 </select>
               </label>
-              <label className="flex items-center gap-2.5 cursor-pointer rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+              <label className="flex cursor-pointer items-center gap-2.5 border border-slate-200 px-3 py-3 transition-colors hover:bg-[#f8fafd] dark:border-slate-800 dark:hover:bg-slate-800">
                 <input
                   type="checkbox"
                   checked={form.isOpen}
@@ -5164,13 +5502,13 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
           </div>
 
           {msg && (
-            <p className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{msg}</p>
+            <p className="border border-slate-200 bg-[#f8fafd] px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{msg}</p>
           )}
 
           <button
             type="submit"
             disabled={saving}
-            className="w-full sm:w-auto rounded-xl bg-m-blue hover:bg-m-blue-dark text-white px-8 py-3 font-bold flex items-center gap-2 shadow-sm shadow-m-blue/20 transition-all disabled:opacity-60 active:scale-[0.98]"
+            className={`${googlePrimaryButtonClass} w-full sm:w-auto`}
           >
             <Save size={16} />
             {saving ? 'Menyimpan...' : editingId ? 'Perbarui Lomba' : 'Simpan Lomba'}
@@ -5182,17 +5520,17 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
       <div className="space-y-3">
         <h2 className="font-black text-base text-slate-900 dark:text-white">{competitions.length} Lomba Terdaftar</h2>
         {competitions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
+          <div className="flex flex-col items-center justify-center border border-dashed border-slate-300 bg-white py-16 text-center dark:border-slate-800 dark:bg-[#0d1320]">
             <Trophy size={32} className="text-slate-300 dark:text-slate-600 mb-3" />
             <p className="font-black text-slate-500 dark:text-slate-400">Belum ada lomba ditambahkan</p>
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-4">
             {competitions.map((comp) => {
               const IconComp = (LucideIcons as Record<string, React.FC<{ size?: number; className?: string }>>)[comp.iconName] ?? LucideIcons.Trophy;
               return (
-                <div key={comp.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-start gap-4">
-                  <div className="w-11 h-11 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center justify-center bg-slate-50 dark:bg-slate-800 text-m-blue shrink-0">
+                <div key={comp.id} className="flex items-start gap-4 border border-slate-200 bg-white p-4 shadow-none transition-colors hover:bg-[#f8fafd] dark:border-slate-800 dark:bg-[#0d1320] dark:hover:bg-[#111827]">
+                  <div className="w-11 h-11 rounded-2xl border border-slate-200 bg-[#e8f0fe] text-[#1a73e8] dark:border-slate-800 dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8] flex items-center justify-center shrink-0">
                     <IconComp size={20} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -5211,13 +5549,13 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
                     <div className="mt-2.5 flex gap-2">
                       <button
                         onClick={() => startEdit(comp)}
-                        className="rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
+                        className="rounded-full bg-[#f1f3f4] hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(comp.id, comp.title)}
-                        className="rounded-lg bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900 px-3 py-1.5 text-xs font-bold transition-colors"
+                        className="rounded-full bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900 px-3 py-1.5 text-xs font-bold transition-colors"
                       >
                         Hapus
                       </button>
@@ -5390,43 +5728,29 @@ const CompetitionRegistrationManager: React.FC<{
   };
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Manajemen</p>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white">Pendaftar Lomba</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Daftar peserta yang mendaftar melalui website.</p>
-        </div>
-        {pending > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-500/20 w-fit">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse inline-block" />
-            {pending} pending
-          </div>
-        )}
-      </div>
-
+    <div className="w-full space-y-3">
       {/* Stats global */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total',    value: registrations.length,                                  cls: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' },
-          { label: 'Pending',  value: registrations.filter(r => r.status === 'pending').length,   cls: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' },
-          { label: 'Diterima', value: registrations.filter(r => r.status === 'confirmed').length, cls: 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' },
-          { label: 'Ditolak',  value: registrations.filter(r => r.status === 'rejected').length,  cls: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' },
+          { label: 'Total',    value: registrations.length, cls: 'text-[#1a73e8] dark:text-[#8ab4f8]', bar: 'bg-[#1a73e8]' },
+          { label: 'Pending',  value: registrations.filter(r => r.status === 'pending').length, cls: 'text-[#f29900] dark:text-[#fdd663]', bar: 'bg-[#fbbc04]' },
+          { label: 'Diterima', value: registrations.filter(r => r.status === 'confirmed').length, cls: 'text-[#34a853] dark:text-[#81c995]', bar: 'bg-[#34a853]' },
+          { label: 'Ditolak',  value: registrations.filter(r => r.status === 'rejected').length, cls: 'text-[#ea4335] dark:text-[#f28b82]', bar: 'bg-[#ea4335]' },
         ].map((s) => (
-          <div key={s.label} className={`rounded-2xl p-4 ${s.cls} text-center`}>
-            <p className="text-2xl font-black">{s.value}</p>
-            <p className="text-xs font-bold uppercase tracking-wider mt-1 opacity-80">{s.label}</p>
+          <div key={s.label} className="relative overflow-hidden border border-slate-200 bg-white p-4 text-center shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+            <div className={`absolute inset-x-0 top-0 h-1 ${s.bar}`} />
+            <p className={`text-2xl font-black ${s.cls}`}>{s.value}</p>
+            <p className="text-xs font-bold uppercase tracking-wider mt-1 text-slate-500 dark:text-slate-400">{s.label}</p>
           </div>
         ))}
       </div>
 
       {/* Slide tab per lomba */}
-      <div className="relative">
+      <div className="border border-slate-200 bg-white p-3 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           <button
             onClick={() => handleCompChange('__all__')}
-            className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-all ${activeComp === '__all__' ? 'bg-m-blue text-white shadow-md shadow-blue-500/25' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-m-blue hover:text-m-blue'}`}
+            className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-all ${activeComp === '__all__' ? 'bg-[#1a73e8] text-white shadow-md shadow-[#1a73e8]/20' : 'bg-[#f1f3f4] dark:bg-slate-800 border border-transparent text-slate-600 dark:text-slate-300 hover:bg-[#e8f0fe] hover:text-[#1a73e8] dark:hover:bg-[#1a73e8]/20 dark:hover:text-[#8ab4f8]'}`}
           >
             Semua ({registrations.length})
           </button>
@@ -5437,7 +5761,7 @@ const CompetitionRegistrationManager: React.FC<{
               <button
                 key={title}
                 onClick={() => handleCompChange(title)}
-                className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${activeComp === title ? 'bg-m-blue text-white shadow-md shadow-blue-500/25' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-m-blue hover:text-m-blue'}`}
+                className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${activeComp === title ? 'bg-[#1a73e8] text-white shadow-md shadow-[#1a73e8]/20' : 'bg-[#f1f3f4] dark:bg-slate-800 border border-transparent text-slate-600 dark:text-slate-300 hover:bg-[#e8f0fe] hover:text-[#1a73e8] dark:hover:bg-[#1a73e8]/20 dark:hover:text-[#8ab4f8]'}`}
               >
                 {title} ({count})
                 {pend > 0 && (
@@ -5450,13 +5774,13 @@ const CompetitionRegistrationManager: React.FC<{
       </div>
 
       {/* Toolbar: status filter + download PDF */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-slate-200 bg-white px-4 py-3 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Status:</span>
           <select
             value={filterStatus}
             onChange={(e) => handleStatusChange(e.target.value as typeof filterStatus)}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-2 focus:ring-m-blue/10"
+            className="rounded-full border border-slate-200 bg-[#f8fafd] px-3 py-2 text-sm font-medium text-slate-900 outline-none transition-all focus:border-[#1a73e8] focus:ring-4 focus:ring-[#1a73e8]/10 dark:border-slate-800 dark:bg-[#0f172a] dark:text-white"
           >
             <option value="semua">Semua Status</option>
             <option value="pending">Pending</option>
@@ -5471,7 +5795,7 @@ const CompetitionRegistrationManager: React.FC<{
           <button
             onClick={() => downloadPdf(activeComp)}
             disabled={downloadingPdf !== null}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-sm font-bold transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#e6f4ea] dark:bg-[#34a853]/10 hover:bg-emerald-100 dark:hover:bg-[#34a853]/20 text-[#137333] dark:text-[#81c995] border border-emerald-200 dark:border-emerald-800 text-sm font-bold transition-colors disabled:opacity-50"
           >
             <Download size={15} className={downloadingPdf ? 'animate-bounce' : ''} />
             {downloadingPdf ? 'Membuat PDF...' : `Unduh Rekap PDF`}
@@ -5486,7 +5810,7 @@ const CompetitionRegistrationManager: React.FC<{
                 key={title}
                 onClick={() => downloadPdf(title)}
                 disabled={downloadingPdf !== null}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-600 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-[#f1f3f4] dark:bg-slate-800 hover:bg-[#e6f4ea] dark:hover:bg-[#34a853]/10 text-slate-600 dark:text-slate-300 hover:text-[#137333] dark:hover:text-[#81c995] border border-transparent text-xs font-bold transition-colors disabled:opacity-50"
               >
                 <Download size={13} />
                 PDF {title}
@@ -5498,12 +5822,12 @@ const CompetitionRegistrationManager: React.FC<{
 
       {/* List */}
       {paginated.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
+        <div className="flex flex-col items-center justify-center border border-dashed border-slate-300 bg-white py-16 text-center dark:border-slate-800 dark:bg-[#0d1320]">
           <ClipboardList size={32} className="text-slate-300 dark:text-slate-600 mb-3" />
           <p className="font-black text-slate-500 dark:text-slate-400">Belum ada pendaftar</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#0f1322] rounded-2xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden shadow-sm">
+        <div className="overflow-hidden border border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
           {paginated.map((reg, idx) => {
             const no = (page - 1) * PAGE_SIZE + idx + 1;
             const isLast = idx === paginated.length - 1;
@@ -5517,7 +5841,7 @@ const CompetitionRegistrationManager: React.FC<{
             return (
               <div
                 key={reg.id}
-                className={`flex items-center gap-4 px-5 py-4 hover:bg-slate-50/60 dark:hover:bg-white/[0.03] transition-colors duration-150 ${!isLast ? 'border-b border-slate-100 dark:border-slate-800/60' : ''}`}
+                className={`flex items-center gap-4 px-5 py-4 hover:bg-[#f8fafd] dark:hover:bg-white/[0.03] transition-colors duration-150 ${!isLast ? 'border-b border-slate-100 dark:border-slate-800/60' : ''}`}
               >
                 {/* Avatar */}
                 <div
@@ -5611,7 +5935,7 @@ const CompetitionRegistrationManager: React.FC<{
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="h-8 w-8 rounded-lg flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors"
+              className="h-8 w-8 rounded-full flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-[#e8f0fe] hover:text-[#1a73e8] dark:hover:bg-slate-700 disabled:opacity-40 transition-colors"
               aria-label="Halaman sebelumnya"
             >
               <ChevronLeft size={15} />
@@ -5631,7 +5955,7 @@ const CompetitionRegistrationManager: React.FC<{
                     <button
                       key={p}
                       onClick={() => setPage(p as number)}
-                      className={`h-8 w-8 rounded-lg text-sm font-bold transition-colors ${page === p ? 'bg-m-blue text-white shadow-sm' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                      className={`h-8 w-8 rounded-full text-sm font-bold transition-colors ${page === p ? 'bg-[#1a73e8] text-white shadow-sm' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-[#e8f0fe] hover:text-[#1a73e8] dark:hover:bg-slate-700'}`}
                     >
                       {p}
                     </button>
@@ -5641,7 +5965,7 @@ const CompetitionRegistrationManager: React.FC<{
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="h-8 w-8 rounded-lg flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors"
+              className="h-8 w-8 rounded-full flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-[#e8f0fe] hover:text-[#1a73e8] dark:hover:bg-slate-700 disabled:opacity-40 transition-colors"
               aria-label="Halaman berikutnya"
             >
               <ChevronRight size={15} />
@@ -5654,15 +5978,15 @@ const CompetitionRegistrationManager: React.FC<{
 };
 
 const Header = ({ title, action, saving }: { title: string; action: () => void; saving: boolean }) => (
-  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+  <div className="flex flex-col gap-4 border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] sm:flex-row sm:items-center sm:justify-between">
     <div>
-      <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Admin</p>
-      <h1 className="text-3xl font-black text-slate-900 dark:text-white">{title}</h1>
+      <p className="text-xs font-bold uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8] mb-1">Admin</p>
+      <h1 className="text-2xl font-black text-slate-900 dark:text-white">{title}</h1>
       <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Perubahan langsung tersimpan ke Firebase.</p>
     </div>
     <button
       onClick={action}
-      className="flex items-center justify-center gap-2 rounded-xl bg-m-blue hover:bg-m-blue-dark text-white px-6 py-2.5 font-bold text-sm shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-95 w-fit"
+      className={`${googlePrimaryButtonClass} w-fit`}
     >
       <Save size={16} />
       {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
@@ -5671,9 +5995,9 @@ const Header = ({ title, action, saving }: { title: string; action: () => void; 
 );
 
 const Panel = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4 shadow-sm">
-    <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
-      <div className="h-1.5 w-1.5 rounded-full bg-m-blue" />
+  <section className="space-y-4 border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+    <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 dark:border-slate-800">
+      <div className="h-2 w-2 rounded-full bg-[#1a73e8]" />
       <h2 className="font-black text-base text-slate-900 dark:text-white">{title}</h2>
     </div>
     {children}
@@ -5693,31 +6017,12 @@ const ListManager = ({
   onEdit: (item: EditableItem) => void;
   onDelete: (id: string) => void;
 }) => {
-  const titleMap = {
-    team: 'Anggota Kelompok',
-    programs: 'Program Kerja',
-    gallery: 'Galeri Kegiatan',
-    testimonials: 'Testimoni',
-  };
-
-  const subtitleMap = {
-    team: 'Data anggota ditampilkan di halaman Tim.',
-    programs: 'Program kerja ditampilkan di halaman Program.',
-    gallery: 'Foto galeri ditampilkan di halaman Galeri.',
-    testimonials: 'Testimoni ditampilkan di halaman Testimoni.',
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff] mb-1">Manajemen Data</p>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white">{titleMap[type]}</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">{subtitleMap[type]} Total: {data.length} item.</p>
-        </div>
+    <div className="w-full space-y-3">
+      <div className="flex justify-end border border-slate-200 bg-white p-3 shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
         <button
           onClick={onAdd}
-          className="flex items-center gap-2 rounded-xl bg-m-blue hover:bg-m-blue-dark text-white px-5 py-2.5 font-bold text-sm shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-95 w-fit"
+          className={`${googlePrimaryButtonClass} w-fit`}
         >
           <Plus size={16} />
           Tambah Data
@@ -5725,15 +6030,15 @@ const ListManager = ({
       </div>
 
       {data.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-center">
-          <div className="h-16 w-16 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mb-4">
+        <div className="flex flex-col items-center justify-center border border-dashed border-slate-300 bg-white py-20 text-center shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+          <div className="h-16 w-16 rounded-2xl bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8] flex items-center justify-center mb-4">
             <Plus size={28} />
           </div>
           <p className="font-black text-lg text-slate-700 dark:text-slate-300">Belum ada data</p>
           <p className="text-sm text-slate-400 mt-1">Klik tombol "Tambah Data" untuk memulai.</p>
         </div>
       ) : (
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {data.map((item) => {
             const image = 'image' in item ? item.image : 'url' in item ? item.url : 'avatar' in item ? item.avatar : '';
             const title = 'title' in item ? item.title : item.name;
@@ -5741,7 +6046,7 @@ const ListManager = ({
             const description = 'description' in item ? item.description : 'quote' in item ? item.quote : '';
 
             return (
-              <article key={item.id} className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-lg dark:hover:shadow-slate-900/50 transition-all duration-200">
+              <article key={item.id} className="group overflow-hidden border border-slate-200 bg-white shadow-none transition-colors duration-200 hover:bg-[#f8fafd] dark:border-slate-800 dark:bg-[#0d1320] dark:hover:bg-[#111827]">
                 {image && (
                   <div className="relative overflow-hidden h-44 bg-slate-100 dark:bg-slate-800">
                     <img src={image} alt={title} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -5761,13 +6066,13 @@ const ListManager = ({
                   <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                     <button
                       onClick={() => onEdit(item)}
-                      className="flex-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-bold transition-colors"
+                      className="flex-1 rounded-full bg-[#f1f3f4] px-3 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200 dark:bg-[#1f2937] dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => onDelete(item.id)}
-                      className="rounded-xl bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-3 py-2 transition-colors"
+                      className="rounded-full bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-3 py-2 transition-colors"
                       aria-label="Hapus"
                     >
                       <Trash2 size={15} />
@@ -5806,13 +6111,13 @@ const EditModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
       <form
         onSubmit={saveEditing}
-        className="w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto bg-white dark:bg-slate-900 sm:rounded-2xl rounded-t-2xl border-t sm:border border-slate-200 dark:border-slate-800 shadow-2xl"
+        className="w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto bg-white dark:bg-[#111827] sm:rounded-[28px] rounded-t-[28px] border-t sm:border border-slate-200 dark:border-slate-800 shadow-2xl"
       >
         {/* Modal Header */}
-        <div className="sticky top-0 z-10 bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+        <div className="sticky top-0 z-10 bg-white/95 dark:bg-[#111827]/95 backdrop-blur px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Form</p>
             <h2 className="text-xl font-black text-slate-900 dark:text-white">{titleMap[editing.type]}</h2>
@@ -5863,7 +6168,7 @@ const EditModal = ({
             </>
           )}
 
-          <button className="w-full rounded-xl bg-m-blue hover:bg-m-blue-dark text-white py-3 font-bold flex items-center justify-center gap-2 shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-[0.98]">
+          <button className={`${googlePrimaryButtonClass} w-full py-3`}>
             <Save size={16} />
             {saving ? 'Menyimpan...' : 'Simpan Data'}
           </button>
@@ -5888,13 +6193,13 @@ const ReviewEditModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
       <form
         onSubmit={onSave}
-        className="w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto bg-white dark:bg-slate-900 sm:rounded-2xl rounded-t-2xl border-t sm:border border-slate-200 dark:border-slate-800 shadow-2xl"
+        className="w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto bg-white dark:bg-[#111827] sm:rounded-[28px] rounded-t-[28px] border-t sm:border border-slate-200 dark:border-slate-800 shadow-2xl"
       >
         {/* Modal Header */}
-        <div className="sticky top-0 z-10 bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+        <div className="sticky top-0 z-10 bg-white/95 dark:bg-[#111827]/95 backdrop-blur px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Moderasi</p>
             <h2 className="text-xl font-black text-slate-900 dark:text-white">Edit Ulasan</h2>
@@ -5915,7 +6220,7 @@ const ReviewEditModal = ({
           <Field label="Isi Ulasan" rows={5} value={review.quote} onChange={(value) => updateReview({ quote: value })} />
           <ImageField label="Avatar" value={review.avatar} onChange={(value) => updateReview({ avatar: value })} />
 
-          <button className="w-full rounded-xl bg-m-blue hover:bg-m-blue-dark text-white py-3 font-bold flex items-center justify-center gap-2 shadow-sm shadow-m-blue/20 transition-all hover:shadow-md hover:shadow-m-blue/30 active:scale-[0.98]">
+          <button className={`${googlePrimaryButtonClass} w-full py-3`}>
             <Save size={16} />
             {saving ? 'Menyimpan...' : 'Simpan Ulasan'}
           </button>

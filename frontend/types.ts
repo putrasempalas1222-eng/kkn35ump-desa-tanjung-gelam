@@ -171,3 +171,13 @@ export interface WeeklyReport {
   entries: WeeklyReportEntry[];
   updatedAt?: number | object;
 }
+
+export interface DivisionNote {
+  id: string;
+  userId: string;
+  division: DivisionName;
+  title: string;
+  content: string;
+  date: string;
+  updatedAt?: number | object;
+}
