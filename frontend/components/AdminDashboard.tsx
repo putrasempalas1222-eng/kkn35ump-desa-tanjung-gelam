@@ -29,6 +29,7 @@ import {
   Printer,
   Save,
   Send,
+  Sparkles,
   Trash2,
   User,
   Users,
@@ -54,6 +55,7 @@ import {
   WeeklyReportEntry,
   CompetitionItem,
   CompetitionRegistration,
+  DivisionChatMessage,
 } from '../types';
 
 interface AdminDashboardProps {
@@ -63,7 +65,7 @@ interface AdminDashboardProps {
 type Tab = 'overview' | 'accounts' | 'content' | 'maintenance' | 'event' | 'team' | 'programs' | 'gallery' | 'testimonials' | 'reviews' | 'messages' | 'competitions' | 'competition-registrations';
 type EditableType = 'team' | 'programs' | 'gallery' | 'testimonials';
 type EditableItem = TeamMember | Program | GalleryImage | Testimonial;
-type DivisionDashboardView = 'home' | 'maps' | 'notes' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput' | 'treasurerIncome';
+type DivisionDashboardView = 'home' | 'maps' | 'notes' | 'chat' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput' | 'treasurerIncome';
 
 const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
 
@@ -100,13 +102,22 @@ const getDivisionAccessGroup = (value: DivisionName) => {
   return normalized;
 };
 
+const getChatSenderLabel = (name: string, division: DivisionName) =>
+  `${name || 'Divisi'} (D. ${getDivisionLabel(division)})`;
+
 const REPORT_LOGO_UMP = '/report-assets/logo-ump.png';
 const REPORT_LOGO_KKN = '/report-assets/logo-kkn.png';
+const LOGIN_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const getSessionActivityKey = (uid: string) => `kkn_session_last_active_${uid}`;
+const getOtpVerifiedKey = (uid: string) => `kkn_login_otp_verified_${uid}`;
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const A4_WIDTH_PX = 794;
 const A4_HEIGHT_PX = 1123;
 const PUTRA_AI_PROXY_ENDPOINT = '/putra-ai-proxy';
+const OLLAMA_ENDPOINT = 'http://localhost:11434';
+const OLLAMA_REPORT_MODEL = 'llama3.2:3b';
 
 const getPutraAiProxyUrl = () => {
   const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
@@ -142,6 +153,27 @@ const extractPutraAiText = (payload: unknown): string => {
     return contentParts.map((part) => part?.text).filter(Boolean).join('\n');
   }
 
+  return '';
+};
+
+const extractJsonObject = (text: string) => {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
+  const candidate = fenced || text;
+  const start = candidate.indexOf('{');
+  const end = candidate.lastIndexOf('}');
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('Respons AI tidak berisi JSON.');
+  }
+
+  return JSON.parse(candidate.slice(start, end + 1));
+};
+
+const readAiStringField = (source: any, keys: string[]) => {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
   return '';
 };
 
@@ -227,6 +259,184 @@ const Field = ({
     )}
   </label>
 );
+
+const SignaturePad = ({
+  value,
+  signerName,
+  onChange,
+}: {
+  value?: string;
+  signerName?: string;
+  onChange: (value: string) => void;
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const drawingRef = useRef(false);
+
+  const getPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  };
+
+  const startDrawing = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    drawingRef.current = true;
+    canvas.setPointerCapture(event.pointerId);
+    const point = getPoint(event);
+    context.beginPath();
+    context.moveTo(point.x, point.y);
+  };
+
+  const draw = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawingRef.current) return;
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    const point = getPoint(event);
+    context.lineWidth = 4;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.strokeStyle = '#111827';
+    context.lineTo(point.x, point.y);
+    context.stroke();
+  };
+
+  const finishDrawing = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !drawingRef.current) return;
+    drawingRef.current = false;
+    onChange(canvas.toDataURL('image/png'));
+  };
+
+  const clearSignature = () => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height);
+    onChange('');
+  };
+
+  const generateSignatureFromName = () => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    const name = (signerName || '').trim();
+    if (!canvas || !context || !name) return;
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#111827';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.font = '76px "Segoe Script", "Brush Script MT", cursive';
+    context.fillText(name, canvas.width / 2, canvas.height / 2 + 8, canvas.width - 80);
+    context.lineWidth = 2;
+    context.strokeStyle = 'rgba(17, 24, 39, 0.22)';
+    context.beginPath();
+    context.moveTo(canvas.width * 0.23, canvas.height * 0.72);
+    context.quadraticCurveTo(canvas.width * 0.5, canvas.height * 0.82, canvas.width * 0.77, canvas.height * 0.72);
+    context.stroke();
+    onChange(canvas.toDataURL('image/png'));
+  };
+
+  const downloadSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !value) return;
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = `tanda-tangan-${(signerName || 'digital').trim().replace(/\s+/g, '-').toLowerCase()}.png`;
+    link.click();
+  };
+
+  const uploadSignature = async (file?: File) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const dataUrl = await fileToImageDataUrl(file);
+    onChange(dataUrl);
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (!value) return;
+    const image = new Image();
+    image.onload = () => {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    };
+    image.src = value;
+  }, [value]);
+
+  return (
+    <div className="block md:col-span-2">
+      <div className="mb-1.5 flex items-center justify-between gap-3">
+        <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Tanda Tangan Digital
+        </span>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={generateSignatureFromName}
+            disabled={!signerName?.trim()}
+            className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300"
+          >
+            Buat dari Nama
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+          >
+            Upload Gambar
+          </button>
+          <button
+            type="button"
+            onClick={downloadSignature}
+            disabled={!value}
+            className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+          >
+            Simpan PNG
+          </button>
+          <button
+            type="button"
+            onClick={clearSignature}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+          >
+            Hapus
+          </button>
+        </div>
+      </div>
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            uploadSignature(event.target.files?.[0]);
+            event.target.value = '';
+          }}
+        />
+        <canvas
+          ref={canvasRef}
+          width={720}
+          height={220}
+          onPointerDown={startDrawing}
+          onPointerMove={draw}
+          onPointerUp={finishDrawing}
+          onPointerCancel={finishDrawing}
+          onPointerLeave={finishDrawing}
+          className="h-[150px] w-full touch-none rounded-xl bg-white"
+        />
+      </div>
+    </div>
+  );
+};
 
 const SelectField = <T extends string>({
   label,
@@ -589,70 +799,43 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [customDivisions, setCustomDivisions] = useState<typeof DIVISIONS>(() => {
-    if (typeof window === 'undefined') return [];
-
-    try {
-      const saved = JSON.parse(localStorage.getItem('custom_division_slots') || '[]');
-      if (!Array.isArray(saved)) return [];
-      return saved
-        .filter((item) => item && typeof item.value === 'string' && typeof item.label === 'string')
-        .map((item) => ({
-          value: item.value.trim().toLowerCase(),
-          label: item.label.trim(),
-          defaultName: typeof item.defaultName === 'string' ? item.defaultName : '',
-        }))
-        .filter((item) => item.value && item.label && !DIVISIONS.some((divisionItem) => divisionItem.value === item.value));
-    } catch {
-      return [];
-    }
-  });
-  const [hiddenDivisions, setHiddenDivisions] = useState<DivisionName[]>(() => {
-    if (typeof window === 'undefined') return [];
-
-    try {
-      const saved = JSON.parse(localStorage.getItem('hidden_division_slots') || '[]');
-      if (!Array.isArray(saved)) return [];
-      return saved.filter((value): value is DivisionName => typeof value === 'string' && value.trim());
-    } catch {
-      return [];
-    }
-  });
-  const [restoreDivision, setRestoreDivision] = useState<DivisionName>('ketua');
-  const [restoreDivisionInput, setRestoreDivisionInput] = useState('');
   const [editingProfileId, setEditingProfileId] = useState('');
   const [editingProfileName, setEditingProfileName] = useState('');
   const [editingProfileDivision, setEditingProfileDivision] = useState<DivisionName>('ketua');
   const [savingProfileId, setSavingProfileId] = useState('');
   const [deletingProfileId, setDeletingProfileId] = useState('');
   const [resettingProfileId, setResettingProfileId] = useState('');
-  const allDivisions = useMemo(() => [...DIVISIONS, ...customDivisions], [customDivisions]);
-  const visibleDivisions = useMemo(() => allDivisions.filter((item) => !hiddenDivisions.includes(item.value)), [allDivisions, hiddenDivisions]);
-  const restorableDivisions = useMemo(() => allDivisions.filter((item) => hiddenDivisions.includes(item.value)), [allDivisions, hiddenDivisions]);
+  const databaseDivisionSlots = useMemo(() => {
+    const divisionValues = Array.from(new Set(
+      profiles
+        .filter((profile) => profile.role === 'division' && profile.division)
+        .map((profile) => profile.division)
+    ));
+
+    return divisionValues
+      .filter((value) => !DIVISIONS.some((item) => item.value === value))
+      .map((value) => ({
+        value,
+        label: getDivisionLabel(value),
+        defaultName: '',
+      }));
+  }, [profiles]);
+  const allDivisions = useMemo(() => [...DIVISIONS, ...databaseDivisionSlots], [databaseDivisionSlots]);
+  const visibleDivisions = allDivisions;
+  const tableDivisions = useMemo(() => {
+    const divisionValues = Array.from(new Set(
+      profiles
+        .filter((profile) => profile.role === 'division' && profile.division)
+        .map((profile) => profile.division)
+    ));
+
+    return divisionValues
+      .map((value) => allDivisions.find((item) => item.value === value) || { value, label: getDivisionLabel(value), defaultName: '' })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [allDivisions, profiles]);
   const getProfilesByDivision = (value: DivisionName) => profiles.filter((profile) => profile.role === 'division' && profile.division === value);
   const selectedDivisionProfiles = getProfilesByDivision(division);
   const selectedDivisionHasAccount = selectedDivisionProfiles.length > 0;
-
-  useEffect(() => {
-    localStorage.setItem('hidden_division_slots', JSON.stringify(hiddenDivisions));
-
-    if (hiddenDivisions.includes(division)) {
-      const nextDivision = visibleDivisions[0]?.value || allDivisions[0]?.value || DIVISIONS[0].value;
-      const nextDivisionInfo = allDivisions.find((item) => item.value === nextDivision);
-      setDivision(nextDivision);
-      setName(nextDivisionInfo?.defaultName || '');
-    }
-  }, [hiddenDivisions, division, visibleDivisions, allDivisions]);
-
-  useEffect(() => {
-    localStorage.setItem('custom_division_slots', JSON.stringify(customDivisions));
-  }, [customDivisions]);
-
-  useEffect(() => {
-    if (restorableDivisions.length > 0 && !restorableDivisions.some((item) => item.value === restoreDivision)) {
-      setRestoreDivision(restorableDivisions[0].value);
-    }
-  }, [restorableDivisions, restoreDivision]);
 
   const createAccount = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -751,7 +934,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   };
 
   const deleteProfile = async (profile: UserProfile) => {
-    if (!window.confirm(`Hapus ${profile.name || profile.email} dari daftar divisi dan Firebase Auth? Akun ini tidak bisa login lagi.`)) return;
+    if (!window.confirm(`Hapus akun ${profile.name || profile.email} saja dari Firebase Auth dan database? Divisi lain tidak ikut terhapus.`)) return;
 
     setDeletingProfileId(profile.uid);
     setMessage('');
@@ -763,7 +946,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
         setEditingProfileName('');
         setEditingProfileDivision('ketua');
       }
-      setMessage('Akun berhasil dihapus dari daftar divisi dan Firebase Auth.');
+      setMessage('Akun yang dipilih berhasil dihapus dari Firebase Auth dan database.');
     } catch (error: any) {
       setMessage(error?.message || 'Akun belum berhasil dihapus dari Firebase Auth.');
     } finally {
@@ -799,18 +982,14 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
 
   const hideDivisionSlot = async (value: DivisionName) => {
     const selectedDivision = allDivisions.find((item) => item.value === value);
-    const divisionProfiles = profiles.filter((profile) => profile.division === value);
+    const divisionProfiles = getProfilesByDivision(value);
 
-    if (visibleDivisions.length <= 1) {
-      setMessage('Minimal harus ada satu divisi di daftar.');
+    if (divisionProfiles.length === 0) {
+      setMessage(`Divisi ${selectedDivision?.label || value} tidak punya akun di database.`);
       return;
     }
 
-    const confirmText = divisionProfiles.length
-      ? `Hapus divisi ${selectedDivision?.label || value} dan ${divisionProfiles.length} akun di dalamnya dari Firebase Auth? Slot ini bisa ditambahkan lagi nanti.`
-      : `Hapus slot divisi ${selectedDivision?.label || value} dari daftar? Slot ini bisa ditambahkan lagi nanti.`;
-
-    if (!window.confirm(confirmText)) return;
+    if (!window.confirm(`Hapus divisi ${selectedDivision?.label || value}? Semua ${divisionProfiles.length} akun di divisi ini akan ikut terhapus dari Firebase Auth dan database.`)) return;
 
     const deleteKey = `division:${value}`;
     setDeletingProfileId(deleteKey);
@@ -825,57 +1004,12 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
         setEditingProfileDivision('ketua');
       }
 
-      setHiddenDivisions((current) => (current.includes(value) ? current : [...current, value]));
-      setRestoreDivision(value);
-      setMessage(divisionProfiles.length
-        ? `Divisi ${selectedDivision?.label || value} dan akunnya sudah dihapus dari daftar dan Firebase Auth.`
-        : `Slot divisi ${selectedDivision?.label || value} sudah dihapus dari daftar.`);
+      setMessage(`Divisi ${selectedDivision?.label || value} dan semua akunnya sudah dihapus dari Firebase Auth dan database.`);
     } catch (error: any) {
       setMessage(error?.message || 'Divisi belum berhasil dihapus.');
     } finally {
       setDeletingProfileId('');
     }
-  };
-
-  const restoreDivisionSlot = () => {
-    const inputLabel = restoreDivisionInput.trim().replace(/\s+/g, ' ');
-    const normalizedInput = inputLabel.toLowerCase();
-    if (!normalizedInput) {
-      setMessage('Nama divisi tidak boleh kosong.');
-      return;
-    }
-
-    const selectedDivision = restorableDivisions.find((item) => (
-      item.label.toLowerCase() === normalizedInput ||
-      item.value.toLowerCase() === normalizedInput
-    ));
-
-    if (selectedDivision) {
-      setHiddenDivisions((current) => current.filter((value) => value !== selectedDivision.value));
-      setDivision(selectedDivision.value);
-      setName(selectedDivision.defaultName || '');
-      setRestoreDivisionInput('');
-      setMessage(`Slot divisi ${selectedDivision.label} sudah ditambahkan lagi.`);
-      return;
-    }
-
-    if (allDivisions.some((item) => item.value.toLowerCase() === normalizedInput || item.label.toLowerCase() === normalizedInput)) {
-      setMessage('Divisi itu sudah ada di daftar.');
-      return;
-    }
-
-    const newDivision = {
-      value: normalizedInput,
-      label: inputLabel.toUpperCase(),
-      defaultName: '',
-    };
-
-    setCustomDivisions((current) => [...current, newDivision]);
-    setHiddenDivisions((current) => current.filter((value) => value !== newDivision.value));
-    setDivision(newDivision.value);
-    setName('');
-    setRestoreDivisionInput('');
-    setMessage(`Divisi ${newDivision.label} berhasil dibuat. Silakan isi email dan password untuk akun divisi ini.`);
   };
 
   return (
@@ -889,7 +1023,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
               <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Setiap divisi hanya boleh memiliki satu akun aktif.</p>
             </div>
             <span className="w-fit border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-[#111827] dark:text-slate-300">
-              {profiles.filter((profile) => profile.role === 'division').length}/{visibleDivisions.length} akun aktif
+              {profiles.filter((profile) => profile.role === 'division').length} akun aktif di database
             </span>
           </div>
           <div className="border border-slate-200 bg-[#f8fafd] p-4 shadow-none dark:border-slate-800 dark:bg-[#111827]">
@@ -940,42 +1074,23 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
               </div>
             </div>
             <span className="w-fit border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-[#111827] dark:text-slate-300">
-              {visibleDivisions.length} slot
+              {tableDivisions.length} divisi di database
             </span>
           </div>
 
-          <div className="my-4 border border-[#d2e3fc] bg-[#f4f8ff] p-4 shadow-none dark:border-[#1a73e8]/30 dark:bg-[#0d1830]">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wider text-[#1a73e8] dark:text-[#8ab4f8]">Tambah Lagi Divisi</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Tulis nama divisi baru atau slot yang pernah dihapus.</p>
-              </div>
-            </div>
-            <div className="mt-3 grid sm:grid-cols-[1fr_auto] gap-2">
-              <input
-                value={restoreDivisionInput}
-                onChange={(event) => setRestoreDivisionInput(event.target.value)}
-                placeholder="Contoh: PERLENGKAPAN 3"
-                className={googleInputClass}
-              />
-              <button
-                type="button"
-                onClick={restoreDivisionSlot}
-                className={googlePrimaryButtonClass}
-              >
-                Buat Divisi
-              </button>
-            </div>
-          </div>
-
-          <div className="border border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+          <div className="mt-4 border border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
             <div className="hidden grid-cols-[220px_110px_minmax(0,1fr)_150px] gap-4 border-b border-slate-200 bg-[#f8fafd] px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-400 lg:grid">
               <span>Divisi</span>
               <span>Status</span>
               <span>Akun</span>
               <span className="text-right">Aksi</span>
             </div>
-            {visibleDivisions.map((item) => {
+            {tableDivisions.length === 0 && (
+              <div className="px-4 py-10 text-center">
+                <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Belum ada akun divisi di database.</p>
+              </div>
+            )}
+            {tableDivisions.map((item) => {
               const divisionProfiles = getProfilesByDivision(item.value);
               const hasDuplicateAccounts = divisionProfiles.length > 1;
               return (
@@ -1105,7 +1220,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
                       className={adminMiniDangerButtonClass}
                     >
                       <Trash2 size={12} />
-                      {deletingProfileId === `division:${item.value}` ? 'Menghapus...' : 'Hapus divisi'}
+                      {deletingProfileId === `division:${item.value}` ? 'Menghapus...' : 'Hapus divisi & akun'}
                     </button>
                   </div>
                 </div>
@@ -1135,6 +1250,7 @@ const createEmptyReport = (profile: UserProfile, week = '1', reportType: WeeklyR
   villageDate: '',
   signerName: profile.name,
   signerNim: '',
+  signatureDataUrl: '',
   entries: [
     { id: `entry_${Date.now()}_1`, dayNumber: '1', dateText: '', activityName: '', activityTime: '', evidenceUrl: '', responsibleName: '' },
   ],
@@ -2140,6 +2256,18 @@ const DivisionDashboard = ({
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [financialReports, setFinancialReports] = useState<WeeklyReport[]>([]);
   const [notes, setNotes] = useState<DivisionNote[]>([]);
+  const [divisionProfiles, setDivisionProfiles] = useState<UserProfile[]>([]);
+  const [publicChatMessages, setPublicChatMessages] = useState<DivisionChatMessage[]>([]);
+  const [privateChatMessages, setPrivateChatMessages] = useState<DivisionChatMessage[]>([]);
+  const [chatMode, setChatMode] = useState<'public' | 'private'>('public');
+  const [selectedPrivateUid, setSelectedPrivateUid] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const [chatToast, setChatToast] = useState<DivisionChatMessage | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
   const [liveLocations, setLiveLocations] = useState<LiveLocation[]>([]);
   const [isLocationTracking, setIsLocationTracking] = useState(false);
   const [isLocationPermissionRequesting, setIsLocationPermissionRequesting] = useState(false);
@@ -2244,6 +2372,8 @@ const DivisionDashboard = ({
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiChatSending, setAiChatSending] = useState(false);
+  const [aiReportGenerating, setAiReportGenerating] = useState(false);
+  const [aiReportMessage, setAiReportMessage] = useState('');
   const [aiChatHost, setAiChatHost] = useState<HTMLElement | null>(null);
   const [aiChatMessages, setAiChatMessages] = useState<{ role: 'assistant' | 'user'; text: string }[]>([
     {
@@ -2257,11 +2387,132 @@ const DivisionDashboard = ({
   const editingIsTreasurerOutput = isTreasurerOutputReport(editing);
   const editingIsTreasurerIncome = isTreasurerIncomeReport(editing);
   const editingIsTreasurerFinancial = isTreasurerFinancialReport(editing);
+  const normalizeNumberedEntries = (entries: WeeklyReportEntry[]) =>
+    entries.map((entry, index) => ({
+      ...entry,
+      dayNumber: String(index + 1),
+    }));
+  const shouldNormalizeReportEntries = (report: WeeklyReport) => report.reportType === 'weekly' || isMatrixReport(report);
+  const hasAiProtectedContent = (entry: WeeklyReportEntry) =>
+    [entry.dateText, entry.activityName, entry.activityTime, entry.evidenceUrl, entry.responsibleName]
+      .some((value) => Boolean(String(value || '').trim()));
+  const chatLastSeenKey = `division_chat_last_seen_${profile.uid}`;
+  const [chatLastSeenAt, setChatLastSeenAt] = useState(() => Number(localStorage.getItem(chatLastSeenKey) || 0));
+  const privateChatPartners = divisionProfiles.filter((item) => item.uid !== profile.uid);
+  const selectedPrivateProfile =
+    privateChatPartners.find((item) => item.uid === selectedPrivateUid) || privateChatPartners[0] || null;
+  const activePrivateUid = selectedPrivateUid || selectedPrivateProfile?.uid || '';
+  const activePrivateMessages = activePrivateUid
+    ? privateChatMessages.filter((message) => message.senderUid === activePrivateUid || message.recipientUid === activePrivateUid)
+    : [];
+  const visibleChatMessages = chatMode === 'public' ? publicChatMessages : activePrivateMessages;
+  const incomingChatMessages = [...publicChatMessages, ...privateChatMessages].filter((message) => message.senderUid !== profile.uid);
+  const unreadChatCount = incomingChatMessages.filter((message) => Number(message.createdAtMs || 0) > chatLastSeenAt).length;
+  const chatMessagesEndRef = useRef<HTMLDivElement | null>(null);
+  const notifiedChatIdsRef = useRef<Set<string>>(new Set());
+
+  const requestChatNotificationPermission = async () => {
+    if (typeof Notification === 'undefined') {
+      setChatError('Browser ini belum mendukung notifikasi.');
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission !== 'granted') {
+      setChatError(permission === 'denied' ? 'Izin notifikasi diblokir browser.' : 'Izin notifikasi belum aktif.');
+      return;
+    }
+
+    try {
+      await storage.registerDivisionPushToken(profile);
+      setChatError('');
+      setChatToast({
+        id: `notif_ready_${Date.now()}`,
+        chatType: 'public',
+        senderUid: profile.uid,
+        senderName: 'Sistem KKN 35',
+        senderEmail: '',
+        senderDivision: profile.division,
+        text: 'Notifikasi chat sudah aktif untuk akun ini.',
+        date: new Date().toLocaleString('id-ID'),
+        createdAtMs: Date.now(),
+      });
+    } catch (error: any) {
+      setChatError(error?.message || 'Token notifikasi belum berhasil disimpan.');
+    }
+  };
+
+  const showChatNotification = async (message: DivisionChatMessage) => {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+    const title = message.chatType === 'private'
+      ? `Chat pribadi dari ${message.senderName}`
+      : `Chat publik dari ${getDivisionLabel(message.senderDivision)}`;
+    const options: NotificationOptions = {
+      body: message.text,
+      icon: '/report-assets/logokknv1.png',
+      badge: '/report-assets/logokknv1.png',
+      tag: `division-chat-${message.id}`,
+      data: { url: `${window.location.origin}/#admin` },
+    };
+
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.ready.catch(() => null);
+      if (registration?.showNotification) {
+        registration.showNotification(title, options);
+        return;
+      }
+    }
+
+    new Notification(title, options);
+  };
 
   useEffect(() => storage.subscribeWeeklyReports(profile.uid, setReports), [profile.uid]);
   useEffect(() => storage.subscribeFinancialReports(setFinancialReports), []);
   useEffect(() => storage.subscribeDivisionNotes(profile.uid, setNotes), [profile.uid]);
+  useEffect(() => storage.subscribeUserProfiles((profiles) => setDivisionProfiles(profiles.filter((item) => item.role === 'division'))), []);
+  useEffect(() => storage.subscribePublicDivisionChat(setPublicChatMessages), []);
+  useEffect(() => storage.subscribePrivateDivisionChats(profile.uid, setPrivateChatMessages), [profile.uid]);
   useEffect(() => storage.subscribeLiveLocations(setLiveLocations), []);
+
+  useEffect(() => {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    storage.registerDivisionPushToken(profile).catch(() => undefined);
+  }, [profile.uid]);
+
+  useEffect(() => {
+    if (!selectedPrivateUid && privateChatPartners[0]?.uid) {
+      setSelectedPrivateUid(privateChatPartners[0].uid);
+    }
+  }, [privateChatPartners, selectedPrivateUid]);
+
+  useEffect(() => {
+    chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [visibleChatMessages.length, chatMode, activePrivateUid]);
+
+  useEffect(() => {
+    if (dashboardView !== 'chat') return;
+    const latest = Math.max(0, ...incomingChatMessages.map((message) => Number(message.createdAtMs || 0)));
+    if (!latest) return;
+    localStorage.setItem(chatLastSeenKey, String(latest));
+    setChatLastSeenAt(latest);
+  }, [dashboardView, incomingChatMessages.length, chatLastSeenKey]);
+
+  useEffect(() => {
+    incomingChatMessages.forEach((message) => {
+      if (notifiedChatIdsRef.current.has(message.id)) return;
+      notifiedChatIdsRef.current.add(message.id);
+      if (Number(message.createdAtMs || 0) <= chatLastSeenAt) return;
+      if (!(dashboardView === 'chat' && document.visibilityState === 'visible')) {
+        setChatToast(message);
+        window.setTimeout(() => {
+          setChatToast((current) => (current?.id === message.id ? null : current));
+        }, 6000);
+      }
+      showChatNotification(message).catch(() => undefined);
+    });
+  }, [incomingChatMessages, chatLastSeenAt, dashboardView]);
 
   useEffect(() => {
     return () => {
@@ -2314,6 +2565,7 @@ const DivisionDashboard = ({
       try {
         await storage.saveWeeklyReport({
           ...editing,
+          entries: shouldNormalizeReportEntries(editing) ? normalizeNumberedEntries(editing.entries) : editing.entries,
           reportType: isGroupMatrixReport(editing) ? 'matrix' : isIndividualMatrixReport(editing) ? 'individualMatrix' : isTreasurerOutputReport(editing) ? 'treasurerOutput' : isTreasurerIncomeReport(editing) ? 'treasurerIncome' : 'weekly',
         });
         setAutoSaveStatus('saved');
@@ -2338,6 +2590,233 @@ const DivisionDashboard = ({
       ...current,
       entries: [...current.entries, createEmptyReportEntry(current.entries.length + 1)],
     }));
+  };
+
+  const generateReportWithOllama = async (targetIndex?: number) => {
+    if (!editingIsMatrix && editing.reportType !== 'weekly') {
+      setAiReportMessage('Bantuan AI saat ini khusus laporan mingguan dan matriks.');
+      return;
+    }
+
+    const firstEmptyIndex = editing.entries.findIndex((entry) => !hasAiProtectedContent(entry));
+    const fallbackRowIndex = firstEmptyIndex === -1 ? Math.max(editing.entries.length - 1, 0) : firstEmptyIndex;
+
+    const rowNumberText =
+      typeof targetIndex === 'number'
+        ? String(targetIndex + 1)
+        : window.prompt(
+            `AI mau bantu isi/edit baris nomor berapa? (1-${editing.entries.length})`,
+            String(fallbackRowIndex + 1)
+          );
+    if (rowNumberText === null) return;
+
+    const rowIndex = Number(rowNumberText) - 1;
+    if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= editing.entries.length) {
+      setAiReportMessage(`Nomor baris tidak valid. Pilih angka 1 sampai ${editing.entries.length}.`);
+      return;
+    }
+
+    const targetHasContent = rowIndex < editing.entries.length && hasAiProtectedContent(editing.entries[rowIndex]);
+    if (targetHasContent && !window.confirm(`Baris nomor ${rowIndex + 1} sudah ada isi. AI akan memperbarui isi baris ini saja. Lanjutkan?`)) {
+      setAiReportMessage('Dibatalkan. Isi lama tetap aman.');
+      return;
+    }
+    const targetRowIndex = rowIndex;
+    const aiFocusDescription = editingIsMatrix
+      ? 'Nama Kegiatan dan Sasaran Kegiatan'
+      : 'Nama Kegiatan';
+
+    const instruction = window.prompt(
+      targetHasContent
+        ? `Tulis prompt/arahan untuk AI memperbaiki ${aiFocusDescription} pada baris ini. Contoh: rapikan jadi kegiatan komunikasi desa yang lebih formal.`
+        : `Tulis prompt/arahan untuk AI mengisi ${aiFocusDescription} pada baris ini. Contoh: kegiatan sosialisasi kesehatan di posko, sasaran ibu-ibu PKK.`,
+      ''
+    );
+    if (instruction === null) return;
+
+    setAiReportGenerating(true);
+    setAiReportMessage(
+      targetHasContent
+        ? `AI sedang memperbarui baris nomor ${targetRowIndex + 1}...`
+        : `AI sedang membantu isi baris nomor ${targetRowIndex + 1}...`
+    );
+
+    const selectedEntry = editing.entries[targetRowIndex];
+    const reportKind = editingIsGroupMatrix
+      ? 'matriks program kerja kelompok'
+      : editingIsIndividualMatrix
+        ? 'matriks program kerja individu'
+        : 'laporan mingguan/logbook KKN';
+    const selectedDateText =
+      editing.reportType === 'weekly' && !parseIndonesianDateToIso(selectedEntry.dateText)
+        ? ''
+        : selectedEntry.dateText;
+
+    const prompt = `
+Kamu membantu mahasiswa KKN menyusun ${reportKind} dalam bahasa Indonesia yang formal, singkat, dan realistis.
+Konteks:
+- Nama: ${editing.name || profile.name}
+- Divisi: ${getDivisionLabel(profile.division)}
+- Desa/Kelurahan: ${editing.desa || 'Tanjung Gelam'}
+- Kecamatan: ${editing.kecamatan || '-'}
+- Minggu ke: ${editing.week || '1'}
+- Baris yang diisi: nomor ${targetRowIndex + 1}${targetHasContent ? ' (edit baris ini setelah konfirmasi pengguna)' : ''}
+- Fokus AI: ${aiFocusDescription}
+- Arahan pengguna: ${instruction.trim() || 'Lengkapi baris ini secara realistis berdasarkan konteks KKN.'}
+
+Data baris target saat ini:
+${JSON.stringify({
+  no: editingIsMatrix || editing.reportType === 'weekly' ? String(targetRowIndex + 1) : selectedEntry.dayNumber,
+  tanggalAtauTujuan: selectedDateText,
+  namaKegiatan: selectedEntry.activityName,
+  waktuAtauSasaran: selectedEntry.activityTime,
+  buktiAtauJadwal: selectedEntry.evidenceUrl && selectedEntry.evidenceUrl.startsWith('data:image/') ? '[gambar sudah diupload]' : selectedEntry.evidenceUrl,
+  penanggungJawab: selectedEntry.responsibleName || '',
+}, null, 2)}
+
+Data baris lain sebagai konteks saja, jangan diubah:
+${JSON.stringify(editing.entries.map((entry, index) => ({
+  no: entry.dayNumber,
+  posisiBaris: index + 1,
+  tanggalAtauTujuan: editing.reportType === 'weekly' && !parseIndonesianDateToIso(entry.dateText) ? '' : entry.dateText,
+  namaKegiatan: entry.activityName,
+  waktuAtauSasaran: entry.activityTime,
+  buktiAtauJadwal: entry.evidenceUrl && entry.evidenceUrl.startsWith('data:image/') ? '[gambar sudah diupload]' : entry.evidenceUrl,
+  penanggungJawab: entry.responsibleName || '',
+})), null, 2)}
+
+Aturan:
+- Balas hanya JSON valid, tanpa markdown.
+- Isi hanya satu baris target nomor ${targetRowIndex + 1}; jangan membuat 4 baris atau semua tabel.
+- Jangan mengubah baris lain. Jika baris target sudah ada isi, rapikan/perbaiki hanya baris target sesuai arahan pengguna.
+- Untuk laporan mingguan, AI hanya boleh memperbaiki/mengisi field activityName sebagai Nama Kegiatan. Field dateText, activityTime, evidenceUrl, dan responsibleName harus dikembalikan sama seperti data target.
+- Untuk matriks, AI hanya boleh memperbaiki/mengisi field activityName sebagai Nama Kegiatan dan activityTime sebagai Sasaran Kegiatan. Field dateText sebagai Tujuan Kegiatan, evidenceUrl sebagai Jadwal Kegiatan, dan responsibleName harus dikembalikan sama seperti data target.
+- Buat respons lebih jelas dan cukup panjang: laporan mingguan activityName berisi 2-3 kalimat ringkas tentang kegiatan, proses, dan hasil awal.
+- Untuk matriks, activityName berisi nama kegiatan yang spesifik dan jelas; activityTime berisi sasaran kegiatan 2-3 kalimat yang menjelaskan siapa sasaran, kebutuhan, dan dampak yang diharapkan.
+- Jangan isi atau ubah field bukti foto/gambar/data:image.
+- Untuk laporan mingguan, entry berisi: dayNumber, dateText, activityName, activityTime.
+- Untuk matriks, entry berisi: dayNumber, activityName, dateText sebagai tujuan kegiatan, activityTime sebagai sasaran kegiatan, evidenceUrl sebagai jadwal kegiatan${editingIsGroupMatrix ? ', responsibleName sebagai penanggung jawab' : ''}.
+- Untuk laporan mingguan dan matriks, dayNumber wajib "${targetRowIndex + 1}".
+- Buat kalimat kegiatan spesifik untuk KKN, bukan terlalu umum.
+- Jika ada isi lama di baris target, boleh rapikan dan lengkapi.
+
+Format JSON wajib:
+${editingIsMatrix ? `{
+  "entry": {
+    "activityName": "nama kegiatan yang spesifik dan jelas berdasarkan prompt",
+    "activityTime": "sasaran kegiatan 2-3 kalimat yang menjelaskan siapa sasaran, kebutuhan, dan dampak yang diharapkan"
+  }
+}` : `{
+  "entry": {
+    "activityName": "2-3 kalimat ringkas tentang kegiatan, proses, dan hasil awal berdasarkan prompt"
+  }
+}`}
+
+Jangan gunakan nama field selain activityName${editingIsMatrix ? ' dan activityTime' : ''}.
+Jika perlu, activityName juga berarti Nama Kegiatan${editingIsMatrix ? ' dan activityTime berarti Sasaran Kegiatan' : ''}.
+Format lengkap yang juga diterima:
+{
+  "entry": {
+    "dayNumber": "${targetRowIndex + 1}",
+    "dateText": "...",
+    "activityName": "...",
+    "activityTime": "...",
+    "evidenceUrl": "...",
+    "responsibleName": "..."
+  }
+}
+`;
+
+    try {
+      const response = await fetch(`${OLLAMA_ENDPOINT}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_REPORT_MODEL,
+          prompt,
+          stream: false,
+          options: {
+            temperature: 0.35,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ollama memberi status ${response.status}.`);
+      }
+
+      const payload = await response.json();
+      const aiText = String(payload?.response || '').trim();
+      const parsed = extractJsonObject(aiText);
+      const generatedEntry = parsed?.entry || (Array.isArray(parsed?.entries) ? parsed.entries[0] : null);
+
+      if (!generatedEntry) {
+        throw new Error('AI belum menghasilkan baris laporan target.');
+      }
+
+      const generatedActivityName = readAiStringField(generatedEntry, [
+        'activityName',
+        'namaKegiatan',
+        'nama_kegiatan',
+        'kegiatan',
+        'judulKegiatan',
+        'judul_kegiatan',
+        'name',
+      ]);
+      const generatedActivityTime = readAiStringField(generatedEntry, [
+        'activityTime',
+        'sasaranKegiatan',
+        'sasaran_kegiatan',
+        'sasaran',
+        'targetKegiatan',
+        'target_kegiatan',
+        'target',
+      ]);
+
+      if (!generatedActivityName) {
+        throw new Error('AI belum mengirim Nama Kegiatan. Coba ulangi dengan prompt yang lebih spesifik.');
+      }
+      if (editingIsMatrix && !generatedActivityTime) {
+        throw new Error('AI belum mengirim Sasaran Kegiatan. Coba ulangi dengan prompt yang menyebut sasaran kegiatan.');
+      }
+
+      setEditing((current) => {
+        const nextEntries = current.entries.map((entry, index) => {
+          if (index !== targetRowIndex) {
+            return editingIsMatrix || current.reportType === 'weekly' ? { ...entry, dayNumber: String(index + 1) } : entry;
+          }
+
+          const nextEvidenceUrl =
+            entry.evidenceUrl && entry.evidenceUrl.startsWith('data:image/')
+              ? entry.evidenceUrl
+              : editingIsMatrix
+                ? entry.evidenceUrl
+                : entry.evidenceUrl;
+
+          return {
+            ...entry,
+            dayNumber: editingIsMatrix || current.reportType === 'weekly' ? String(index + 1) : String(generatedEntry.dayNumber || entry.dayNumber || index + 1),
+            dateText: current.reportType === 'weekly' && !parseIndonesianDateToIso(entry.dateText) ? '' : entry.dateText,
+            activityName: generatedActivityName,
+            activityTime: editingIsMatrix ? generatedActivityTime : entry.activityTime,
+            evidenceUrl: nextEvidenceUrl,
+            responsibleName: entry.responsibleName,
+          };
+        });
+
+        return {
+          ...current,
+          entries: nextEntries,
+          reportType: editingIsGroupMatrix ? 'matrix' : editingIsIndividualMatrix ? 'individualMatrix' : 'weekly',
+        };
+      });
+
+      setAiReportMessage(`AI berhasil ${targetHasContent ? 'memperbarui' : 'mengisi'} baris nomor ${targetRowIndex + 1}. Cek lagi sebelum disimpan.`);
+    } catch (error: any) {
+      setAiReportMessage(error?.message || 'AI belum berhasil mengisi laporan. Pastikan Ollama aktif di http://localhost:11434 dan model llama3.2:3b sudah tersedia.');
+    } finally {
+      setAiReportGenerating(false);
+    }
   };
 
   const createNewReport = (reportType: WeeklyReport['reportType'] = 'weekly') => {
@@ -2401,6 +2880,7 @@ const DivisionDashboard = ({
     setSaving(true);
     await storage.saveWeeklyReport({
       ...editing,
+      entries: shouldNormalizeReportEntries(editing) ? normalizeNumberedEntries(editing.entries) : editing.entries,
       reportType: editingIsGroupMatrix ? 'matrix' : editingIsIndividualMatrix ? 'individualMatrix' : editingIsTreasurerOutput ? 'treasurerOutput' : editingIsTreasurerIncome ? 'treasurerIncome' : 'weekly',
     });
     setAutoSaveStatus('saved');
@@ -2666,6 +3146,34 @@ const DivisionDashboard = ({
     }
   };
 
+  const sendDivisionChat = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const text = chatInput.trim();
+    if (!text || chatSending) return;
+    if (chatMode === 'private' && !selectedPrivateProfile) {
+      setChatError('Pilih divisi tujuan terlebih dahulu.');
+      return;
+    }
+
+    setChatSending(true);
+    setChatError('');
+    try {
+      await storage.sendDivisionChatMessage({
+        sender: profile,
+        text,
+        recipient: chatMode === 'private' ? selectedPrivateProfile : null,
+      });
+      setChatInput('');
+      const now = Date.now();
+      localStorage.setItem(chatLastSeenKey, String(now));
+      setChatLastSeenAt(now);
+    } catch (error: any) {
+      setChatError(error?.message || 'Pesan belum berhasil dikirim.');
+    } finally {
+      setChatSending(false);
+    }
+  };
+
   const currentLiveLocation = liveLocations.find((location) => location.uid === profile.uid);
   const sortedLiveLocations = [...liveLocations].sort((a, b) => {
     if (a.uid === profile.uid) return -1;
@@ -2698,6 +3206,7 @@ const DivisionDashboard = ({
     { label: 'Home', icon: Home, active: dashboardView === 'home', action: () => openDashboardView('home') },
     { label: 'Live Maps', icon: MapPinned, active: dashboardView === 'maps', action: () => openDashboardView('maps') },
     { label: 'Catatan', icon: StickyNote, active: dashboardView === 'notes', action: () => openDashboardView('notes') },
+    { label: unreadChatCount ? `Chat Divisi (${unreadChatCount})` : 'Chat Divisi', icon: MessageSquare, active: dashboardView === 'chat', action: () => openDashboardView('chat') },
     { label: 'Laporan Mingguan', icon: FileText, active: dashboardView === 'weekly', action: () => openReportPage('weekly') },
     { label: 'Matriks Individu', icon: ClipboardCheck, active: dashboardView === 'individualMatrix', action: () => openReportPage('individualMatrix') },
     ...(isSecretary ? [{ label: 'Matriks Kelompok', icon: ClipboardList, active: dashboardView === 'groupMatrix', action: () => openReportPage('groupMatrix') }] : []),
@@ -2884,6 +3393,55 @@ const DivisionDashboard = ({
   return (
     <div className="min-h-screen bg-[#f8fafd] text-slate-900 dark:bg-[#0b0f19] dark:text-white lg:flex lg:h-dvh lg:overflow-hidden">
       {mobileNavDrawer}
+      {chatToast && (
+        <button
+          type="button"
+          onClick={() => {
+            setChatMode(chatToast.chatType);
+            if (chatToast.chatType === 'private') {
+              setSelectedPrivateUid(chatToast.senderUid === profile.uid ? chatToast.recipientUid || '' : chatToast.senderUid);
+            }
+            setChatToast(null);
+            openDashboardView('chat');
+          }}
+          className="no-print fixed right-4 top-24 z-[95] w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-[#1a73e8]/20 bg-white p-4 text-left shadow-2xl shadow-slate-950/20 transition-transform hover:-translate-y-0.5 dark:border-[#8ab4f8]/20 dark:bg-[#111827]"
+        >
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-m-blue text-white">
+              <MessageSquare size={19} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-black uppercase tracking-wider text-[#1a73e8] dark:text-[#8ab4f8]">
+                Pesan Baru
+              </span>
+              <span className="mt-1 block truncate text-sm font-black text-slate-900 dark:text-white">
+                {getChatSenderLabel(chatToast.senderName, chatToast.senderDivision)}
+              </span>
+              <span className="mt-1 block line-clamp-2 text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+                {chatToast.text}
+              </span>
+            </span>
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(event) => {
+                event.stopPropagation();
+                setChatToast(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setChatToast(null);
+                }
+              }}
+              className="-mr-1 -mt-1 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
+            >
+              <X size={16} />
+            </span>
+          </div>
+        </button>
+      )}
       <aside className="no-print hidden h-dvh w-72 shrink-0 flex-col justify-between overflow-y-auto overscroll-contain border-r border-slate-200/80 bg-white p-5 dark:border-slate-800/80 dark:bg-[#111827] lg:flex">
         <div>
           <div className="mb-6 px-1">
@@ -3077,6 +3635,7 @@ const DivisionDashboard = ({
               {[
                 { title: 'Live Maps', desc: `${liveLocations.length} divisi sedang berbagi lokasi`, action: () => openDashboardView('maps', 'live-maps'), tone: 'emerald' },
                 { title: 'Catatan Divisi', desc: `${notes.length} catatan tersimpan untuk divisi kamu`, action: () => openDashboardView('notes'), tone: 'amber' },
+                { title: 'Chat Divisi', desc: unreadChatCount ? `${unreadChatCount} pesan baru dari divisi` : 'Chat publik dan pribadi semua divisi', action: () => openDashboardView('chat'), tone: 'blue' },
                 { title: 'Laporan Mingguan', desc: 'Isi kegiatan mingguan dan bukti foto', action: () => openReportPage('weekly'), tone: 'blue' },
                 { title: 'Matriks Individu', desc: 'Program kerja individu semua divisi', action: () => openReportPage('individualMatrix'), tone: 'slate' },
                 ...(isSecretary ? [{ title: 'Matriks Kelompok', desc: 'Khusus sekretaris untuk program kerja kelompok', action: () => openReportPage('groupMatrix'), tone: 'emerald' }] : []),
@@ -3219,6 +3778,176 @@ const DivisionDashboard = ({
             </div>
           </div>
         </section>
+        )}
+
+        {dashboardView === 'chat' && (
+          <section className="order-1 flex min-h-[calc(100dvh-89px)] flex-col overflow-hidden border border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-[#0d1320] lg:col-span-2 lg:h-dvh lg:min-h-0">
+            <div className="shrink-0 flex flex-col gap-4 border-b border-slate-200 bg-[#f8fafd] px-4 py-5 dark:border-slate-800 dark:bg-[#111827] md:flex-row md:items-start md:justify-between md:px-6">
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Chat Divisi</p>
+                <h2 className="mt-1 text-2xl font-black text-slate-900 dark:text-white">Obrolan Semua Divisi</h2>
+                <p className="mt-2 max-w-2xl text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+                  Pakai chat publik untuk koordinasi bersama, atau chat pribadi untuk menghubungi divisi tertentu.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={requestChatNotificationPermission}
+                  disabled={notificationPermission === 'granted'}
+                  className="rounded-full border border-[#1a73e8]/20 bg-white px-4 py-2 text-xs font-black text-[#1a73e8] transition-colors hover:bg-[#e8f0fe] disabled:cursor-not-allowed disabled:border-emerald-200 disabled:bg-emerald-50 disabled:text-emerald-700 dark:border-[#8ab4f8]/20 dark:bg-slate-900 dark:text-[#8ab4f8] dark:hover:bg-[#1a73e8]/15 dark:disabled:border-emerald-900/50 dark:disabled:bg-emerald-950/30 dark:disabled:text-emerald-300"
+                >
+                  {notificationPermission === 'granted'
+                    ? 'Notifikasi Aktif'
+                    : notificationPermission === 'denied'
+                      ? 'Notifikasi Diblokir'
+                      : 'Aktifkan Notifikasi'}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid min-h-0 flex-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+              <aside className="flex min-h-0 flex-col border-b border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-[#0d1320] lg:border-b-0 lg:border-r">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setChatMode('public')}
+                    className={`rounded-full px-4 py-2.5 text-sm font-black transition-colors ${chatMode === 'public' ? 'bg-m-blue text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}`}
+                  >
+                    Publik
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatMode('private')}
+                    className={`rounded-full px-4 py-2.5 text-sm font-black transition-colors ${chatMode === 'private' ? 'bg-m-blue text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}`}
+                  >
+                    Pribadi
+                  </button>
+                </div>
+
+                {chatMode === 'public' ? (
+                  <div className="mt-4 rounded-2xl border border-[#1a73e8]/15 bg-[#e8f0fe] p-4 text-sm font-semibold leading-relaxed text-[#1a73e8] dark:border-[#8ab4f8]/20 dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]">
+                    Semua divisi bisa membaca dan membalas pesan di ruang publik ini.
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-2">
+                    <p className="px-1 text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Pilih Divisi</p>
+                    <div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain pr-1 lg:max-h-[calc(100dvh-250px)]">
+                      {privateChatPartners.length === 0 && (
+                        <p className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-center text-sm font-bold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          Belum ada akun divisi lain.
+                        </p>
+                      )}
+                      {privateChatPartners.map((partner) => {
+                        const latest = privateChatMessages
+                          .filter((message) => message.senderUid === partner.uid || message.recipientUid === partner.uid)
+                          .slice(-1)[0];
+                        return (
+                          <button
+                            key={partner.uid}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPrivateUid(partner.uid);
+                              setChatMode('private');
+                            }}
+                            className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${activePrivateUid === partner.uid ? 'border-m-blue bg-[#e8f0fe] text-[#1a73e8] dark:border-[#8ab4f8] dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]' : 'border-slate-200 bg-white text-slate-700 hover:bg-[#f8fafd] dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200 dark:hover:bg-slate-800'}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-m-blue to-blue-500 text-sm font-black text-white">
+                                {partner.name ? partner.name[0].toUpperCase() : 'D'}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-black">{partner.name || getDivisionLabel(partner.division)}</span>
+                                <span className="block truncate text-xs font-semibold opacity-70">
+                                  D. {getDivisionLabel(partner.division)}{latest?.text ? ` · ${latest.text}` : ''}
+                                </span>
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </aside>
+
+              <div className="flex min-h-[520px] min-w-0 flex-col bg-[#f8fafd] dark:bg-[#090d16] lg:min-h-0">
+                <div className="shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-[#0d1320]">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      {chatMode === 'public' ? 'Ruang Publik' : 'Chat Pribadi'}
+                    </p>
+                    <h3 className="truncate text-lg font-black text-slate-900 dark:text-white">
+                      {chatMode === 'public' ? 'Semua Divisi' : selectedPrivateProfile ? getDivisionLabel(selectedPrivateProfile.division) : 'Pilih divisi'}
+                    </h3>
+                  </div>
+                  {unreadChatCount > 0 && (
+                    <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-600 dark:bg-red-950/30 dark:text-red-300">
+                      {unreadChatCount} baru
+                    </span>
+                  )}
+                </div>
+
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-5">
+                  {visibleChatMessages.length === 0 && (
+                    <div className="flex h-full min-h-[260px] items-center justify-center">
+                      <div className="max-w-sm text-center">
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]">
+                          <MessageSquare size={26} />
+                        </div>
+                        <p className="mt-4 font-black text-slate-900 dark:text-white">Belum ada pesan</p>
+                        <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+                          Mulai koordinasi dengan divisi lain dari sini.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {visibleChatMessages.map((message) => {
+                    const mine = message.senderUid === profile.uid;
+                    return (
+                      <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[82%] rounded-2xl px-4 py-3 shadow-sm ${mine ? 'bg-m-blue text-white' : 'border border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-100'}`}>
+                          <p className={`mb-1 text-[11px] font-black uppercase tracking-wider ${mine ? 'text-white/80' : 'text-[#1a73e8] dark:text-[#8ab4f8]'}`}>
+                            {getChatSenderLabel(message.senderName, message.senderDivision)}
+                          </p>
+                          <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-relaxed">{message.text}</p>
+                          <p className={`mt-2 text-[10px] font-bold ${mine ? 'text-white/70' : 'text-slate-400 dark:text-slate-500'}`}>
+                            {message.date}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={chatMessagesEndRef} />
+                </div>
+
+                {chatError && (
+                  <p className="mx-4 mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-600 dark:bg-red-950/30 dark:text-red-300">
+                    {chatError}
+                  </p>
+                )}
+
+                <form onSubmit={sendDivisionChat} className="shrink-0 flex items-end gap-3 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-[#0d1320]">
+                  <textarea
+                    value={chatInput}
+                    onChange={(event) => setChatInput(event.target.value.slice(0, 800))}
+                    rows={2}
+                    placeholder={chatMode === 'public' ? 'Tulis pesan untuk semua divisi...' : selectedPrivateProfile ? `Tulis pesan untuk ${getDivisionLabel(selectedPrivateProfile.division)}...` : 'Pilih divisi tujuan dulu...'}
+                    disabled={chatSending || (chatMode === 'private' && !selectedPrivateProfile)}
+                    className="min-h-[48px] flex-1 resize-none rounded-2xl border border-slate-200 bg-[#f8fafd] px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-m-blue focus:bg-white focus:ring-4 focus:ring-m-blue/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-[#111827] dark:text-white dark:focus:bg-slate-900"
+                  />
+                  <button
+                    type="submit"
+                    disabled={chatSending || !chatInput.trim() || (chatMode === 'private' && !selectedPrivateProfile)}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-m-blue text-white shadow-sm shadow-m-blue/20 transition-colors hover:bg-m-blue-dark disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Kirim pesan"
+                  >
+                    <Send size={18} />
+                  </button>
+                </form>
+              </div>
+            </div>
+          </section>
         )}
 
         {dashboardView === 'notes' && (
@@ -3378,11 +4107,27 @@ const DivisionDashboard = ({
                 <Plus size={16} />
                 {reportPageTitle} Baru
               </button>
+              {(editing.reportType === 'weekly' || editingIsMatrix) && (
+                <button
+                  type="button"
+                  onClick={() => generateReportWithOllama()}
+                  disabled={aiReportGenerating}
+                  className="min-h-[44px] rounded-full border border-violet-200 bg-violet-50 px-5 py-2.5 text-sm font-bold text-violet-700 transition-all duration-200 hover:bg-violet-100 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/50 inline-flex items-center justify-center gap-2"
+                >
+                  <Sparkles size={16} />
+                  {aiReportGenerating ? 'AI Mengisi...' : 'Bantu Isi AI'}
+                </button>
+              )}
               <button className="min-h-[44px] rounded-full bg-m-blue hover:bg-m-blue-dark text-white px-6 py-2.5 text-sm font-bold inline-flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 shadow-sm shadow-m-blue/15">
                 <Save size={18} />
                 {saving ? 'Menyimpan...' : 'Simpan Sekarang'}
               </button>
             </div>
+            {aiReportMessage && (
+              <p className="rounded-xl border border-slate-200 bg-[#f8fafd] px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200">
+                {aiReportMessage}
+              </p>
+            )}
           </div>
 
           <div className="grid md:grid-cols-2 gap-5">
@@ -3398,6 +4143,13 @@ const DivisionDashboard = ({
                 <Field label={editingIsGroupMatrix ? 'Nama Ketua Kelompok' : 'Nama Mahasiswa'} value={editing.signerName} onChange={(value) => setEditing({ ...editing, signerName: value })} />
                 <Field label={editingIsGroupMatrix ? 'NIM Ketua Kelompok' : 'NIM Mahasiswa'} value={editing.signerNim} onChange={(value) => setEditing({ ...editing, signerNim: value })} />
               </>
+            )}
+            {(editing.reportType === 'weekly' || editingIsMatrix) && (
+              <SignaturePad
+                value={editing.signatureDataUrl || ''}
+                signerName={editing.signerName || editing.name}
+                onChange={(value) => setEditing({ ...editing, signatureDataUrl: value })}
+              />
             )}
             <div className="block">
               <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 transition-colors">
@@ -3443,7 +4195,7 @@ const DivisionDashboard = ({
               </button>
             </div>
             <div className="space-y-4">
-              {editing.entries.map((entry) => (
+              {editing.entries.map((entry, index) => (
                 editingIsTreasurerFinancial ? (
                   <div key={entry.id} className="relative space-y-5 border border-slate-200 bg-[#f8fafd] p-4 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:hover:bg-[#0d1320]">
                     <div className="grid gap-5 md:grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)]">
@@ -3459,8 +4211,26 @@ const DivisionDashboard = ({
                   </div>
                 ) : editingIsMatrix ? (
                   <div key={entry.id} className="relative space-y-5 border border-slate-200 bg-[#f8fafd] p-4 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:hover:bg-[#0d1320]">
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => generateReportWithOllama(index)}
+                        disabled={aiReportGenerating}
+                        className="inline-flex min-h-[36px] items-center justify-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-black text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
+                      >
+                        <Sparkles size={13} />
+                        {hasAiProtectedContent(entry) ? `AI Edit Baris ${index + 1}` : `AI Isi Baris ${index + 1}`}
+                      </button>
+                    </div>
                     <div className="grid gap-5 md:grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)]">
-                      <Field label="No" value={entry.dayNumber} onChange={(value) => updateEntry(entry.id, { dayNumber: value })} />
+                      <div className="block">
+                        <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          No
+                        </span>
+                        <div className={`${googleInputClass} flex items-center bg-slate-100 font-black text-slate-500 dark:bg-slate-900/70 dark:text-slate-400`}>
+                          {index + 1}
+                        </div>
+                      </div>
                       <Field label="Nama Kegiatan" rows={3} value={entry.activityName} onChange={(value) => updateEntry(entry.id, { activityName: value })} />
                       <Field label="Tujuan Kegiatan" rows={3} value={entry.dateText} onChange={(value) => updateEntry(entry.id, { dateText: value })} />
                     </div>
@@ -3474,7 +4244,25 @@ const DivisionDashboard = ({
                   </div>
                 ) : (
                   <div key={entry.id} className="relative grid gap-5 border border-slate-200 bg-[#f8fafd] p-4 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:hover:bg-[#0d1320] md:grid-cols-[100px_1fr_1fr]">
-                    <Field label="Hari Ke" value={entry.dayNumber} onChange={(value) => updateEntry(entry.id, { dayNumber: value })} />
+                    <div className="flex justify-end md:col-span-3">
+                      <button
+                        type="button"
+                        onClick={() => generateReportWithOllama(index)}
+                        disabled={aiReportGenerating}
+                        className="inline-flex min-h-[36px] items-center justify-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-black text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
+                      >
+                        <Sparkles size={13} />
+                        {hasAiProtectedContent(entry) ? `AI Edit Baris ${index + 1}` : `AI Isi Baris ${index + 1}`}
+                      </button>
+                    </div>
+                    <div className="block">
+                      <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Hari Ke
+                      </span>
+                      <div className={`${googleInputClass} flex items-center bg-slate-100 font-black text-slate-500 dark:bg-slate-900/70 dark:text-slate-400`}>
+                        {index + 1}
+                      </div>
+                    </div>
                     <div className="block">
                       <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 transition-colors">
                         Hari, Tanggal, Bulan, Tahun
@@ -3496,7 +4284,7 @@ const DivisionDashboard = ({
                         }}
                         className={`${googleInputClass} dark:[color-scheme:dark]`}
                       />
-                      {entry.dateText && (
+                      {entry.dateText && parseIndonesianDateToIso(entry.dateText) && (
                         <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium italic">
                           {entry.dateText}
                         </p>
@@ -4060,15 +4848,17 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
                     <tbody>
                       {pageEntries.map((entry, index) => (
                         <tr key={entry.id} className="align-top">
-                          <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[32mm]' : 'h-[22mm]'}`}>{entry.dayNumber}.</td>
+                          <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[38mm]' : 'h-[30mm]'}`}>{entry.dayNumber}.</td>
                           <td className="border border-black px-1 py-2 whitespace-pre-wrap">{entry.dateText}</td>
                           <td className="border border-black px-1 py-2 whitespace-pre-wrap">
                             {entry.activityName}
                             {entry.activityTime && <><br /><br />{entry.activityTime}</>}
                           </td>
-                          <td className="border border-black px-1 py-2">
+                          <td className="border border-black p-1 text-center align-middle">
                             {(/^https?:\/\/.+\.(png|jpg|jpeg|webp)$/i.test(entry.evidenceUrl) || /^data:image\//i.test(entry.evidenceUrl)) ? (
-                              <img src={entry.evidenceUrl} alt="Bukti kegiatan" className={`${index === 0 ? 'max-h-[26mm]' : 'max-h-[16mm]'} w-full object-contain`} />
+                              <div className="mx-auto h-[34mm] w-[34mm] overflow-hidden bg-white">
+                                <img src={entry.evidenceUrl} alt="Bukti kegiatan" className="h-full w-full object-cover" />
+                              </div>
                             ) : (
                               <span className="break-all">{entry.evidenceUrl}</span>
                             )}
@@ -4081,8 +4871,8 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
 
                 {pageIndex === pages.length - 1 && (
                   customTableTemplate ? (
-                    <div className="mt-[10mm] grid grid-cols-3 text-[9px] text-black">
-                      <div>
+                    <div className="mt-[10mm] grid grid-cols-[1fr_0.8fr_1fr] items-start gap-[8mm] text-[9px] leading-tight text-black">
+                      <div className="text-left">
                         <p>Dosen Pembimbing Lapangan</p>
                         <div className="h-[18mm]"></div>
                         <p>(Nama Lengkap dan gelar)</p>
@@ -4091,10 +4881,14 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
                       <div className="text-center">
                         <p>Mengetahui,</p>
                       </div>
-                      <div>
+                      <div className="ml-auto w-[54mm] text-center">
                         <p>{report.desa || 'Palembang'}, &nbsp;&nbsp; {report.villageDate || 'Juli'} 2026</p>
-                        <p className="mt-[6mm]">{groupMatrixTemplate ? 'Ketua Kelompok' : 'Mahasiswa'}</p>
-                        <div className="h-[12mm]"></div>
+                        <p className="mt-[4mm]">{groupMatrixTemplate ? 'Ketua Kelompok' : 'Mahasiswa'}</p>
+                        <div className="mx-auto flex h-[16mm] w-[44mm] items-center justify-center">
+                          {report.signatureDataUrl && (
+                            <img src={report.signatureDataUrl} alt="Tanda tangan" className="max-h-[15mm] max-w-[42mm] object-contain" />
+                          )}
+                        </div>
                         <p>({report.signerName || 'Nama Lengkap'})</p>
                         <p>{report.signerNim || (groupMatrixTemplate ? 'NIM' : 'NIM.')}</p>
                       </div>
@@ -4102,7 +4896,11 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
                   ) : (
                     <div className="mt-[8mm] ml-auto w-[60mm] text-center text-[9px]">
                       <p>{report.desa || 'Desa/Kelurahan'}, {report.villageDate || '................'} 2026</p>
-                      <div className="h-[18mm]"></div>
+                      <div className="flex h-[18mm] items-center justify-center">
+                        {report.signatureDataUrl && (
+                          <img src={report.signatureDataUrl} alt="Tanda tangan" className="max-h-[16mm] max-w-[45mm] object-contain" />
+                        )}
+                      </div>
                       <p>({report.signerName || 'Nama'} &nbsp; {report.signerNim || 'NIM'})</p>
                     </div>
                   )
@@ -4412,15 +5210,17 @@ const ReportTemplate = ({
                   <tbody>
                     {pageEntries.map((entry, index) => (
                       <tr key={entry.id} className="align-top">
-                        <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[32mm]' : 'h-[22mm]'}`}>{entry.dayNumber}.</td>
+                        <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[38mm]' : 'h-[30mm]'}`}>{entry.dayNumber}.</td>
                         <td className="border border-black px-1 py-2 whitespace-pre-wrap">{entry.dateText}</td>
                         <td className="border border-black px-1 py-2 whitespace-pre-wrap">
                           {entry.activityName}
                           {entry.activityTime && <><br /><br />{entry.activityTime}</>}
                         </td>
-                        <td className="border border-black px-1 py-2">
+                        <td className="border border-black p-1 text-center align-middle">
                           {(/^https?:\/\/.+\.(png|jpg|jpeg|webp)$/i.test(entry.evidenceUrl) || /^data:image\//i.test(entry.evidenceUrl)) ? (
-                            <img src={entry.evidenceUrl} alt="Bukti kegiatan" className={`${index === 0 ? 'max-h-[26mm]' : 'max-h-[16mm]'} w-full object-contain`} />
+                            <div className="mx-auto h-[34mm] w-[34mm] overflow-hidden bg-white">
+                              <img src={entry.evidenceUrl} alt="Bukti kegiatan" className="h-full w-full object-cover" />
+                            </div>
                           ) : (
                             <span className="break-all">{entry.evidenceUrl}</span>
                           )}
@@ -4433,8 +5233,8 @@ const ReportTemplate = ({
 
               {pageIndex === pages.length - 1 && (
                 customTableTemplate ? (
-                  <div className="mt-[10mm] grid grid-cols-3 text-[9px] text-black">
-                    <div>
+                  <div className="mt-[10mm] grid grid-cols-[1fr_0.8fr_1fr] items-start gap-[8mm] text-[9px] leading-tight text-black">
+                    <div className="text-left">
                       <p>Dosen Pembimbing Lapangan</p>
                       <div className="h-[18mm]"></div>
                       <p>(Nama Lengkap dan gelar)</p>
@@ -4443,10 +5243,14 @@ const ReportTemplate = ({
                     <div className="text-center">
                       <p>Mengetahui,</p>
                     </div>
-                    <div>
+                    <div className="ml-auto w-[54mm] text-center">
                       <p>{report.desa || 'Palembang'}, &nbsp;&nbsp; {report.villageDate || 'Juli'} 2026</p>
-                      <p className="mt-[6mm]">{groupMatrixTemplate ? 'Ketua Kelompok' : 'Mahasiswa'}</p>
-                      <div className="h-[12mm]"></div>
+                      <p className="mt-[4mm]">{groupMatrixTemplate ? 'Ketua Kelompok' : 'Mahasiswa'}</p>
+                      <div className="mx-auto flex h-[16mm] w-[44mm] items-center justify-center">
+                        {report.signatureDataUrl && (
+                          <img src={report.signatureDataUrl} alt="Tanda tangan" className="max-h-[15mm] max-w-[42mm] object-contain" />
+                        )}
+                      </div>
                       <p>({report.signerName || 'Nama Lengkap'})</p>
                       <p>{report.signerNim || (groupMatrixTemplate ? 'NIM' : 'NIM.')}</p>
                     </div>
@@ -4454,7 +5258,11 @@ const ReportTemplate = ({
                 ) : (
                   <div className="mt-[8mm] ml-auto w-[60mm] text-center text-[9px]">
                     <p>{report.desa || 'Desa/Kelurahan'}, {report.villageDate || '................'} 2026</p>
-                    <div className="h-[18mm]"></div>
+                    <div className="flex h-[18mm] items-center justify-center">
+                      {report.signatureDataUrl && (
+                        <img src={report.signatureDataUrl} alt="Tanda tangan" className="max-h-[16mm] max-w-[45mm] object-contain" />
+                      )}
+                    </div>
                     <p>({report.signerName || 'Nama'} &nbsp; {report.signerNim || 'NIM'})</p>
                   </div>
                 )
@@ -4486,6 +5294,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [loginError, setLoginError] = useState('');
   const [resetMessage, setResetMessage] = useState('');
   const [resetSending, setResetSending] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpMessage, setOtpMessage] = useState('');
+  const [otpMessageType, setOtpMessageType] = useState<'info' | 'success'>('info');
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpVerifiedUid, setOtpVerifiedUid] = useState('');
+  const [otpSendStartedAt, setOtpSendStartedAt] = useState(0);
+  const [otpResendAvailableAt, setOtpResendAvailableAt] = useState(0);
+  const [otpCooldownNow, setOtpCooldownNow] = useState(Date.now());
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [saving, setSaving] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -4510,6 +5328,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     const unsubscribeAuth = storage.onAuthChange((user) => {
       setAdminUser(user?.email || null);
       setCurrentUid(user?.uid || '');
+      if (!user) {
+        setOtpVerifiedUid('');
+        setOtpCode('');
+        setOtpMessage('');
+        setOtpEmail('');
+        setOtpResendAvailableAt(0);
+      }
       setCheckingAuth(false);
     });
 
@@ -4542,12 +5367,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     return storage.subscribeUserProfile(currentUid, setCurrentProfile);
   }, [currentUid]);
 
+  useEffect(() => {
+    if (!currentUid) return;
+
+    const otpVerifiedAt = Number(localStorage.getItem(getOtpVerifiedKey(currentUid)) || 0);
+    setOtpVerifiedUid(otpVerifiedAt && Date.now() - otpVerifiedAt < LOGIN_SESSION_TIMEOUT_MS ? currentUid : '');
+  }, [currentUid, currentProfile?.role]);
+
+  useEffect(() => {
+    if (!currentUid) return;
+
+    const activityKey = getSessionActivityKey(currentUid);
+    const expireSession = () => {
+      localStorage.removeItem(activityKey);
+      localStorage.removeItem(getOtpVerifiedKey(currentUid));
+      setOtpVerifiedUid('');
+      setOtpCode('');
+      setOtpMessage('');
+      setOtpResendAvailableAt(0);
+      storage.logout();
+    };
+    const lastActivity = Number(localStorage.getItem(activityKey) || 0);
+    if (lastActivity && Date.now() - lastActivity > LOGIN_SESSION_TIMEOUT_MS) {
+      expireSession();
+      return;
+    }
+
+    const touchSession = () => localStorage.setItem(activityKey, String(Date.now()));
+    touchSession();
+
+    const events: Array<keyof WindowEventMap> = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+    events.forEach((eventName) => window.addEventListener(eventName, touchSession, { passive: true }));
+    const timer = window.setInterval(() => {
+      const last = Number(localStorage.getItem(activityKey) || 0);
+      if (last && Date.now() - last > LOGIN_SESSION_TIMEOUT_MS) {
+        expireSession();
+      }
+    }, 60 * 1000);
+
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, touchSession));
+      window.clearInterval(timer);
+    };
+  }, [currentUid]);
+
   const unreadMessages = messages.filter((message) => message.status === 'unread').length;
   const pendingReviews = reviewSubmissions.length;
   const isAdmin = adminUser === ADMIN_EMAIL || currentProfile?.role === 'admin';
   const currentDivisionAccessGroup = currentProfile ? getDivisionAccessGroup(currentProfile.division) : '';
   const isPddOperator = currentDivisionAccessGroup === 'pdd';
   const isAcaraOperator = currentDivisionAccessGroup === 'acara';
+  const requiresDivisionOtp = currentProfile?.role === 'division' && otpVerifiedUid !== currentUid;
   const allowedTabs: Tab[] = isAdmin
     ? ['overview', 'accounts', 'content', 'maintenance', 'event', 'team', 'programs', 'gallery', 'testimonials', 'reviews', 'messages', 'competitions', 'competition-registrations']
     : isPddOperator
@@ -4575,14 +5445,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     }
   }, [activeTab, allowedTabs, canUseAdminPanel]);
 
+  useEffect(() => {
+    if (!otpSending || !otpSendStartedAt) return;
+
+    const timer = window.setTimeout(() => {
+      setOtpMessageType('info');
+      setOtpMessage('OTP sedang dikirim lewat Gmail. Biasanya 3-10 detik; kalau belum masuk, cek Inbox/Spam atau tekan Kirim ulang OTP.');
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [otpSending, otpSendStartedAt]);
+
+  useEffect(() => {
+    if (!otpResendAvailableAt) return;
+
+    const timer = window.setInterval(() => setOtpCooldownNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [otpResendAvailableAt]);
+
+  const otpResendRemainingSeconds = Math.max(0, Math.ceil((otpResendAvailableAt - otpCooldownNow) / 1000));
+  const canResendOtp = !otpSending && otpResendRemainingSeconds <= 0;
+
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoginError('');
     setResetMessage('');
+    setOtpMessage('');
+    setOtpMessageType('info');
+    setOtpCode('');
 
     try {
-      await storage.login(email, password);
+      const credential = await storage.login(email, password);
       await storage.init();
+      localStorage.setItem(getSessionActivityKey(credential.user.uid), String(Date.now()));
+      localStorage.removeItem(getOtpVerifiedKey(credential.user.uid));
+
+      const profile = await storage.getUserProfile(credential.user.uid);
+      if (profile?.role === 'division') {
+        setOtpSending(true);
+        setOtpSendStartedAt(Date.now());
+        setOtpCooldownNow(Date.now());
+        setOtpResendAvailableAt(Date.now() + OTP_RESEND_COOLDOWN_MS);
+        try {
+          const otp = await storage.requestLoginOtp();
+          setOtpEmail(otp.email || credential.user.email || email.trim());
+          setOtpMessageType('success');
+          setOtpMessage(`Kode OTP sudah dikirim ke ${otp.email || credential.user.email || email.trim()}. Cek inbox atau spam.`);
+        } catch (error: any) {
+          setOtpMessage('');
+          setLoginError(error?.message || 'Kode OTP belum berhasil dikirim. Cek SMTP Gmail dan coba kirim ulang.');
+        } finally {
+          setOtpSending(false);
+          setOtpSendStartedAt(0);
+        }
+      } else {
+        setOtpVerifiedUid(credential.user.uid);
+      }
     } catch (error: any) {
       const code = error?.code || '';
 
@@ -4596,7 +5514,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         return;
       }
 
-      setLoginError('Login belum berhasil. Cek koneksi, akun Firebase Auth, dan konfigurasi project.');
+      setLoginError(error?.message || 'Login belum berhasil. Cek koneksi, akun Firebase Auth, dan konfigurasi project.');
+    }
+  };
+
+  const resendLoginOtp = async () => {
+    if (!canResendOtp) return;
+
+    setLoginError('');
+    setOtpMessage('');
+    setOtpMessageType('info');
+    setOtpSending(true);
+    setOtpSendStartedAt(Date.now());
+    setOtpCooldownNow(Date.now());
+    setOtpResendAvailableAt(Date.now() + OTP_RESEND_COOLDOWN_MS);
+    try {
+      const otp = await storage.requestLoginOtp();
+      setOtpEmail(otp.email || otpEmail);
+      setOtpMessageType('success');
+      setOtpMessage(`Kode OTP baru sudah dikirim ke ${otp.email || otpEmail}.`);
+    } catch (error: any) {
+      setOtpMessage('');
+      setLoginError(error?.message || 'Kode OTP belum berhasil dikirim.');
+    } finally {
+      setOtpSending(false);
+      setOtpSendStartedAt(0);
+    }
+  };
+
+  const verifyLoginOtp = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoginError('');
+    setOtpMessage('');
+    setOtpMessageType('info');
+
+    const cleanCode = otpCode.replace(/\D/g, '');
+    if (cleanCode.length !== 6) {
+      setLoginError('Masukkan kode OTP 6 digit.');
+      return;
+    }
+
+    setOtpVerifying(true);
+    try {
+      await storage.verifyLoginOtp(cleanCode);
+      if (currentUid) {
+        localStorage.setItem(getOtpVerifiedKey(currentUid), String(Date.now()));
+        localStorage.setItem(getSessionActivityKey(currentUid), String(Date.now()));
+        setOtpVerifiedUid(currentUid);
+      }
+      setOtpCode('');
+      setOtpMessage('');
+      setOtpResendAvailableAt(0);
+    } catch (error: any) {
+      setLoginError(error?.message || 'Kode OTP belum cocok.');
+    } finally {
+      setOtpVerifying(false);
     }
   };
 
@@ -4639,6 +5611,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   };
 
   const logout = async () => {
+    if (currentUid) {
+      localStorage.removeItem(getOtpVerifiedKey(currentUid));
+      localStorage.removeItem(getSessionActivityKey(currentUid));
+    }
+    setOtpVerifiedUid('');
+    setOtpCode('');
+    setOtpMessage('');
+    setOtpResendAvailableAt(0);
     await storage.logout();
   };
 
@@ -4824,6 +5804,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           >
             <ArrowLeft size={16} />
             Kembali ke Website
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (requiresDivisionOtp) {
+    return (
+      <div className="min-h-screen bg-[#f8fafd] dark:bg-[#0b0f19] flex items-center justify-center p-4">
+        <div className={`${googleSurfaceClass} w-full max-w-lg overflow-hidden`}>
+          <div className="border-b border-slate-100 bg-gradient-to-br from-[#e8f0fe] via-white to-white px-6 py-6 dark:border-slate-800 dark:from-[#1a73e8]/15 dark:via-[#111827] dark:to-[#111827] sm:px-8 sm:py-7">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] border border-white/80 bg-white p-2 shadow-[0_4px_18px_rgba(60,64,67,0.16)] dark:border-slate-700 dark:bg-slate-950">
+                <Mail size={30} className="text-[#1a73e8] dark:text-[#8ab4f8]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">Verifikasi OTP</p>
+                <h1 className="text-3xl font-black tracking-normal text-slate-900 dark:text-white">Cek Email</h1>
+                <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">
+                  Akun divisi wajib verifikasi kode sebelum masuk.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={verifyLoginOtp} className="space-y-5 px-6 pt-7 sm:px-8">
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                Kode OTP 6 Digit
+              </span>
+              <input
+                value={otpCode}
+                onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123456"
+                className={`${googleInputClass} h-16 rounded-2xl text-center text-2xl font-black tracking-[0.45em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
+              />
+              <p className="mt-2 text-xs font-semibold text-slate-400 dark:text-slate-500">
+                Masukkan 6 angka dari email. Kode berlaku 10 menit.
+              </p>
+            </label>
+
+            {otpMessage && (
+              <p className={`rounded-2xl px-4 py-3 text-sm font-semibold leading-6 ${
+                otpMessageType === 'success'
+                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                  : 'bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]'
+              }`}>
+                {otpMessage}
+              </p>
+            )}
+
+            {loginError && (
+              <p className="rounded-2xl bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm font-semibold leading-6 text-red-600 dark:text-red-300">
+                {loginError}
+              </p>
+            )}
+
+            <button className={`${googlePrimaryButtonClass} w-full py-4 text-base`} disabled={otpVerifying || otpCode.length !== 6}>
+              {otpVerifying ? 'Memverifikasi...' : 'Verifikasi & Masuk'}
+            </button>
+
+            <button
+              type="button"
+              onClick={resendLoginOtp}
+              disabled={!canResendOtp}
+              className="w-full rounded-full border border-[#1a73e8]/15 bg-white px-4 py-3 text-sm font-black text-[#1a73e8] transition-all hover:bg-[#e8f0fe] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400 dark:border-[#8ab4f8]/20 dark:bg-slate-900 dark:text-[#8ab4f8] dark:hover:bg-[#1a73e8]/15 dark:disabled:border-slate-800 dark:disabled:bg-slate-900/60 dark:disabled:text-slate-500"
+            >
+              {otpSending
+                ? 'Mengirim OTP...'
+                : otpResendRemainingSeconds > 0
+                  ? `Kirim ulang dalam ${otpResendRemainingSeconds} detik`
+                  : 'Kirim ulang kode OTP'}
+            </button>
+          </form>
+
+          <button
+            onClick={logout}
+            className="mx-8 mb-8 mt-4 w-[calc(100%-4rem)] rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 py-3 font-semibold flex items-center justify-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          >
+            <ArrowLeft size={16} />
+            Ganti Akun
           </button>
         </div>
       </div>

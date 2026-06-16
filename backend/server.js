@@ -10,9 +10,25 @@ import { GoogleAuth } from 'google-auth-library';
 import fetch from 'node-fetch';
 import rateLimit from 'express-rate-limit';
 import { WebSocketServer, WebSocket } from 'ws';
-import admin from 'firebase-admin';
+import { applicationDefault, cert, getApp, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getDatabase } from 'firebase-admin/database';
+import { getMessaging } from 'firebase-admin/messaging';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 const app = express();
+app.use((req, res, next) => {
+  const origin = req.get('origin') || '';
+  if (/^http:\/\/(localhost|127\.0\.0\.1):5173$/i.test(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(express.json({limit: process?.env?.API_PAYLOAD_MAX_SIZE || "7mb"}));
 
 const PORT = process?.env?.API_BACKEND_PORT || 5000;
@@ -35,16 +51,122 @@ const PUTRA_MODEL = process?.env?.PUTRA_MODEL || "PutraAi-V1";
 const FIREBASE_PROJECT_ID = process?.env?.FIREBASE_PROJECT_ID;
 const FIREBASE_DATABASE_URL = process?.env?.FIREBASE_DATABASE_URL;
 const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
+const otpStore = new Map();
+const OTP_TTL_MS = 10 * 60 * 1000;
+const SMTP_TIMEOUT_MS = 10000;
+let smtpTransporter = null;
+
+const hashOtp = (code) => crypto.createHash('sha256').update(code).digest('hex');
+
+const getSmtpTransport = () => {
+  const host = process.env.SMTP_HOST || process.env.SMTP_SERVER_HOST;
+  const port = Number(process.env.SMTP_PORT || process.env.SMTP_SERVER_PORT || 587);
+  const user = process.env.SMTP_USER || process.env.SMTP_USERNAME || process.env.SMTP_ACCOUNT_USERNAME;
+  const pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.SMTP_ACCOUNT_PASSWORD;
+  const mode = String(process.env.SMTP_SECURITY_MODE || '').toLowerCase();
+
+  if (!host || !user || !pass) {
+    throw new Error('SMTP belum dikonfigurasi. Isi SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, dan SMTP_FROM di backend/.env.local atau environment server.');
+  }
+
+  if (smtpTransporter) return smtpTransporter;
+
+  smtpTransporter = nodemailer.createTransport({
+    pool: true,
+    host,
+    port,
+    secure: port === 465 || mode === 'ssl',
+    requireTLS: mode === 'tls' || port === 587,
+    family: 4,
+    maxConnections: 1,
+    maxMessages: 50,
+    connectionTimeout: SMTP_TIMEOUT_MS,
+    greetingTimeout: SMTP_TIMEOUT_MS,
+    socketTimeout: SMTP_TIMEOUT_MS,
+    tls: {
+      servername: host,
+    },
+    auth: { user, pass },
+  });
+  return smtpTransporter;
+};
+
+const sendOtpEmail = async ({ email, name, code }) => {
+  const transporter = getSmtpTransport();
+  const from = process.env.SMTP_FROM || process.env.SMTP_SENDER_ADDRESS || process.env.SMTP_USER;
+  const startedAt = Date.now();
+  const displayName = name || 'Divisi KKN 35';
+
+  const info = await Promise.race([
+    transporter.sendMail({
+      from,
+      to: email,
+      subject: 'Kode OTP Login KKN 35',
+      text: `Halo ${displayName},\n\nKode OTP login kamu adalah: ${code}\n\nKode ini berlaku 10 menit. Jangan bagikan kode ini kepada siapa pun.\n\nKKN 35 UMP`,
+      html: `
+        <div style="margin:0;padding:28px 0;background:#f6f9fc;font-family:Arial,Helvetica,sans-serif;color:#111827">
+          <div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e5edf7;border-radius:24px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08)">
+            <div style="padding:28px 30px;background:linear-gradient(135deg,#e8f0fe 0%,#ffffff 70%);border-bottom:1px solid #eef2f7">
+              <div style="display:inline-block;padding:6px 10px;border-radius:999px;background:#1a73e8;color:#ffffff;font-size:12px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase">
+                KKN 35 UMP
+              </div>
+              <h1 style="margin:16px 0 6px;font-size:26px;line-height:1.2;font-weight:900;color:#0f172a">
+                Verifikasi Login
+              </h1>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:#475569">
+                Gunakan kode OTP berikut untuk masuk ke dashboard divisi.
+              </p>
+            </div>
+
+            <div style="padding:30px">
+              <p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#334155">
+                Halo <strong style="color:#0f172a">${displayName}</strong>,
+              </p>
+
+              <div style="margin:0 0 20px;padding:24px;border-radius:22px;background:#f8fafc;border:1px solid #dbe7f5;text-align:center">
+                <p style="margin:0 0 10px;font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#64748b">
+                  Kode OTP 6 Digit
+                </p>
+                <div style="font-size:38px;line-height:1;font-weight:900;letter-spacing:10px;color:#0f172a">
+                  ${code}
+                </div>
+              </div>
+
+              <div style="margin:0 0 18px;padding:14px 16px;border-radius:16px;background:#ecfdf5;border:1px solid #bbf7d0;color:#047857;font-size:14px;line-height:1.6;font-weight:700">
+                Kode berlaku selama 10 menit.
+              </div>
+
+              <p style="margin:0;font-size:14px;line-height:1.7;color:#64748b">
+                Jangan bagikan kode ini kepada siapa pun. Jika kamu tidak meminta kode ini, abaikan email ini.
+              </p>
+            </div>
+
+            <div style="padding:18px 30px;background:#f8fafc;border-top:1px solid #eef2f7;text-align:center">
+              <p style="margin:0;font-size:12px;color:#94a3b8">
+                Email otomatis dari sistem KKN 35 Universitas Muhammadiyah Palembang.
+              </p>
+            </div>
+          </div>
+        </div>
+      `,
+    }),
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('SMTP timeout. Cek koneksi internet, SMTP Gmail, dan App Password.')), SMTP_TIMEOUT_MS + 2000);
+    }),
+  ]);
+
+  console.log(`[Auth OTP] Email OTP terkirim ke ${email} dalam ${Date.now() - startedAt}ms. messageId=${info?.messageId || '-'}`);
+};
 
 function getFirebaseAdminApp() {
-  if (admin.apps.length) return admin.app();
+  if (getApps().length) return getApp();
 
   const serviceAccountJson = process?.env?.FIREBASE_SERVICE_ACCOUNT_JSON;
   const credential = serviceAccountJson
-    ? admin.credential.cert(JSON.parse(serviceAccountJson))
-    : admin.credential.applicationDefault();
+    ? cert(JSON.parse(serviceAccountJson))
+    : applicationDefault();
 
-  return admin.initializeApp({
+  return initializeApp({
     credential,
     projectId: FIREBASE_PROJECT_ID,
     databaseURL: FIREBASE_DATABASE_URL,
@@ -52,8 +174,9 @@ function getFirebaseAdminApp() {
 }
 
 const firebaseAdminApp = getFirebaseAdminApp();
-const firebaseAuth = admin.auth(firebaseAdminApp);
-const firebaseDatabase = admin.database(firebaseAdminApp);
+const firebaseAuth = getAuth(firebaseAdminApp);
+const firebaseDatabase = getDatabase(firebaseAdminApp);
+const firebaseMessaging = getMessaging(firebaseAdminApp);
 
 app.set('trust proxy', 1 /* number of proxies between user and server */);
 
@@ -386,6 +509,253 @@ app.post('/putra-ai-proxy', async (req, res) => {
     res.status(502).json({
       error: 'PUTRA AI proxy failed',
       message: error?.message || 'Unable to reach PUTRA AI proxy target.',
+    });
+  }
+});
+
+const otpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many OTP requests',
+    message: 'Terlalu banyak percobaan OTP. Coba lagi beberapa menit.',
+  },
+});
+
+const getBearerToken = (req) => {
+  const authorization = req.get('authorization') || '';
+  return authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length).trim() : '';
+};
+
+const getAuthenticatedUser = async (req, res) => {
+  const token = getBearerToken(req);
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized', message: 'Token login tidak ditemukan.' });
+    return null;
+  }
+
+  const decodedToken = await firebaseAuth.verifyIdToken(token);
+  const accountEmail = String(decodedToken.email || '').trim().toLowerCase();
+  if (!accountEmail) {
+    res.status(400).json({ error: 'Missing email', message: 'Email akun tidak ditemukan.' });
+    return null;
+  }
+
+  return { decodedToken, accountEmail };
+};
+
+app.post('/auth/request-otp', otpLimiter, async (req, res) => {
+  try {
+    const authContext = await getAuthenticatedUser(req, res);
+    if (!authContext) return;
+
+    const { decodedToken, accountEmail } = authContext;
+    if (accountEmail === ADMIN_EMAIL) {
+      return res.json({ ok: true, skipped: true });
+    }
+
+    const code = String(crypto.randomInt(100000, 1000000));
+    otpStore.set(decodedToken.uid, {
+      hash: hashOtp(code),
+      expiresAt: Date.now() + OTP_TTL_MS,
+      attempts: 0,
+      email: accountEmail,
+    });
+
+    await sendOtpEmail({ email: accountEmail, name: decodedToken.name, code });
+
+    return res.json({
+      ok: true,
+      email: accountEmail,
+      expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
+    });
+  } catch (error) {
+    console.error('[Auth OTP Request] Failed:', error);
+    return res.status(500).json({
+      error: 'OTP request failed',
+      message: error?.message || 'Kode OTP belum berhasil dikirim.',
+    });
+  }
+});
+
+app.post('/auth/verify-otp', otpLimiter, async (req, res) => {
+  try {
+    const authContext = await getAuthenticatedUser(req, res);
+    if (!authContext) return;
+
+    const { decodedToken, accountEmail } = authContext;
+    if (accountEmail === ADMIN_EMAIL) {
+      return res.json({ ok: true, skipped: true });
+    }
+
+    const code = String(req.body?.code || '').replace(/\D/g, '');
+    if (code.length !== 6) {
+      return res.status(400).json({ error: 'Invalid OTP', message: 'Kode OTP harus 6 digit.' });
+    }
+
+    const record = otpStore.get(decodedToken.uid);
+    if (!record || record.expiresAt < Date.now()) {
+      otpStore.delete(decodedToken.uid);
+      return res.status(400).json({ error: 'Expired OTP', message: 'Kode OTP sudah kedaluwarsa. Kirim ulang kode.' });
+    }
+
+    if (record.attempts >= 5) {
+      otpStore.delete(decodedToken.uid);
+      return res.status(429).json({ error: 'Too many attempts', message: 'OTP terlalu sering salah. Kirim ulang kode.' });
+    }
+
+    if (record.hash !== hashOtp(code)) {
+      record.attempts += 1;
+      otpStore.set(decodedToken.uid, record);
+      return res.status(400).json({ error: 'Wrong OTP', message: 'Kode OTP belum cocok.' });
+    }
+
+    otpStore.delete(decodedToken.uid);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('[Auth OTP Verify] Failed:', error);
+    return res.status(500).json({
+      error: 'OTP verify failed',
+      message: error?.message || 'Kode OTP belum berhasil diverifikasi.',
+    });
+  }
+});
+
+const formatDivisionLabel = (value = '') =>
+  String(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => (/\d+/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()))
+    .join(' ');
+
+const getTokenValues = (snapshot) => {
+  const value = snapshot.val() || {};
+  return Object.values(value)
+    .map((item) => item?.token)
+    .filter((token) => typeof token === 'string' && token.length > 20);
+};
+
+const sendChatPushNotifications = async ({ message, tokens }) => {
+  const uniqueTokens = [...new Set(tokens)].filter(Boolean);
+  if (!uniqueTokens.length) return { successCount: 0, failureCount: 0 };
+
+  const title = message.chatType === 'private'
+    ? `Chat pribadi dari ${message.senderName}`
+    : `Chat publik dari ${formatDivisionLabel(message.senderDivision)}`;
+
+  const response = await firebaseMessaging.sendEachForMulticast({
+    tokens: uniqueTokens,
+    data: {
+      type: 'division-chat',
+      chatType: message.chatType,
+      messageId: message.id,
+      title,
+      body: message.text,
+      senderName: message.senderName,
+      senderDivision: formatDivisionLabel(message.senderDivision),
+      url: '/#admin',
+    },
+    webpush: {
+      headers: {
+        Urgency: 'high',
+      },
+      fcmOptions: {
+        link: '/#admin',
+      },
+    },
+  });
+
+  return response;
+};
+
+app.post('/division-chat/send', async (req, res) => {
+  try {
+    const authContext = await getAuthenticatedUser(req, res);
+    if (!authContext) return;
+
+    const { decodedToken } = authContext;
+    const senderSnapshot = await firebaseDatabase.ref(`userProfiles/${decodedToken.uid}`).get();
+    const sender = senderSnapshot.val();
+    if (!sender || sender.role !== 'division') {
+      return res.status(403).json({ error: 'Forbidden', message: 'Hanya akun divisi yang bisa mengirim chat.' });
+    }
+
+    const cleanText = String(req.body?.text || '').trim().replace(/\s+/g, ' ');
+    const recipientUid = String(req.body?.recipientUid || '').trim();
+    if (!cleanText) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Pesan tidak boleh kosong.' });
+    }
+    if (cleanText.length > 800) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Pesan terlalu panjang. Maksimal 800 karakter.' });
+    }
+
+    let recipient = null;
+    if (recipientUid) {
+      const recipientSnapshot = await firebaseDatabase.ref(`userProfiles/${recipientUid}`).get();
+      recipient = recipientSnapshot.val();
+      if (!recipient || recipient.role !== 'division') {
+        return res.status(404).json({ error: 'Not Found', message: 'Divisi tujuan belum ditemukan.' });
+      }
+      if (recipient.uid === sender.uid) {
+        return res.status(400).json({ error: 'Bad Request', message: 'Tidak bisa mengirim chat pribadi ke akun sendiri.' });
+      }
+    }
+
+    const isPrivate = Boolean(recipient);
+    const path = isPrivate ? 'divisionChats/private' : 'divisionChats/public';
+    const messageRef = firebaseDatabase.ref(path).push();
+    const createdAtMs = Date.now();
+    const baseMessage = {
+      id: messageRef.key || `chat_${createdAtMs}`,
+      chatType: isPrivate ? 'private' : 'public',
+      senderUid: sender.uid,
+      senderName: sender.name,
+      senderEmail: sender.email,
+      senderDivision: sender.division,
+      text: cleanText,
+      date: new Date(createdAtMs).toLocaleString('id-ID'),
+      createdAtMs,
+      createdAt: createdAtMs,
+    };
+    const message = isPrivate
+      ? {
+        ...baseMessage,
+        conversationId: [sender.uid, recipient.uid].sort().join('__'),
+        recipientUid: recipient.uid,
+        recipientName: recipient.name,
+        recipientDivision: recipient.division,
+      }
+      : baseMessage;
+
+    await messageRef.set(message);
+
+    let pushTokens = [];
+
+    if (isPrivate) {
+      const recipientTokensSnapshot = await firebaseDatabase.ref(`notificationTokens/${recipient.uid}`).get();
+      pushTokens = getTokenValues(recipientTokensSnapshot);
+    } else {
+      const allTokensSnapshot = await firebaseDatabase.ref('notificationTokens').get();
+      allTokensSnapshot.forEach((child) => {
+        if (child.key !== sender.uid) pushTokens.push(...getTokenValues(child));
+      });
+    }
+
+    let pushResult = { successCount: 0, failureCount: 0 };
+    try {
+      pushResult = await sendChatPushNotifications({ message, tokens: pushTokens });
+    } catch (pushError) {
+      console.error('[Division Chat Push] Failed:', pushError);
+    }
+
+    return res.json({ ok: true, message, push: pushResult });
+  } catch (error) {
+    console.error('[Division Chat Send] Failed:', error);
+    return res.status(500).json({
+      error: 'Division chat send failed',
+      message: error?.message || 'Pesan belum berhasil dikirim.',
     });
   }
 });

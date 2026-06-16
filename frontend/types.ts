@@ -168,6 +168,7 @@ export interface WeeklyReport {
   villageDate: string;
   signerName: string;
   signerNim: string;
+  signatureDataUrl?: string;
   entries: WeeklyReportEntry[];
   updatedAt?: number | object;
 }
@@ -180,4 +181,21 @@ export interface DivisionNote {
   content: string;
   date: string;
   updatedAt?: number | object;
+}
+
+export interface DivisionChatMessage {
+  id: string;
+  chatType: 'public' | 'private';
+  conversationId?: string;
+  senderUid: string;
+  senderName: string;
+  senderEmail: string;
+  senderDivision: DivisionName;
+  recipientUid?: string;
+  recipientName?: string;
+  recipientDivision?: DivisionName;
+  text: string;
+  date: string;
+  createdAtMs: number;
+  createdAt?: number | object;
 }

@@ -17,6 +17,8 @@ export default defineConfig(({ mode }) => {
           '/api-proxy': 'http://127.0.0.1:5000',
           '/putra-ai-proxy': 'http://127.0.0.1:5000',
           '/admin': 'http://127.0.0.1:5000',
+          '/auth': 'http://127.0.0.1:5000',
+          '/division-chat': 'http://127.0.0.1:5000',
           '/ws-proxy': {target: 'ws://127.0.0.1:5000', ws: true},
         },
       },

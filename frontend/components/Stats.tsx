@@ -51,7 +51,7 @@ export const Stats: React.FC = () => {
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 divide-x divide-white/10">
-          <StatItem icon={Users} endValue={13} label="Anggota Kelompok" />
+          <StatItem icon={Users} endValue={12} label="Anggota Kelompok" />
           <StatItem icon={Briefcase} endValue={10} label="Program Kerja" suffix="+" />
           <StatItem icon={Calendar} endValue={40} label="Hari Pengabdian" />
           <StatItem icon={Map} endValue={1} label="Desa Binaan" />

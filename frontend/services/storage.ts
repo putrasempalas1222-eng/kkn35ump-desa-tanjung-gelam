@@ -1,5 +1,5 @@
 import { getApps, initializeApp } from 'firebase/app';
-import { getAnalytics, isSupported } from 'firebase/analytics';
+import { getAnalytics, isSupported as isAnalyticsSupported } from 'firebase/analytics';
 import {
   createUserWithEmailAndPassword,
   getAuth,
@@ -22,6 +22,11 @@ import {
   get,
 } from 'firebase/database';
 import {
+  getMessaging,
+  getToken,
+  isSupported as isMessagingSupported,
+} from 'firebase/messaging';
+import {
   DivisionName,
   EventContent,
   GalleryImage,
@@ -36,6 +41,7 @@ import {
   CompetitionItem,
   CompetitionRegistration,
   DivisionNote,
+  DivisionChatMessage,
 } from '../types';
 
 export interface ContactMessage {
@@ -57,6 +63,7 @@ const DEFAULT_FIREBASE_ENV: Record<string, string> = {
   VITE_FIREBASE_MESSAGING_SENDER_ID: '275478991025',
   VITE_FIREBASE_APP_ID: '1:275478991025:web:80d97124eb119cc039d290',
   VITE_FIREBASE_MEASUREMENT_ID: 'G-YL95DFEMDK',
+  VITE_FIREBASE_VAPID_KEY: '',
 };
 
 const getFirebaseEnv = (key: string) => import.meta.env[key] || DEFAULT_FIREBASE_ENV[key] || '';
@@ -77,7 +84,7 @@ export const auth = getAuth(app);
 export const database = getDatabase(app);
 
 if (typeof window !== 'undefined') {
-  isSupported()
+  isAnalyticsSupported()
     .then((supported) => {
       if (supported) getAnalytics(app);
     })
@@ -97,9 +104,11 @@ const COLLECTIONS = {
   weeklyReports: 'weeklyReports',
   financialReports: 'financialReports',
   divisionNotes: 'divisionNotes',
+  divisionChats: 'divisionChats',
   liveLocations: 'liveLocations',
   competitions: 'competitions',
   competitionRegistrations: 'competitionRegistrations',
+  notificationTokens: 'notificationTokens',
 };
 
 const ACCOUNT_CREATOR_APP = 'accountCreator';
@@ -295,6 +304,40 @@ const validateCompetitionRegistration = (reg: Pick<CompetitionRegistration, 'nam
   return '';
 };
 
+const fetchJsonWithTimeout = async (url: string, options: RequestInit, timeoutMs = 30000) => {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    if (
+      response.status === 502 &&
+      url.startsWith('/auth/') &&
+      ['localhost', '127.0.0.1'].includes(window.location.hostname)
+    ) {
+      const fallbackResponse = await fetch(`http://127.0.0.1:5000${url}`, { ...options, signal: controller.signal });
+      const fallbackPayload = await fallbackResponse.json().catch(() => ({}));
+      return { response: fallbackResponse, payload: fallbackPayload };
+    }
+    return { response, payload };
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Kirim OTP terlalu lama. Coba tekan Kirim ulang OTP, lalu cek Inbox/Spam email.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
+};
+
+const getMessagingTokenKey = (token: string) => token.replace(/[.#$/[\]]/g, '_');
+
+const getServiceWorkerRegistration = async () => {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined;
+  return navigator.serviceWorker.ready.catch(() => undefined);
+};
+
 export const storage = {
   defaults: {
     siteContent: EMPTY_SITE_CONTENT,
@@ -305,6 +348,35 @@ export const storage = {
 
   onAuthChange: (callback: (user: FirebaseUser | null) => void) => onAuthStateChanged(auth, callback),
   login: (email: string, password: string) => signInWithEmailAndPassword(auth, email, password),
+  requestLoginOtp: async () => {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+
+    const { response, payload } = await fetchJsonWithTimeout('/auth/request-otp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) throw new Error(payload?.message || 'Kode OTP belum berhasil dikirim.');
+    return payload as { ok: boolean; skipped?: boolean; email?: string; expiresInSeconds?: number };
+  },
+  verifyLoginOtp: async (code: string) => {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+
+    const { response, payload } = await fetchJsonWithTimeout('/auth/verify-otp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ code }),
+    });
+    if (!response.ok) throw new Error(payload?.message || 'Kode OTP belum cocok.');
+    return payload as { ok: boolean; skipped?: boolean };
+  },
   sendPasswordReset: (email: string) =>
     sendPasswordResetEmail(auth, email.trim(), {
       url: `${window.location.origin}/#admin`,
@@ -323,6 +395,11 @@ export const storage = {
       (snapshot) => callback(snapshot.val() || null),
       () => callback(null)
     );
+  },
+  getUserProfile: async (uid: string) => {
+    if (!uid) return null;
+    const snapshot = await get(ref(database, `${COLLECTIONS.userProfiles}/${uid}`));
+    return (snapshot.val() || null) as UserProfile | null;
   },
   subscribeUserProfiles: (callback: (data: UserProfile[]) => void) =>
     subscribeList<UserProfile>(COLLECTIONS.userProfiles, (profiles) =>
@@ -541,6 +618,90 @@ export const storage = {
     return id;
   },
   deleteDivisionNote: (uid: string, id: string) => remove(ref(database, `${COLLECTIONS.divisionNotes}/${uid}/${id}`)),
+
+  subscribePublicDivisionChat: (callback: (data: DivisionChatMessage[]) => void) =>
+    subscribeList<DivisionChatMessage>(`${COLLECTIONS.divisionChats}/public`, (messages) =>
+      callback(messages.sort((a, b) => Number(a.createdAtMs || 0) - Number(b.createdAtMs || 0)))
+    ),
+  subscribePrivateDivisionChats: (uid: string, callback: (data: DivisionChatMessage[]) => void) => {
+    if (!uid) {
+      callback([]);
+      return () => undefined;
+    }
+
+    return subscribeList<DivisionChatMessage>(`${COLLECTIONS.divisionChats}/private`, (messages) =>
+      callback(
+        messages
+          .filter((message) => message.senderUid === uid || message.recipientUid === uid)
+          .sort((a, b) => Number(a.createdAtMs || 0) - Number(b.createdAtMs || 0))
+      )
+    );
+  },
+  sendDivisionChatMessage: async ({
+    sender,
+    text,
+    recipient,
+  }: {
+    sender: UserProfile;
+    text: string;
+    recipient?: UserProfile | null;
+  }) => {
+    const cleanText = text.trim().replace(/\s+/g, ' ');
+    if (cleanText.length < 1) throw new Error('Pesan tidak boleh kosong.');
+    if (cleanText.length > 800) throw new Error('Pesan terlalu panjang. Maksimal 800 karakter.');
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+
+    const { response, payload } = await fetchJsonWithTimeout('/division-chat/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        text: cleanText,
+        recipientUid: recipient?.uid || '',
+      }),
+    });
+
+    if (!response.ok) throw new Error(payload?.message || 'Pesan belum berhasil dikirim.');
+    return payload.message as DivisionChatMessage;
+  },
+  registerDivisionPushToken: async (profile: UserProfile) => {
+    if (typeof window === 'undefined' || typeof Notification === 'undefined') {
+      throw new Error('Browser ini belum mendukung notifikasi.');
+    }
+    if (Notification.permission !== 'granted') {
+      throw new Error('Izin notifikasi belum aktif.');
+    }
+
+    const supported = await isMessagingSupported().catch(() => false);
+    if (!supported) throw new Error('Firebase Messaging belum didukung di browser ini.');
+
+    const vapidKey = getFirebaseEnv('VITE_FIREBASE_VAPID_KEY');
+    if (!vapidKey) throw new Error('VAPID key belum diatur di frontend/.env.local.');
+
+    const messaging = getMessaging(app);
+    const serviceWorkerRegistration = await getServiceWorkerRegistration();
+    const token = await getToken(messaging, {
+      vapidKey,
+      serviceWorkerRegistration,
+    });
+    if (!token) throw new Error('Token notifikasi belum berhasil dibuat.');
+
+    const tokenKey = getMessagingTokenKey(token);
+    await set(ref(database, `${COLLECTIONS.notificationTokens}/${profile.uid}/${tokenKey}`), {
+      token,
+      uid: profile.uid,
+      email: profile.email,
+      name: profile.name,
+      division: profile.division,
+      userAgent: navigator.userAgent,
+      updatedAtMs: Date.now(),
+      updatedAt: serverTimestamp(),
+    });
+    return token;
+  },
 
   subscribeLiveLocations: (callback: (data: LiveLocation[]) => void) =>
     subscribeList<LiveLocation>(COLLECTIONS.liveLocations, (locations) =>

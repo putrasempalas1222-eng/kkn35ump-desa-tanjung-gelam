@@ -7,6 +7,38 @@ const APP_SHELL = [
   '/report-assets/logo-ump.png'
 ];
 
+try {
+  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
+
+  firebase.initializeApp({
+    apiKey: 'AIzaSyCxFcWI6vLfGNcQMnTVRsRtXsDJfzqiWEw',
+    authDomain: 'project-3dfa8c97-bc93-4195-a5a.firebaseapp.com',
+    databaseURL: 'https://project-3dfa8c97-bc93-4195-a5a-default-rtdb.firebaseio.com',
+    projectId: 'project-3dfa8c97-bc93-4195-a5a',
+    storageBucket: 'project-3dfa8c97-bc93-4195-a5a.firebasestorage.app',
+    messagingSenderId: '275478991025',
+    appId: '1:275478991025:web:80d97124eb119cc039d290',
+    measurementId: 'G-YL95DFEMDK',
+  });
+
+  const messaging = firebase.messaging();
+  messaging.onBackgroundMessage((payload) => {
+    const data = payload.data || {};
+    self.registration.showNotification(data.title || 'Pesan Baru KKN 35', {
+      body: data.body || 'Ada pesan chat divisi baru.',
+      icon: '/report-assets/logokknv1.png',
+      badge: '/report-assets/logokknv1.png',
+      tag: data.messageId || 'division-chat',
+      data: {
+        url: data.url || '/#admin',
+      },
+    });
+  });
+} catch (error) {
+  console.warn('Firebase Messaging service worker disabled:', error);
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => undefined)
@@ -36,5 +68,22 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/')))
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || '/#admin';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    })
   );
 });
