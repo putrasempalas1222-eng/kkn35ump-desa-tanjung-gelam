@@ -6,6 +6,18 @@ export const config = {
 };
 
 const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
+const BLOCKED_EMAIL_DOMAINS = new Set([
+  'kknump.plg',
+  'localhost',
+  'local',
+  'example.com',
+  'example.org',
+  'test.com',
+]);
+const BLOCKED_EMAILS = new Set([
+  ADMIN_EMAIL,
+  'mputraramadhaniid1@gmail.com',
+]);
 const databaseURL =
   process.env.DATABASE_URL ||
   process.env.FB_DATABASE_URL ||
@@ -19,6 +31,19 @@ const escapeHtml = (value = '') =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+
+const getEmailBlockReason = (email) => {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) return 'Email kosong.';
+  if (BLOCKED_EMAILS.has(cleanEmail)) return 'Email sistem/dummy tidak dikirim.';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return 'Format email tidak valid.';
+
+  const domain = cleanEmail.split('@').pop();
+  if (!domain || BLOCKED_EMAIL_DOMAINS.has(domain)) return `Domain ${domain || '-'} tidak menerima email publik.`;
+  if (!domain.includes('.') || domain.endsWith('.local')) return `Domain ${domain} tidak valid untuk pengiriman email.`;
+
+  return '';
+};
 
 const normalizePrivateKey = (privateKey) => {
   const header = '-----BEGIN PRIVATE KEY-----';
@@ -230,6 +255,7 @@ export default async function handler(req, res) {
     const collection = req.body?.collection || {};
     const recipients = Array.isArray(req.body?.recipients) ? req.body.recipients : [];
     const senderDivision = String(sender.division || '').toLowerCase();
+    const skippedEmails = [];
 
     if (!senderDivision.startsWith('bendahara') && authContext.accountEmail !== ADMIN_EMAIL) {
       return res.status(403).json({ error: 'Forbidden', message: 'Hanya bendahara yang boleh mengirim informasi pengumpulan uang.' });
@@ -245,7 +271,11 @@ export default async function handler(req, res) {
     profilesSnapshot?.forEach((child) => {
       const profile = child.val();
       const email = String(profile?.email || '').trim().toLowerCase();
-      if (!email || email === ADMIN_EMAIL) return;
+      const blockReason = getEmailBlockReason(email);
+      if (blockReason) {
+        if (email) skippedEmails.push({ email, reason: blockReason, source: 'userProfiles' });
+        return;
+      }
       databaseRecipients.push({
         uid: profile?.uid || child.key,
         name: profile?.name || profile?.division || email.split('@')[0],
@@ -261,7 +291,11 @@ export default async function handler(req, res) {
         const page = await admin.auth().listUsers(1000, pageToken);
         page.users.forEach((userRecord) => {
           const email = String(userRecord.email || '').trim().toLowerCase();
-          if (!email || email === ADMIN_EMAIL) return;
+          const blockReason = getEmailBlockReason(email);
+          if (blockReason) {
+            if (email) skippedEmails.push({ email, reason: blockReason, source: 'firebaseAuth' });
+            return;
+          }
           authRecipients.push({
             uid: userRecord.uid,
             name: userRecord.displayName || email.split('@')[0],
@@ -277,7 +311,12 @@ export default async function handler(req, res) {
     const uniqueRecipients = [...databaseRecipients, ...authRecipients, ...recipients, sender]
       .filter((item) => {
         const email = String(item?.email || '').trim().toLowerCase();
-        return email && email !== ADMIN_EMAIL;
+        const blockReason = getEmailBlockReason(email);
+        if (blockReason) {
+          if (email) skippedEmails.push({ email, reason: blockReason, source: 'payload' });
+          return false;
+        }
+        return true;
       })
       .reduce((map, item) => {
         map.set(String(item.email).toLowerCase(), item);
@@ -285,7 +324,11 @@ export default async function handler(req, res) {
       }, new Map());
 
     if (uniqueRecipients.size === 0) {
-      return res.status(400).json({ error: 'No recipients', message: 'Tidak ada email akun divisi yang ditemukan.' });
+      return res.status(400).json({
+        error: 'No recipients',
+        message: 'Tidak ada email akun divisi valid yang bisa dikirimi notifikasi.',
+        skippedEmails,
+      });
     }
 
     const transporter = getTransporter();
@@ -355,6 +398,7 @@ export default async function handler(req, res) {
         failed: failedResults.length,
         recipients: uniqueRecipients.size,
         failedEmails: failedResults.map((result) => ({ email: result.email, error: result.error })),
+        skippedEmails,
       });
     }
 
@@ -382,6 +426,7 @@ export default async function handler(req, res) {
       recipients: uniqueRecipients.size,
       sentEmails: emailResults.filter((result) => result.ok).map((result) => result.email),
       failedEmails: failedResults.map((result) => ({ email: result.email, error: result.error })),
+      skippedEmails,
       message,
     });
   } catch (error) {
