@@ -2474,6 +2474,7 @@ const DivisionDashboard = ({
   const [moneyPaymentSavingId, setMoneyPaymentSavingId] = useState('');
   const [selectedMoneyCollectionId, setSelectedMoneyCollectionId] = useState('');
   const [moneyEvidencePreview, setMoneyEvidencePreview] = useState<{ url: string; title: string } | null>(null);
+  const [isTreasurerMoneyUploadOpen, setIsTreasurerMoneyUploadOpen] = useState(false);
   const [moneyCollectionPage, setMoneyCollectionPage] = useState(1);
   const [moneyCollectionDraft, setMoneyCollectionDraft] = useState<MoneyCollection>(() => ({
     id: `money_${Date.now()}`,
@@ -2712,6 +2713,10 @@ const DivisionDashboard = ({
       setSelectedMoneyCollectionId('');
     }
   }, [moneyCollections, selectedMoneyCollectionId]);
+
+  useEffect(() => {
+    setIsTreasurerMoneyUploadOpen(false);
+  }, [selectedMoneyCollectionId]);
 
   useEffect(() => {
     if (!isDivisionChatEnabled) return;
@@ -3256,6 +3261,7 @@ Format lengkap yang juga diterima:
         note: draft.note.trim(),
       });
       setMoneyPaymentDrafts((current) => ({ ...current, [collection.id]: { amount: collection.amount || '', evidenceUrl: '', note: '' } }));
+      setIsTreasurerMoneyUploadOpen(false);
     } catch (error: any) {
       alert(error?.message || 'Bukti pembayaran belum berhasil dikirim.');
     } finally {
@@ -3728,6 +3734,7 @@ Format lengkap yang juga diterima:
     ? selectedMoneyPayments.filter((payment) => payment.payerUid === profile.uid)
     : [];
   const selectedMoneyOwnPayment = selectedMoneyOwnPayments[selectedMoneyOwnPayments.length - 1] || null;
+  const shouldShowMoneyUploadForm = !isTreasurer || isTreasurerMoneyUploadOpen || selectedMoneyOwnPayments.length > 0;
   const unpaidMoneyCollections = moneyCollections.filter((collection) =>
     !getMoneyCollectionPayments(collection).some((payment) => payment.payerUid === profile.uid)
   );
@@ -5011,7 +5018,32 @@ Format lengkap yang juga diterima:
                   )}
                 </div>
 
-                {(
+                {isTreasurer && (
+                  <div className="mt-4 flex flex-col gap-3 border border-slate-200 bg-[#f8fafd] px-4 py-3 dark:border-slate-800 dark:bg-[#111827] sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#8ab4f8]">Upload Bukti Bendahara</p>
+                      <p className="mt-1 text-sm font-bold text-slate-600 dark:text-slate-300">
+                        {selectedMoneyOwnPayments.length > 0
+                          ? 'Bukti bendahara sudah tersimpan dan ikut masuk ke rekap.'
+                          : 'Buka panel upload hanya saat bendahara perlu mengirim bukti pembayaran.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsTreasurerMoneyUploadOpen((open) => !open)}
+                      className={`inline-flex min-h-[42px] shrink-0 items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-black transition-colors ${
+                        isTreasurerMoneyUploadOpen
+                          ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200'
+                          : 'bg-[#1a73e8] text-white shadow-md shadow-[#1a73e8]/20 hover:bg-[#1669d9]'
+                      }`}
+                    >
+                      {isTreasurerMoneyUploadOpen ? <ChevronUp size={16} /> : <Upload size={16} />}
+                      {isTreasurerMoneyUploadOpen ? 'Tutup Upload' : selectedMoneyOwnPayments.length > 0 ? 'Lihat Bukti Saya' : 'Upload Bukti'}
+                    </button>
+                  </div>
+                )}
+
+                {shouldShowMoneyUploadForm && (
                   <div className={`mt-4 border border-slate-200 bg-[#f8fafd] dark:border-slate-800 dark:bg-[#111827] ${isTreasurer ? 'overflow-hidden' : ''}`}>
                     <div className="border-b border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-950">
                       <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#8ab4f8]">Upload Pembayaran</p>

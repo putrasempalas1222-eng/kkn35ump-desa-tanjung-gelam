@@ -70,6 +70,30 @@ const DEFAULT_FIREBASE_ENV: Record<string, string> = {
 };
 
 const getFirebaseEnv = (key: string) => import.meta.env[key] || DEFAULT_FIREBASE_ENV[key] || '';
+const DEFAULT_BACKEND_API_BASE_URL = 'https://asia-southeast2-play-integrity-2adpr7x4a8xhyex.cloudfunctions.net/apiDataKkn35';
+
+const getBackendApiBaseUrl = () => {
+  const configured = String(import.meta.env.VITE_BACKEND_API_BASE_URL || '').replace(/\/$/, '');
+  if (configured) return configured;
+  if (typeof window !== 'undefined' && window.location.hostname === 'kkn35ump-desa-gelam.vercel.app') {
+    return DEFAULT_BACKEND_API_BASE_URL;
+  }
+  return '';
+};
+
+const buildBackendApiUrl = (url: string) => {
+  if (!url.startsWith('/')) return url;
+  const isBackendRoute = [
+    '/auth/',
+    '/admin/',
+    '/division-chat/',
+    '/money-collections/',
+    '/api-proxy',
+    '/putra-ai-proxy/',
+  ].some((prefix) => url.startsWith(prefix));
+  const baseUrl = isBackendRoute ? getBackendApiBaseUrl() : '';
+  return baseUrl ? `${baseUrl}${url}` : url;
+};
 
 const firebaseConfig = {
   apiKey: getFirebaseEnv('VITE_FIREBASE_API_KEY'),
@@ -319,9 +343,10 @@ const validateCompetitionRegistration = (reg: Pick<CompetitionRegistration, 'nam
 const fetchJsonWithTimeout = async (url: string, options: RequestInit, timeoutMs = 30000) => {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  const requestUrl = buildBackendApiUrl(url);
 
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(requestUrl, { ...options, signal: controller.signal });
     const payload = await response.json().catch(() => ({}));
     if (
       response.status === 502 &&
