@@ -6,6 +6,7 @@ interface NavbarProps {
   darkMode: boolean;
   toggleDarkMode: () => void;
   isLoggedIn?: boolean;
+  introCompleted?: boolean;
 }
 
 const NAV_LINKS = [
@@ -23,7 +24,7 @@ const NAV_LINKS = [
 // Light-bg sections (light mode only)
 const LIGHT_SECTIONS = new Set(['about', 'team', 'event', 'gallery', 'village', 'programs', 'contact']);
 
-export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode }) => {
+export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, introCompleted = true }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isOverLight, setIsOverLight] = useState(false);
@@ -61,7 +62,10 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode }) => {
   // ── LIGHT MODE on light sections: semi-transparent white glass ──
 
   return (
-    <nav
+    <motion.nav
+      initial={{ opacity: 0, y: -25 }}
+      animate={introCompleted ? { opacity: 1, y: 0 } : { opacity: 0, y: -25 }}
+      transition={{ duration: 1.4, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
       className={`
         fixed top-0 left-0 right-0 z-50 transition-all duration-500
         ${isScrolled ? 'py-2.5' : 'py-4'}
@@ -287,6 +291,6 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode }) => {
           </motion.div>
         )}
       </AnimatePresence>
-    </nav>
+    </motion.nav>
   );
 };

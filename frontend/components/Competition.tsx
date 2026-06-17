@@ -23,12 +23,12 @@ import { storage } from '../services/storage';
 import { CompetitionItem, CompetitionRegistration } from '../types';
 
 const ACCENT_COLORS: Record<string, { text: string; badge: string; btn: string; glow: string }> = {
-  pink:   { text: 'text-pink-600 dark:text-pink-400',   badge: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',   btn: 'from-pink-500 to-rose-500',   glow: 'rgba(236,72,153,0.30)' },
-  blue:   { text: 'text-blue-600 dark:text-blue-400',   badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',   btn: 'from-blue-500 to-indigo-600',  glow: 'rgba(59,130,246,0.30)' },
-  violet: { text: 'text-violet-600 dark:text-violet-400', badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300', btn: 'from-violet-500 to-purple-600', glow: 'rgba(139,92,246,0.30)' },
-  green:  { text: 'text-green-600 dark:text-green-400',  badge: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',  btn: 'from-green-500 to-emerald-600', glow: 'rgba(16,185,129,0.30)' },
-  amber:  { text: 'text-amber-600 dark:text-amber-400',  badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',  btn: 'from-amber-500 to-orange-500',  glow: 'rgba(245,158,11,0.30)' },
-  default:{ text: 'text-m-blue dark:text-blue-400',      badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',      btn: 'from-m-blue to-indigo-600',   glow: 'rgba(26,115,232,0.30)' },
+  pink:   { text: 'text-pink-600 dark:text-pink-400',   badge: 'bg-pink-500/10 text-pink-500 border border-pink-500/20',   btn: 'from-pink-500 to-rose-500',   glow: 'rgba(236,72,153,0.30)' },
+  blue:   { text: 'text-blue-600 dark:text-blue-400',   badge: 'bg-blue-500/10 text-blue-500 border border-blue-500/20',   btn: 'from-blue-500 to-indigo-600',  glow: 'rgba(59,130,246,0.30)' },
+  violet: { text: 'text-violet-600 dark:text-violet-400', badge: 'bg-violet-500/10 text-violet-500 border border-violet-500/20', btn: 'from-violet-500 to-purple-600', glow: 'rgba(139,92,246,0.30)' },
+  green:  { text: 'text-green-600 dark:text-green-400',  badge: 'bg-green-500/10 text-green-500 border border-green-500/20',  btn: 'from-green-500 to-emerald-600', glow: 'rgba(16,185,129,0.30)' },
+  amber:  { text: 'text-amber-600 dark:text-amber-400',  badge: 'bg-amber-500/10 text-amber-500 border border-amber-500/20',  btn: 'from-amber-500 to-orange-500',  glow: 'rgba(245,158,11,0.30)' },
+  default:{ text: 'text-m-blue dark:text-blue-400',      badge: 'bg-blue-500/10 text-blue-500 border border-blue-500/20',      btn: 'from-m-blue to-indigo-600',   glow: 'rgba(26,115,232,0.30)' },
 };
 const getAccent = (color: string) => ACCENT_COLORS[color] ?? ACCENT_COLORS.default;
 
@@ -55,8 +55,8 @@ const sanitizeShortText = (value: string, maxLength = 120) =>
   value.replace(/[<>]/g, '').replace(/\s{2,}/g, ' ').slice(0, maxLength);
 
 /* ────────────────────────────────────────────────
-   Registration Modal
-──────────────────────────────────────────────── */
+   Registration Modal (Frosted Apple Glass Design)
+ ──────────────────────────────────────────────── */
 interface RegForm { name: string; phone: string; age: string; address: string; notes: string }
 const EMPTY_FORM: RegForm = { name: '', phone: '', age: '', address: '', notes: '' };
 
@@ -74,7 +74,6 @@ const RegistrationModal: React.FC<{
 
   const isFull = registrationCount >= maxCount;
 
-  // Cek duplikat nama secara real-time (saat user ketik)
   const isDuplicateName = useMemo(() => {
     const trimmed = form.name.trim().toLowerCase();
     if (!trimmed) return false;
@@ -154,7 +153,7 @@ const RegistrationModal: React.FC<{
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
       />
 
@@ -162,69 +161,65 @@ const RegistrationModal: React.FC<{
         initial={{ opacity: 0, y: 60, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.96 }}
-        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden"
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full sm:max-w-md bg-white/95 dark:bg-slate-900/95 border border-white/20 dark:border-slate-800/80 rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden flex flex-col backdrop-blur-2xl"
       >
-        {/* Header */}
-        <div className={`bg-gradient-to-r ${accent.btn} p-6 text-white`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-                <IconComp size={24} />
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest opacity-80">Pendaftaran Lomba</p>
-                <h2 id="reg-modal-title" className="text-xl font-black leading-tight">{comp.title}</h2>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="shrink-0 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-              aria-label="Tutup"
-            >
-              <X size={18} />
-            </button>
+        {/* Header - Integrated Glass Header */}
+        <div className="flex items-center gap-4 px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800/60">
+          <div className={`w-12 h-12 rounded-[1.1rem] bg-gradient-to-tr ${accent.btn} text-white flex items-center justify-center shrink-0 shadow-lg`} style={{ boxShadow: `0 8px 20px ${accent.glow}` }}>
+            <IconComp size={22} />
           </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {comp.registrationEnd && (
-              <span className="inline-flex items-center gap-1.5 bg-white/20 rounded-full px-3 py-1 text-xs font-semibold">
-                <Calendar size={11} /> Deadline: {new Date(comp.registrationEnd).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1.5 bg-white/20 rounded-full px-3 py-1 text-xs font-semibold">
-              <Gift size={11} /> {comp.fee}
-            </span>
-            {maxCount < Infinity && (
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${isFull ? 'bg-red-500/40' : 'bg-white/20'}`}>
-                <Users size={11} /> {registrationCount}/{maxCount} Peserta
-              </span>
-            )}
+          <div className="flex-1 min-w-0">
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Pendaftaran Lomba</p>
+            <h2 id="reg-modal-title" className="text-lg font-black text-slate-950 dark:text-white leading-tight mt-0.5">{comp.title}</h2>
           </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            aria-label="Tutup"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 max-h-[60vh] overflow-y-auto">
+        {/* Info badges bar */}
+        <div className="flex flex-wrap gap-2 px-6 py-3 bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-100 dark:border-slate-800/60">
+          {comp.registrationEnd && (
+            <span className="inline-flex items-center gap-1 bg-white dark:bg-slate-800 px-3 py-1 rounded-full text-[10px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
+              <Calendar size={10} /> Deadline: {new Date(comp.registrationEnd).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1 bg-white dark:bg-slate-800 px-3 py-1 rounded-full text-[10px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
+            <Gift size={10} /> {comp.fee}
+          </span>
+          {maxCount < Infinity && (
+            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold border ${isFull ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/50 dark:border-slate-700/50'}`}>
+              <Users size={10} /> Kuota: {registrationCount}/{maxCount}
+            </span>
+          )}
+        </div>
+
+        {/* Body Form */}
+        <div className="p-6 overflow-y-auto max-h-[55vh]">
           {status === 'success' ? (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="flex flex-col items-center text-center py-4 gap-4"
             >
-              <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                <CheckCircle size={36} className="text-green-500" />
+              <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+                <CheckCircle size={32} className="text-green-500" />
               </div>
               <div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white">Pendaftaran Berhasil!</h3>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                  Terima kasih <strong>{form.name}</strong>, pendaftaran untuk <strong>{comp.title}</strong> telah kami terima.
-                  Panitia akan menghubungi kamu via nomor HP yang kamu berikan.
+                <h3 className="text-lg font-black text-slate-950 dark:text-white">Pendaftaran Berhasil!</h3>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Terima kasih <strong>{form.name}</strong>, pendaftaran untuk lomba <strong>{comp.title}</strong> telah terkirim.
+                  Panitia akan menghubungi kamu via WhatsApp dalam waktu dekat.
                 </p>
               </div>
               <button
                 onClick={onClose}
-                className="mt-2 w-full rounded-xl py-3 font-bold text-white text-sm"
-                style={{ background: `linear-gradient(135deg, #1a73e8, #1557b0)` }}
+                className="mt-4 w-full btn-glass btn-glass-blue rounded-full py-3.5 text-xs font-black uppercase tracking-widest text-white border border-white/10"
               >
                 Tutup
               </button>
@@ -233,8 +228,8 @@ const RegistrationModal: React.FC<{
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Nama */}
               <label className="block">
-                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                  <User size={12} /> Nama Lengkap <span className="text-red-400">*</span>
+                <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+                  <User size={12} /> Nama Lengkap <span className="text-red-500">*</span>
                 </span>
                 <input
                   required
@@ -244,16 +239,15 @@ const RegistrationModal: React.FC<{
                   minLength={3}
                   maxLength={80}
                   pattern="[A-Za-zÀ-ÖØ-öø-ÿ\s'.-]{3,80}"
-                  placeholder="Masukkan nama lengkap"
-                  title="Nama lengkap hanya boleh berisi huruf, spasi, titik, apostrof, atau tanda hubung."
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                  placeholder="Masukkan nama lengkap sesuai KTP/KIA"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 text-sm text-slate-950 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/5 transition-all duration-300"
                 />
               </label>
 
               {/* No HP */}
               <label className="block">
-                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                  <Phone size={12} /> Nomor HP / WhatsApp <span className="text-red-400">*</span>
+                <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+                  <Phone size={12} /> Nomor WhatsApp / HP <span className="text-red-500">*</span>
                 </span>
                 <input
                   required
@@ -265,15 +259,14 @@ const RegistrationModal: React.FC<{
                   maxLength={14}
                   pattern="(08|628)\d{8,12}"
                   placeholder="Contoh: 081234567890"
-                  title="Nomor HP hanya boleh angka, diawali 08 atau 628, minimal 10 digit dan maksimal 14 digit."
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 text-sm text-slate-950 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/5 transition-all duration-300"
                 />
               </label>
 
               {/* Usia */}
               <label className="block">
-                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                  <Calendar size={12} /> Usia
+                <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+                  <Calendar size={12} /> Usia Peserta
                 </span>
                 <input
                   type="number"
@@ -281,44 +274,44 @@ const RegistrationModal: React.FC<{
                   max="100"
                   value={form.age}
                   onChange={(e) => setField('age')(sanitizeAge(e.target.value))}
-                  placeholder="Usia peserta"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                  placeholder="Contoh: 17 (dalam tahun)"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 text-sm text-slate-950 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/5 transition-all duration-300"
                 />
               </label>
 
               {/* Alamat */}
               <label className="block">
-                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                  <MapPin size={12} /> Alamat / RT
+                <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+                  <MapPin size={12} /> Alamat Rumah / RT
                 </span>
                 <input
                   type="text"
                   value={form.address}
                   onChange={(e) => setField('address')(sanitizeShortText(e.target.value, 120))}
                   maxLength={120}
-                  placeholder="Contoh: RT 03 Desa Tanjung Gelam"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all"
+                  placeholder="Contoh: RT 03 Dusun II Desa Tanjung Gelam"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 text-sm text-slate-950 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/5 transition-all duration-300"
                 />
               </label>
 
               {/* Catatan */}
               <label className="block">
-                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                  <FileText size={12} /> Catatan (opsional)
+                <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+                  <FileText size={12} /> Catatan Tambahan (opsional)
                 </span>
                 <textarea
                   rows={2}
                   value={form.notes}
                   onChange={(e) => setField('notes')(sanitizeShortText(e.target.value, 160))}
                   maxLength={160}
-                  placeholder="Misal: nama tim, kategori usia, dll."
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 transition-all resize-none"
+                  placeholder="Misal: Nama tim, Kategori lomba khusus, dll."
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 text-sm text-slate-950 dark:text-white outline-none focus:border-m-blue focus:ring-4 focus:ring-m-blue/10 dark:focus:ring-m-blue/5 transition-all duration-300 resize-none"
                 />
               </label>
 
               {errorMsg && (
-                <div className="flex items-center gap-2 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-300">
-                  <AlertCircle size={15} />
+                <div className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-400">
+                  <AlertCircle size={15} className="shrink-0" />
                   {errorMsg}
                 </div>
               )}
@@ -326,16 +319,16 @@ const RegistrationModal: React.FC<{
               {/* Kuota penuh banner */}
               {isFull ? (
                 <div className="flex flex-col items-center gap-3 py-4">
-                  <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                    <Lock size={28} className="text-red-500" />
+                  <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                    <Lock size={26} className="text-red-500" />
                   </div>
                   <div className="text-center">
-                    <p className="font-black text-slate-800 dark:text-white">Kuota Penuh</p>
+                    <p className="font-black text-slate-950 dark:text-white">Kuota Penuh</p>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      Pendaftaran lomba ini sudah mencapai batas {maxCount} peserta.
+                      Pendaftaran lomba ini sudah mencapai batas kuota {maxCount} peserta.
                     </p>
                   </div>
-                  <button onClick={onClose} className="mt-1 px-6 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm">
+                  <button onClick={onClose} className="mt-2 w-full btn-glass btn-glass-white rounded-full py-3 text-xs uppercase font-extrabold tracking-widest text-slate-700 dark:text-slate-200">
                     Tutup
                   </button>
                 </div>
@@ -343,18 +336,12 @@ const RegistrationModal: React.FC<{
                 <button
                   type="submit"
                   disabled={submitting}
-                  className={`w-full rounded-xl py-3.5 font-bold text-white text-sm flex items-center justify-center gap-2 bg-gradient-to-r ${accent.btn} shadow-md disabled:opacity-60 transition-all active:scale-[0.98]`}
-                  style={{ boxShadow: `0 4px 18px ${accent.glow}` }}
+                  className={`btn-glass w-full py-4 rounded-full font-extrabold text-white text-xs uppercase tracking-widest flex items-center justify-center gap-2 bg-gradient-to-r ${accent.btn} border border-white/10 active:scale-[0.98] transition-all`}
+                  style={{ boxShadow: `0 8px 20px ${accent.glow}` }}
                 >
-                  {submitting ? <Loader2 size={16} className="animate-spin" /> : <Trophy size={16} />}
-                  {submitting ? 'Mendaftar...' : 'Kirim Pendaftaran'}
+                  {submitting ? <Loader2 size={15} className="animate-spin" /> : <Trophy size={15} />}
+                  {submitting ? 'Mengirim Data...' : 'Kirim Pendaftaran'}
                 </button>
-              )}
-
-              {!isFull && (
-                <p className="text-center text-xs text-slate-400 dark:text-slate-500">
-                  Data yang kamu isi hanya digunakan untuk keperluan pendaftaran lomba.
-                </p>
               )}
             </form>
           )}
@@ -365,8 +352,8 @@ const RegistrationModal: React.FC<{
 };
 
 /* ────────────────────────────────────────────────
-   Competition Card
-──────────────────────────────────────────────── */
+   Competition Card (Apple Glass Premium Card)
+ ──────────────────────────────────────────────── */
 const CompetitionCard: React.FC<{
   comp: CompetitionItem;
   index: number;
@@ -386,38 +373,41 @@ const CompetitionCard: React.FC<{
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ delay: index * 0.07 }}
-      className="relative rounded-[1.5rem] overflow-hidden border border-slate-100 dark:border-slate-700/60 bg-white dark:bg-slate-800 shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col"
+      className="relative rounded-3xl overflow-hidden border border-slate-200/60 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl shadow-lg hover:shadow-2xl transition-all duration-300 flex flex-col group"
     >
-      {/* subtle top gradient based on color */}
-      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${accent.btn}`} />
+      {/* subtle top gradient indicator based on color */}
+      <div className={`absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r ${accent.btn}`} />
 
-      <div className="relative p-6 flex flex-col flex-1">
+      <div className="relative p-6 flex flex-col flex-grow">
         {/* Header */}
         <div className="flex items-start gap-4">
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center bg-slate-50 dark:bg-slate-700 shadow-sm border border-slate-100 dark:border-slate-600 ${accent.text} group-hover:scale-110 transition-transform duration-300 shrink-0`}>
-            <IconComp size={26} />
+          {/* Glowing Icon Rounded Square */}
+          <div className={`w-14 h-14 rounded-[1.25rem] flex items-center justify-center bg-gradient-to-tr ${accent.btn} text-white shadow-md group-hover:scale-110 transition-transform duration-300 shrink-0`} style={{ boxShadow: `0 8px 18px ${accent.glow}` }}>
+            <IconComp size={24} />
           </div>
-          <div className="flex-1 min-w-0">
-            <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${accent.badge} mb-1.5`}>
+          <div className="flex-grow min-w-0">
+            <span className={`inline-block text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${accent.badge} mb-2`}>
               {comp.category}
             </span>
             <h3 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">{comp.title}</h3>
           </div>
           {!comp.isOpen && (
-            <span className="shrink-0 text-xs font-bold bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-2.5 py-1 rounded-full border border-red-200 dark:border-red-700">
+            <span className="shrink-0 text-[10px] font-black uppercase tracking-widest bg-red-500/10 text-red-500 dark:text-red-400 px-3 py-1 rounded-full border border-red-500/20">
               Tutup
             </span>
           )}
         </div>
 
         {/* Description */}
-        <p className="mt-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{comp.description}</p>
+        <p className="mt-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+          {comp.description === 'tidakada' || !comp.description ? 'Ikuti dan ramaikan perlombaan ini, rebut hadiah menarik!' : comp.description}
+        </p>
 
-        {/* Meta pills */}
-        <div className="mt-4 flex flex-wrap gap-2">
+        {/* Meta pills in premium chips styling */}
+        <div className="mt-5 flex flex-wrap gap-2">
           {(comp.registrationStart || comp.registrationEnd) && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/60 px-3 py-1.5 rounded-full border border-slate-100 dark:border-slate-600">
-              <Calendar size={12} />
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 px-3.5 py-1.5 rounded-full border border-slate-200/50 dark:border-slate-700/50">
+              <Calendar size={12} className="text-slate-400 dark:text-slate-500" />
               {comp.registrationStart && comp.registrationEnd
                 ? `${new Date(comp.registrationStart).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} – ${new Date(comp.registrationEnd).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
                 : comp.registrationEnd
@@ -427,12 +417,12 @@ const CompetitionCard: React.FC<{
             </span>
           )}
           {comp.maxParticipants && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/60 px-3 py-1.5 rounded-full border border-slate-100 dark:border-slate-600">
-              <Users size={12} /> {comp.maxParticipants}
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 px-3.5 py-1.5 rounded-full border border-slate-200/50 dark:border-slate-700/50">
+              <Users size={12} className="text-slate-400 dark:text-slate-500" /> Kuota: {comp.maxParticipants}
             </span>
           )}
           {comp.fee && (
-            <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full ${comp.fee.toLowerCase() === 'gratis' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-100 dark:border-green-800' : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-100 dark:border-amber-800'}`}>
+            <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-full ${comp.fee.toLowerCase() === 'gratis' ? 'bg-green-500/10 text-[#30D158] border border-green-500/20' : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'}`}>
               <Gift size={12} /> {comp.fee}
             </span>
           )}
@@ -442,7 +432,7 @@ const CompetitionCard: React.FC<{
         {(requirements.length > 0 || prizes.length > 0) && (
           <button
             onClick={() => setExpanded((p) => !p)}
-            className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+            className="mt-5 flex items-center gap-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-m-blue dark:hover:text-blue-400 transition-colors uppercase tracking-wider"
             aria-expanded={expanded}
           >
             Lihat Detail
@@ -464,12 +454,12 @@ const CompetitionCard: React.FC<{
             >
               <div className="mt-4 grid sm:grid-cols-2 gap-4">
                 {requirements.length > 0 && (
-                  <div className="bg-slate-50 dark:bg-slate-700/40 rounded-xl p-4 border border-slate-100 dark:border-slate-600/50">
-                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3">Syarat</p>
-                    <ul className="space-y-1.5">
+                  <div className="bg-slate-50/50 dark:bg-slate-900/30 rounded-2xl p-4 border border-slate-150 dark:border-slate-800/60">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3">Syarat & Ketentuan</p>
+                    <ul className="space-y-2">
                       {requirements.map((req, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-                          <Star size={11} className="mt-1 shrink-0 text-m-blue" fill="currentColor" />
+                        <li key={i} className="flex items-start gap-2.5 text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
+                          <Star size={11} className="mt-0.5 shrink-0 text-m-blue" fill="currentColor" />
                           {req}
                         </li>
                       ))}
@@ -477,12 +467,12 @@ const CompetitionCard: React.FC<{
                   </div>
                 )}
                 {prizes.length > 0 && (
-                  <div className="bg-slate-50 dark:bg-slate-700/40 rounded-xl p-4 border border-slate-100 dark:border-slate-600/50">
-                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3">Hadiah</p>
-                    <ul className="space-y-1.5">
+                  <div className="bg-slate-50/50 dark:bg-slate-900/30 rounded-2xl p-4 border border-slate-150 dark:border-slate-800/60">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3">Hadiah Pemenang</p>
+                    <ul className="space-y-2">
                       {prizes.map((prize, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-                          <Medal size={13} className={`mt-0.5 shrink-0 ${i === 0 ? 'text-yellow-500' : i === 1 ? 'text-slate-400' : 'text-amber-700'}`} />
+                        <li key={i} className="flex items-start gap-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 leading-relaxed">
+                          <Medal size={12} className={`mt-0.5 shrink-0 ${i === 0 ? 'text-yellow-500' : i === 1 ? 'text-slate-400' : 'text-amber-700'}`} />
                           {prize}
                         </li>
                       ))}
@@ -494,16 +484,16 @@ const CompetitionCard: React.FC<{
           )}
         </AnimatePresence>
 
-        {/* CTA */}
-        <div className="mt-auto pt-5">
+        {/* CTA Button */}
+        <div className="mt-auto pt-6">
           <button
             disabled={!comp.isOpen}
             onClick={() => comp.isOpen && onRegister(comp)}
-            className={`w-full rounded-xl py-3 px-5 text-sm font-bold text-white flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.97] bg-gradient-to-r ${accent.btn} ${!comp.isOpen ? 'opacity-40 cursor-not-allowed' : 'hover:shadow-lg'}`}
-            style={comp.isOpen ? { boxShadow: `0 4px 18px ${accent.glow}` } : undefined}
+            className={`btn-glass w-full py-3.5 rounded-full font-extrabold text-white text-xs uppercase tracking-widest flex items-center justify-center gap-2 active:scale-[0.98] transition-all bg-gradient-to-r ${accent.btn} border border-white/10 ${!comp.isOpen ? 'opacity-40 cursor-not-allowed shadow-none' : 'shadow-lg hover:shadow-xl'}`}
+            style={comp.isOpen ? { boxShadow: `0 6px 18px ${accent.glow}` } : undefined}
             aria-label={comp.isOpen ? `Daftar ${comp.title}` : `${comp.title} sudah tutup`}
           >
-            <Trophy size={15} />
+            <Trophy size={14} />
             {comp.isOpen ? 'Daftar Sekarang' : 'Pendaftaran Ditutup'}
           </button>
         </div>
@@ -514,7 +504,7 @@ const CompetitionCard: React.FC<{
 
 /* ────────────────────────────────────────────────
    Main Section
-──────────────────────────────────────────────── */
+ ──────────────────────────────────────────────── */
 export const Competition: React.FC = () => {
   const [competitions, setCompetitions] = useState<CompetitionItem[]>([]);
   const [registrations, setRegistrations] = useState<CompetitionRegistration[]>([]);
@@ -543,15 +533,15 @@ export const Competition: React.FC = () => {
             viewport={{ once: true }}
             className="text-center max-w-2xl mx-auto mb-14"
           >
-            <span className="inline-flex items-center gap-2 rounded-full border border-m-blue/20 bg-blue-50 dark:bg-blue-900/20 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-m-blue dark:text-blue-400 mb-4">
-              <Trophy size={13} />
+            <span className="inline-flex items-center gap-2 rounded-full border border-m-blue/20 bg-blue-50 dark:bg-blue-900/20 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-m-blue dark:text-blue-400 mb-4">
+              <Trophy size={12} />
               Perlombaan
             </span>
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">
               Daftar Perlombaan <span className="text-m-blue">KKN 35</span>
             </h2>
             <div className="w-20 h-1 bg-m-blue mx-auto rounded-full mb-5" />
-            <p className="text-slate-600 dark:text-slate-300 text-lg leading-relaxed">
+            <p className="text-slate-600 dark:text-slate-300 text-lg leading-relaxed font-medium">
               Ikuti berbagai lomba seru yang diadakan KKN Kelompok 35 UMP. Terbuka untuk seluruh warga!
             </p>
           </motion.div>
@@ -562,16 +552,16 @@ export const Competition: React.FC = () => {
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="flex flex-wrap justify-center gap-2 mb-10"
+              className="flex flex-wrap justify-center gap-3 mb-10"
             >
               {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setFilter(cat)}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                  className={`btn-glass px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 ${
                     filter === cat
-                      ? 'bg-m-blue text-white shadow-md shadow-blue-500/25'
-                      : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:border-m-blue hover:text-m-blue'
+                      ? 'btn-glass-blue text-white'
+                      : 'btn-glass-white text-slate-700 dark:text-slate-200'
                   }`}
                 >
                   {cat}
@@ -606,18 +596,18 @@ export const Competition: React.FC = () => {
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center py-20 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 text-center gap-4"
+              className="flex flex-col items-center justify-center py-20 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-850/40 text-center gap-4 max-w-lg mx-auto backdrop-blur-md"
             >
-              <div className="w-20 h-20 rounded-3xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
-                <Trophy size={36} className="text-m-blue dark:text-blue-400" />
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shadow-sm">
+                <Trophy size={32} className="text-m-blue dark:text-blue-400" />
               </div>
               <div>
-                <h3 className="text-xl font-black text-slate-800 dark:text-white">Segera Hadir!</h3>
-                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-sm">
+                <h3 className="text-xl font-black text-slate-850 dark:text-white">Segera Hadir!</h3>
+                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed font-medium">
                   Daftar perlombaan sedang disiapkan oleh panitia. Pantau terus website ini ya!
                 </p>
               </div>
-              <a href="#contact" className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-m-blue text-white text-sm font-bold hover:bg-m-blue-dark transition-colors shadow-md shadow-blue-500/25">
+              <a href="#contact" className="mt-2 btn-glass btn-glass-blue px-6 py-2.5 rounded-full text-xs font-extrabold uppercase tracking-widest text-white border border-white/10 shadow-md">
                 Hubungi Panitia
               </a>
             </motion.div>
@@ -628,10 +618,10 @@ export const Competition: React.FC = () => {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="mt-12 text-center text-sm text-slate-500 dark:text-slate-400"
+            className="mt-12 text-center text-sm text-slate-500 dark:text-slate-400 font-semibold"
           >
             Pertanyaan? Hubungi panitia via{' '}
-            <a href="#contact" className="font-semibold text-m-blue dark:text-blue-400 hover:underline">
+            <a href="#contact" className="font-bold text-m-blue dark:text-blue-400 hover:underline">
               halaman Kontak
             </a>
             .

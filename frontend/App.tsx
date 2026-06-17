@@ -15,8 +15,10 @@ import { Contact } from './components/Contact';
 import { Footer } from './components/Footer';
 import { ScrollToTop } from './components/ScrollToTop';
 import { AdminDashboard } from './components/AdminDashboard';
+import { WelcomeIntro } from './components/WelcomeIntro';
 import { storage } from './services/storage';
 import { SiteContent } from './types';
+
 
 type ThemeMode = 'light' | 'dark';
 type BeforeInstallPromptEvent = Event & {
@@ -275,11 +277,11 @@ const StatusPage = ({ content, status }: { content: SiteContent; status: 'mainte
 
 const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'public' | 'admin'>('public');
   const [siteContent, setSiteContent] = useState<SiteContent>(storage.defaults.siteContent);
   const [now, setNow] = useState(Date.now());
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [introCompleted, setIntroCompleted] = useState(false);
 
   useEffect(() => {
     // Initialize storage with default constants if empty
@@ -309,15 +311,10 @@ const App: React.FC = () => {
     window.addEventListener('popstate', handleAdminRouteChange);
     handleAdminRouteChange();
 
-    // Simulate loading screen
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1200);
     const clock = window.setInterval(() => setNow(Date.now()), 30000);
     const unsubscribeSite = storage.subscribeSiteContent(setSiteContent);
 
     return () => {
-      clearTimeout(timer);
       clearInterval(clock);
       unsubscribeSite();
       unsubscribeAuth();
@@ -335,40 +332,6 @@ const App: React.FC = () => {
     });
   };
 
-  if (loading) {
-    return (
-      <div
-        className="bg-white dark:bg-slate-950 z-[100]"
-        style={{
-          position: 'fixed',
-          inset: 0,
-          minHeight: '100dvh',
-          width: '100vw',
-          display: 'grid',
-          placeItems: 'center',
-        }}
-      >
-        <div className="text-center px-6">
-          <h2 className="text-5xl md:text-8xl font-black text-slate-900 dark:text-white leading-none">KKN 35</h2>
-          <div className="mt-8 mx-auto h-1 w-36 rounded-full bg-slate-200 dark:bg-white/12 overflow-hidden">
-            <span className="loading-bar block h-full rounded-full bg-m-blue"></span>
-          </div>
-        </div>
-        <style>{`
-          .loading-bar {
-            width: 42%;
-            animation: loading-bar-slide 1.15s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-          }
-          @keyframes loading-bar-slide {
-            0% { transform: translateX(-120%); opacity: 0.55; }
-            50% { opacity: 1; }
-            100% { transform: translateX(260%); opacity: 0.55; }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
   const closeAdmin = () => {
     if (hasMaintenanceLoginToken()) {
       window.history.replaceState(null, '', '/');
@@ -376,6 +339,10 @@ const App: React.FC = () => {
       window.location.hash = '';
     }
     setView('public');
+  };
+
+  const handleIntroComplete = () => {
+    setIntroCompleted(true);
   };
 
   if (view === 'admin') {
@@ -393,9 +360,10 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden font-sans selection:bg-m-blue selection:text-white">
-      <Navbar darkMode={darkMode} toggleDarkMode={toggleDarkMode} isLoggedIn={isLoggedIn} />
+      {!introCompleted && <WelcomeIntro onComplete={handleIntroComplete} />}
+      <Navbar darkMode={darkMode} toggleDarkMode={toggleDarkMode} isLoggedIn={isLoggedIn} introCompleted={introCompleted} />
       <main className="w-full max-w-full overflow-x-hidden">
-        <Hero />
+        <Hero introCompleted={introCompleted} />
         <About />
         <VillageProfile />
         <Team />

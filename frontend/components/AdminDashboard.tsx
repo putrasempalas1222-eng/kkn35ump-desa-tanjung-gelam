@@ -3,20 +3,31 @@ import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowLeft,
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  Bold,
   ClipboardCheck,
   Briefcase,
   CalendarClock,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Download,
   Edit,
   Eye,
   EyeOff,
   FileText,
+  IndentDecrease,
+  IndentIncrease,
+  Italic,
   Image as ImageIcon,
   KeyRound,
   LayoutDashboard,
+  Link,
   LogOut,
   Mail,
   MapPin,
@@ -27,19 +38,30 @@ import {
   Home,
   Globe,
   StickyNote,
+  List,
+  ListOrdered,
+  Minus,
+  Paintbrush,
   Plus,
   Printer,
+  Redo2,
   Save,
   Send,
   Sparkles,
+  Strikethrough,
   Trash2,
+  Type,
+  Undo2,
   User,
   Users,
   X,
   Trophy,
   ClipboardList,
   ShieldCheck,
+  Underline,
+  Upload,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { auth, storage, ContactMessage } from '../services/storage';
 import {
@@ -62,6 +84,7 @@ import {
   DivisionChatMessage,
   MoneyCollection,
   MoneyCollectionPayment,
+  SecretarySharedDocument,
 } from '../types';
 
 interface AdminDashboardProps {
@@ -71,10 +94,48 @@ interface AdminDashboardProps {
 type Tab = 'overview' | 'accounts' | 'content' | 'maintenance' | 'event' | 'team' | 'programs' | 'gallery' | 'testimonials' | 'reviews' | 'messages' | 'competitions' | 'competition-registrations';
 type EditableType = 'team' | 'programs' | 'gallery' | 'testimonials';
 type EditableItem = TeamMember | Program | GalleryImage | Testimonial;
-type DivisionDashboardView = 'home' | 'maps' | 'notes' | 'chat' | 'moneyCollection' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput' | 'treasurerIncome';
+type DivisionDashboardView = 'home' | 'maps' | 'notes' | 'secretaryDocs' | 'chat' | 'moneyCollection' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput' | 'treasurerIncome';
 type TwoFactorView = 'select' | 'email' | 'authenticator' | 'authenticatorSetup';
 
 const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
+const DIVISION_DASHBOARD_VIEWS: DivisionDashboardView[] = [
+  'home',
+  'maps',
+  'notes',
+  'secretaryDocs',
+  'chat',
+  'moneyCollection',
+  'weekly',
+  'individualMatrix',
+  'groupMatrix',
+  'treasurerOutput',
+  'treasurerIncome',
+];
+const ADMIN_TABS: Tab[] = [
+  'overview',
+  'accounts',
+  'content',
+  'maintenance',
+  'event',
+  'team',
+  'programs',
+  'gallery',
+  'testimonials',
+  'reviews',
+  'messages',
+  'competitions',
+  'competition-registrations',
+];
+const getDivisionViewStorageKey = (uid: string) => `kkn_last_division_view_${uid}`;
+const getAdminTabStorageKey = (uid: string) => `kkn_last_admin_tab_${uid}`;
+const isDivisionDashboardView = (value: string): value is DivisionDashboardView =>
+  DIVISION_DASHBOARD_VIEWS.includes(value as DivisionDashboardView);
+const isAdminTab = (value: string): value is Tab => ADMIN_TABS.includes(value as Tab);
+const getSavedDivisionDashboardView = (uid: string, fallback: DivisionDashboardView) => {
+  if (typeof window === 'undefined' || !uid) return fallback;
+  const saved = localStorage.getItem(getDivisionViewStorageKey(uid)) || '';
+  return isDivisionDashboardView(saved) ? saved : fallback;
+};
 
 const DIVISIONS: { value: DivisionName; label: string; defaultName: string }[] = [
   { value: 'ketua', label: 'Ketua', defaultName: 'Daffa' },
@@ -104,6 +165,7 @@ const getDivisionLabel = (value: DivisionName) => DIVISIONS.find((item) => item.
 const getDivisionAccessGroup = (value: DivisionName) => {
   const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
   if (normalized.startsWith('bendahara')) return 'bendahara';
+  if (normalized.startsWith('sekretaris') || normalized.startsWith('seketaris')) return 'sekretaris';
   if (normalized.startsWith('pdd')) return 'pdd';
   if (normalized.startsWith('acara')) return 'acara';
   return normalized;
@@ -124,6 +186,7 @@ const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const A4_WIDTH_PX = 794;
 const A4_HEIGHT_PX = 1123;
+const SECRETARY_DOC_PAGE_GAP_PX = 32;
 const PUTRA_AI_PROXY_ENDPOINT = '/putra-ai-proxy';
 const OLLAMA_ENDPOINT = 'https://rotunda-elderly-alto.ngrok-free.dev';
 const OLLAMA_REPORT_MODEL = 'llama3.2:3b';
@@ -150,9 +213,10 @@ const PAYMENT_METHOD_OPTIONS = [
   'OVO',
   'ShopeePay',
   'LinkAja',
-  'QRIS',
   'Tunai',
 ];
+
+const lucideIconMap = LucideIcons as unknown as Record<string, LucideIcon>;
 
 const onlyDigits = (value: string) => value.replace(/\D/g, '');
 const formatIdrInput = (value: string) => {
@@ -2449,6 +2513,23 @@ const DivisionDashboard = ({
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [financialReports, setFinancialReports] = useState<WeeklyReport[]>([]);
   const [notes, setNotes] = useState<DivisionNote[]>([]);
+  const [secretaryDocuments, setSecretaryDocuments] = useState<SecretarySharedDocument[]>([]);
+  const [selectedSecretaryDocumentId, setSelectedSecretaryDocumentId] = useState('');
+  const [editingSecretaryDocument, setEditingSecretaryDocument] = useState<SecretarySharedDocument>(() => ({
+    id: `doc_${Date.now()}`,
+    title: 'Dokumen Baru',
+    contentHtml: '<p>Mulai tulis dokumen bersama di sini...</p>',
+    plainText: 'Mulai tulis dokumen bersama di sini...',
+    createdByUid: profile.uid,
+    createdByName: profile.name,
+    updatedByUid: profile.uid,
+    updatedByName: profile.name,
+    date: new Date().toLocaleString('id-ID'),
+    updatedAtMs: Date.now(),
+  }));
+  const [secretaryDocumentSaving, setSecretaryDocumentSaving] = useState(false);
+  const [secretaryDocumentStatus, setSecretaryDocumentStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [secretaryDocumentPageCount, setSecretaryDocumentPageCount] = useState(1);
   const [moneyCollections, setMoneyCollections] = useState<MoneyCollection[]>([]);
   const [divisionProfiles, setDivisionProfiles] = useState<UserProfile[]>([]);
   const [publicChatMessages, setPublicChatMessages] = useState<DivisionChatMessage[]>([]);
@@ -2491,7 +2572,9 @@ const DivisionDashboard = ({
     payments: {},
   }));
   const [moneyPaymentDrafts, setMoneyPaymentDrafts] = useState<Record<string, { amount: string; evidenceUrl: string; note: string }>>({});
-  const [dashboardView, setDashboardView] = useState<DivisionDashboardView>(initialView);
+  const [dashboardView, setDashboardView] = useState<DivisionDashboardView>(() =>
+    initialView !== 'home' ? initialView : getSavedDivisionDashboardView(profile.uid, initialView)
+  );
   const reportPageType: WeeklyReport['reportType'] =
     dashboardView === 'individualMatrix'
       ? 'individualMatrix'
@@ -2505,6 +2588,13 @@ const DivisionDashboard = ({
   const [isNavOpen, setIsNavOpen] = useState(false);
   const locationWatchId = useRef<number | null>(null);
   const locationWakeLock = useRef<any>(null);
+  const secretaryEditorRef = useRef<HTMLDivElement | null>(null);
+  const secretaryImageInputRef = useRef<HTMLInputElement | null>(null);
+  const secretaryDraggedImageRef = useRef<HTMLElement | null>(null);
+  const secretaryDraggedImageHtmlRef = useRef('');
+  const secretarySelectedImageRef = useRef<HTMLElement | null>(null);
+  const secretaryLocalEditAtRef = useRef(0);
+  const secretarySaveTimerRef = useRef<number | null>(null);
   const liveTrackingPreferenceKey = `live_maps_tracking_${profile.uid}`;
   const divisionAccessGroup = getDivisionAccessGroup(profile.division);
   const isSecretary = divisionAccessGroup === 'sekretaris';
@@ -2685,9 +2775,21 @@ const DivisionDashboard = ({
     new Notification(title, options);
   };
 
+  useEffect(() => {
+    if (!profile.uid || !isDivisionDashboardView(dashboardView)) return;
+    localStorage.setItem(getDivisionViewStorageKey(profile.uid), dashboardView);
+  }, [dashboardView, profile.uid]);
+
   useEffect(() => storage.subscribeWeeklyReports(profile.uid, setReports), [profile.uid]);
   useEffect(() => storage.subscribeFinancialReports(setFinancialReports), []);
   useEffect(() => storage.subscribeDivisionNotes(profile.uid, setNotes), [profile.uid]);
+  useEffect(() => {
+    if (!isSecretary) {
+      setSecretaryDocuments([]);
+      return () => undefined;
+    }
+    return storage.subscribeSecretaryDocuments(setSecretaryDocuments);
+  }, [isSecretary]);
   useEffect(() => storage.subscribeMoneyCollections(setMoneyCollections), []);
   useEffect(() => storage.subscribeUserProfiles((profiles) => setDivisionProfiles(profiles.filter((item) => item.role === 'division'))), []);
   useEffect(() => {
@@ -2731,6 +2833,49 @@ const DivisionDashboard = ({
   }, [dashboardView, isDivisionChatEnabled]);
 
   useEffect(() => {
+    if (!isSecretary && dashboardView === 'secretaryDocs') {
+      setDashboardView('home');
+    }
+  }, [dashboardView, isSecretary]);
+
+  useEffect(() => {
+    if (!isSecretary) return;
+    if (!secretaryDocuments.length) return;
+    if (selectedSecretaryDocumentId && secretaryDocuments.some((document) => document.id === selectedSecretaryDocumentId)) return;
+    setSelectedSecretaryDocumentId(secretaryDocuments[0].id);
+  }, [isSecretary, secretaryDocuments, selectedSecretaryDocumentId]);
+
+  useEffect(() => {
+    if (!isSecretary || !selectedSecretaryDocumentId) return;
+    const selected = secretaryDocuments.find((document) => document.id === selectedSecretaryDocumentId);
+    if (!selected) return;
+    setEditingSecretaryDocument(selected);
+
+    const editor = secretaryEditorRef.current;
+    const shouldKeepLocalTyping = Date.now() - secretaryLocalEditAtRef.current < 900;
+    if (editor && !shouldKeepLocalTyping && editor.innerHTML !== selected.contentHtml) {
+      editor.innerHTML = selected.contentHtml || '';
+    }
+    window.setTimeout(() => {
+      const currentEditor = secretaryEditorRef.current;
+      if (currentEditor) {
+        normalizeSecretaryDocumentLayout();
+        setSecretaryDocumentPageCount(getSecretaryDocumentPageCount(currentEditor));
+      }
+    }, 0);
+    setSecretaryDocumentStatus('saved');
+  }, [isSecretary, secretaryDocuments, selectedSecretaryDocumentId]);
+
+  useEffect(() => {
+    if (!isSecretary || dashboardView !== 'secretaryDocs') return;
+    const editor = secretaryEditorRef.current;
+    if (!editor) return;
+    if (selectedSecretaryDocumentId) return;
+    if (editor.innerHTML.trim()) return;
+    editor.innerHTML = editingSecretaryDocument.contentHtml || '';
+  }, [dashboardView, editingSecretaryDocument.contentHtml, isSecretary, selectedSecretaryDocumentId]);
+
+  useEffect(() => {
     if (!isDivisionChatEnabled) return;
     if (!selectedPrivateUid && privateChatPartners[0]?.uid) {
       setSelectedPrivateUid(privateChatPartners[0].uid);
@@ -2750,6 +2895,10 @@ const DivisionDashboard = ({
     localStorage.setItem(chatLastSeenKey, String(latest));
     setChatLastSeenAt(latest);
   }, [dashboardView, incomingChatMessages.length, chatLastSeenKey, isDivisionChatEnabled]);
+
+  useEffect(() => () => {
+    if (secretarySaveTimerRef.current) window.clearTimeout(secretarySaveTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!isDivisionChatEnabled) return;
@@ -3128,6 +3277,377 @@ Format lengkap yang juga diterima:
     if (editingNote.id === note.id) resetNoteForm();
   };
 
+  const createSecretaryDocument = async () => {
+    if (!isSecretary) return;
+    const document: SecretarySharedDocument = {
+      id: `doc_${Date.now()}`,
+      title: 'Dokumen Baru',
+      contentHtml: '<p></p>',
+      plainText: '',
+      createdByUid: profile.uid,
+      createdByName: profile.name,
+      updatedByUid: profile.uid,
+      updatedByName: profile.name,
+      date: new Date().toLocaleString('id-ID'),
+      updatedAtMs: Date.now(),
+    };
+    setEditingSecretaryDocument(document);
+    setSelectedSecretaryDocumentId(document.id);
+    if (secretaryEditorRef.current) secretaryEditorRef.current.innerHTML = document.contentHtml;
+    await storage.saveSecretaryDocument(document);
+  };
+
+  const persistSecretaryDocument = async (document: SecretarySharedDocument) => {
+    if (!isSecretary) return;
+    setSecretaryDocumentSaving(true);
+    setSecretaryDocumentStatus('saving');
+    await storage.saveSecretaryDocument({
+      ...document,
+      title: document.title.trim() || 'Dokumen Tanpa Judul',
+      updatedByUid: profile.uid,
+      updatedByName: profile.name,
+      updatedAtMs: Date.now(),
+    });
+    setSecretaryDocumentSaving(false);
+    setSecretaryDocumentStatus('saved');
+  };
+
+  const scheduleSecretaryDocumentSave = (nextDocument: SecretarySharedDocument, updateStatus = true) => {
+    if (secretarySaveTimerRef.current) window.clearTimeout(secretarySaveTimerRef.current);
+    if (updateStatus) setSecretaryDocumentStatus('saving');
+    secretarySaveTimerRef.current = window.setTimeout(() => {
+      persistSecretaryDocument(nextDocument).catch((error) => {
+        console.error('Failed to save secretary document:', error);
+        setSecretaryDocumentSaving(false);
+        setSecretaryDocumentStatus('idle');
+      });
+    }, 650);
+  };
+
+  const getSecretaryEditorSnapshot = () => {
+    const editor = secretaryEditorRef.current;
+    if (!editor) return { contentHtml: editingSecretaryDocument.contentHtml || '', plainText: editingSecretaryDocument.plainText || '' };
+
+    const cleanEditor = editor.cloneNode(true) as HTMLElement;
+    cleanEditor.querySelectorAll('[data-secretary-page-break="true"]').forEach((breakNode) => breakNode.remove());
+    cleanEditor.querySelectorAll('figure[data-secretary-image="true"], figure[draggable="true"]').forEach((figure) => {
+      const item = figure as HTMLElement;
+      item.style.outline = '';
+      item.style.outlineOffset = '';
+      item.style.boxShadow = '';
+    });
+
+    return {
+      contentHtml: cleanEditor.innerHTML,
+      plainText: editor.innerText,
+    };
+  };
+
+  const getSecretaryDocumentPageCount = (editor: HTMLElement) => {
+    const previousMinHeight = editor.style.minHeight;
+    editor.style.minHeight = `${A4_HEIGHT_PX}px`;
+    const measuredHeight = Math.max(editor.scrollHeight, A4_HEIGHT_PX);
+    editor.style.minHeight = previousMinHeight;
+    return Math.max(1, Math.ceil(measuredHeight / A4_HEIGHT_PX));
+  };
+
+  const normalizeSecretaryDocumentLayout = () => {
+    const editor = secretaryEditorRef.current;
+    if (!editor) return;
+
+    editor.querySelectorAll('[data-secretary-page-break="true"]').forEach((breakNode) => breakNode.remove());
+    const maxImageHeight = A4_HEIGHT_PX - 180;
+
+    Array.from(editor.querySelectorAll('figure[data-secretary-image="true"], figure[draggable="true"]')).forEach((figureNode) => {
+      const figure = figureNode as HTMLElement;
+      if (figure.offsetHeight > maxImageHeight) {
+        figure.style.height = `${maxImageHeight}px`;
+      }
+    });
+  };
+
+  const updateSecretaryDocumentDraft = (patch: Partial<SecretarySharedDocument>, saveNow = false) => {
+    setEditingSecretaryDocument((current) => {
+      const next = {
+        ...current,
+        ...patch,
+        updatedByUid: profile.uid,
+        updatedByName: profile.name,
+        updatedAtMs: Date.now(),
+      };
+      if (saveNow) {
+        persistSecretaryDocument(next).catch((error) => {
+          console.error('Failed to save secretary document:', error);
+          setSecretaryDocumentSaving(false);
+          setSecretaryDocumentStatus('idle');
+        });
+      } else {
+        scheduleSecretaryDocumentSave(next);
+      }
+      return next;
+    });
+  };
+
+  const handleSecretaryDocumentInput = () => {
+    const editor = secretaryEditorRef.current;
+    if (!editor) return;
+    secretaryLocalEditAtRef.current = Date.now();
+    normalizeSecretaryDocumentLayout();
+    setSecretaryDocumentPageCount(getSecretaryDocumentPageCount(editor));
+    const snapshot = getSecretaryEditorSnapshot();
+    scheduleSecretaryDocumentSave({
+      ...editingSecretaryDocument,
+      ...snapshot,
+      updatedByUid: profile.uid,
+      updatedByName: profile.name,
+      updatedAtMs: Date.now(),
+    }, false);
+  };
+
+  const selectSecretaryImageFigure = (figure: HTMLElement | null) => {
+    if (secretarySelectedImageRef.current && secretarySelectedImageRef.current !== figure) {
+      secretarySelectedImageRef.current.style.outline = '';
+      secretarySelectedImageRef.current.style.outlineOffset = '';
+      secretarySelectedImageRef.current.style.boxShadow = '';
+    }
+
+    secretarySelectedImageRef.current = figure;
+    if (figure) {
+      figure.style.outline = '2px solid #1a73e8';
+      figure.style.outlineOffset = '3px';
+      figure.style.boxShadow = '0 0 0 6px rgba(26, 115, 232, 0.12)';
+    }
+  };
+
+  const handleSecretaryEditorClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    const figure = target.closest('figure[data-secretary-image="true"], figure[draggable="true"]') as HTMLElement | null;
+    if (figure && secretaryEditorRef.current?.contains(figure)) {
+      selectSecretaryImageFigure(figure);
+      return;
+    }
+    selectSecretaryImageFigure(null);
+  };
+
+  const applySecretaryCommand = (command: string, value?: string) => {
+    secretaryEditorRef.current?.focus();
+    document.execCommand(command, false, value);
+    handleSecretaryDocumentInput();
+  };
+
+  const applySecretaryFormat = (command: string) => applySecretaryCommand(command);
+
+  const applySecretaryAlignment = (command: string, imageAlign: 'left' | 'center' | 'right' | 'full') => {
+    const selectedImage = secretarySelectedImageRef.current;
+    if (selectedImage && secretaryEditorRef.current?.contains(selectedImage)) {
+      selectedImage.style.display = 'block';
+      selectedImage.style.float = 'none';
+      selectedImage.style.verticalAlign = 'top';
+      selectedImage.style.maxWidth = '100%';
+
+      if (imageAlign === 'left') {
+        selectedImage.style.margin = '12px auto 12px 0';
+      } else if (imageAlign === 'center') {
+        selectedImage.style.margin = '12px auto';
+      } else if (imageAlign === 'right') {
+        selectedImage.style.margin = '12px 0 12px auto';
+      } else {
+        selectedImage.style.width = '100%';
+        selectedImage.style.margin = '12px 0';
+      }
+
+      handleSecretaryDocumentInput();
+      return;
+    }
+
+    applySecretaryCommand(command);
+  };
+
+  const insertSecretaryLink = () => {
+    const url = window.prompt('Masukkan URL link');
+    if (!url) return;
+    applySecretaryCommand('createLink', url);
+  };
+
+  const insertSecretaryImage = () => {
+    secretaryImageInputRef.current?.click();
+  };
+
+  const handleSecretaryImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Pilih file gambar.');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      alert('Ukuran gambar maksimal 3 MB supaya realtime tetap ringan.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = String(reader.result || '');
+      if (!src) return;
+      secretaryEditorRef.current?.focus();
+      const imageHtml = `
+        <figure data-secretary-image="true" contenteditable="false" draggable="true" style="display:block;width:320px;height:220px;max-width:100%;resize:both;overflow:hidden;margin:12px auto 12px 0;border:1px solid #cbd5e1;background:#f8fafc;vertical-align:top;cursor:move;">
+          <img src="${src}" alt="${file.name.replace(/"/g, '&quot;')}" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;" />
+        </figure>
+        <p><br></p>
+      `;
+      applySecretaryCommand('insertHTML', imageHtml);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const setSecretaryCaretFromPoint = (clientX: number, clientY: number) => {
+    const doc = document as Document & {
+      caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    };
+    const selection = window.getSelection();
+    if (!selection) return false;
+
+    const range = doc.caretRangeFromPoint?.(clientX, clientY);
+    if (range) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
+    }
+
+    const position = doc.caretPositionFromPoint?.(clientX, clientY);
+    if (position) {
+      const nextRange = document.createRange();
+      nextRange.setStart(position.offsetNode, position.offset);
+      nextRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleSecretaryEditorDragStart = (event: React.DragEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    const figure = target.closest('figure[data-secretary-image="true"], figure[draggable="true"]') as HTMLElement | null;
+    if (!figure || !secretaryEditorRef.current?.contains(figure)) return;
+
+    secretaryDraggedImageRef.current = figure;
+    secretaryDraggedImageHtmlRef.current = figure.outerHTML;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/html', figure.outerHTML);
+    event.dataTransfer.setData('text/plain', 'secretary-image');
+  };
+
+  const handleSecretaryEditorDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!secretaryDraggedImageHtmlRef.current) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleSecretaryEditorDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    const html = secretaryDraggedImageHtmlRef.current || event.dataTransfer.getData('text/html');
+    if (!html) return;
+
+    event.preventDefault();
+    const source = secretaryDraggedImageRef.current;
+    setSecretaryCaretFromPoint(event.clientX, event.clientY);
+    if (source?.parentElement) source.remove();
+    document.execCommand('insertHTML', false, html);
+    secretaryDraggedImageRef.current = null;
+    secretaryDraggedImageHtmlRef.current = '';
+    handleSecretaryDocumentInput();
+  };
+
+  const handleSecretaryFileMenu = (value: string) => {
+    if (value === 'new') createSecretaryDocument();
+    if (value === 'download') downloadSecretaryDocument();
+    if (value === 'print') printSecretaryDocument();
+  };
+
+  const selectSecretaryDocument = (document: SecretarySharedDocument) => {
+    setSelectedSecretaryDocumentId(document.id);
+    setEditingSecretaryDocument(document);
+    window.setTimeout(() => {
+      if (secretaryEditorRef.current) {
+        secretaryEditorRef.current.innerHTML = document.contentHtml || '';
+        normalizeSecretaryDocumentLayout();
+        setSecretaryDocumentPageCount(getSecretaryDocumentPageCount(secretaryEditorRef.current));
+      }
+    }, 0);
+  };
+
+  const deleteSecretaryDocument = async (document: SecretarySharedDocument) => {
+    if (!isSecretary) return;
+    if (!window.confirm(`Hapus dokumen "${document.title}"?`)) return;
+    await storage.deleteSecretaryDocument(document.id);
+    if (selectedSecretaryDocumentId === document.id) {
+      const nextDocument = secretaryDocuments.find((item) => item.id !== document.id);
+      setSelectedSecretaryDocumentId(nextDocument?.id || '');
+      if (nextDocument) {
+        setEditingSecretaryDocument(nextDocument);
+      } else {
+        await createSecretaryDocument();
+      }
+    }
+  };
+
+  const printSecretaryDocument = () => {
+    const { contentHtml } = getSecretaryEditorSnapshot();
+    const printWindow = window.open('', '_blank', 'width=900,height=1100');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>${editingSecretaryDocument.title}</title>
+          <style>
+            body { margin: 0; background: #f1f5f9; font-family: Arial, sans-serif; color: #0f172a; }
+            .page { width: 210mm; min-height: 297mm; box-sizing: border-box; margin: 0 auto; background: white; padding: 24mm 22mm; }
+            .content { font-size: 12pt; line-height: 1.65; }
+            figure { page-break-inside: avoid; }
+            @media print { body { background: white; } .page { margin: 0; width: auto; min-height: auto; } }
+          </style>
+        </head>
+        <body>
+          <main class="page">
+            <div class="content">${contentHtml}</div>
+          </main>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 250);
+  };
+
+  const downloadSecretaryDocument = () => {
+    const { contentHtml } = getSecretaryEditorSnapshot();
+    const filename = `${sanitizeFilePart(editingSecretaryDocument.title || 'dokumen-sekretaris')}.doc`;
+    const html = `
+      <!doctype html>
+      <html>
+        <head><meta charset="utf-8"><title>${editingSecretaryDocument.title}</title></head>
+        <body>
+          ${contentHtml}
+        </body>
+      </html>
+    `;
+    const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const resetMoneyCollectionDraft = () => {
     setMoneyCollectionDraft({
       id: `money_${Date.now()}`,
@@ -3223,13 +3743,7 @@ Format lengkap yang juga diterima:
   const updateMoneyPaymentDraft = (collectionId: string, patch: Partial<{ amount: string; evidenceUrl: string; note: string }>) => {
     setMoneyPaymentDrafts((current) => ({
       ...current,
-      [collectionId]: {
-        amount: '',
-        evidenceUrl: '',
-        note: '',
-        ...(current[collectionId] || {}),
-        ...patch,
-      },
+      [collectionId]: { ...(current[collectionId] || { amount: '', evidenceUrl: '', note: '' }), ...patch },
     }));
   };
 
@@ -3760,6 +4274,7 @@ Format lengkap yang juga diterima:
     { label: 'Home', icon: Home, active: dashboardView === 'home', action: () => openDashboardView('home') },
     { label: 'Live Maps', icon: MapPinned, active: dashboardView === 'maps', action: () => openDashboardView('maps') },
     { label: 'Catatan', icon: StickyNote, active: dashboardView === 'notes', action: () => openDashboardView('notes') },
+    ...(isSecretary ? [{ label: 'Dokumen Bersama', icon: FileText, active: dashboardView === 'secretaryDocs', action: () => openDashboardView('secretaryDocs') }] : []),
     ...(isDivisionChatEnabled ? [{ label: unreadChatCount ? `Chat Divisi (${unreadChatCount})` : 'Chat Divisi', icon: MessageSquare, active: dashboardView === 'chat', action: () => openDashboardView('chat') }] : []),
     { label: 'Pengumpulan Uang', icon: WalletCards, active: dashboardView === 'moneyCollection', action: () => openDashboardView('moneyCollection') },
     { label: 'Laporan Mingguan', icon: FileText, active: dashboardView === 'weekly', action: () => openReportPage('weekly') },
@@ -3771,6 +4286,10 @@ Format lengkap yang juga diterima:
     ...(!isUnifiedOperatorPanel && onAdminPanel ? [{ label: 'Panel Tugas', icon: LayoutDashboard, active: false, action: () => { closeNav(); onAdminPanel(); } }] : []),
     ...(onClose ? [{ label: 'Lihat Website', icon: Globe, active: false, action: () => { closeNav(); onClose(); } }] : []),
   ];
+  const secretaryToolbarIconButtonClass =
+    'flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-700 transition-colors hover:bg-white hover:text-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white';
+  const secretaryToolbarSelectClass =
+    'h-8 rounded-md border border-transparent bg-transparent px-2 text-sm font-semibold text-slate-700 outline-none transition-colors hover:bg-white focus:border-m-blue dark:text-slate-200 dark:hover:bg-slate-800';
 
   const mobileNavDrawer = typeof document !== 'undefined' && isNavOpen
     ? createPortal(
@@ -4647,6 +5166,305 @@ Format lengkap yang juga diterima:
                 </button>
               </div>
             </form>
+          </section>
+        )}
+
+        {dashboardView === 'secretaryDocs' && isSecretary && (
+          <section className="order-1 grid gap-3 lg:col-span-2 xl:grid-cols-[320px_minmax(0,1fr)]">
+            <aside className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Sekretaris</p>
+                  <h3 className="mt-1 text-lg font-black text-slate-950 dark:text-white">{secretaryDocuments.length} dokumen</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={createSecretaryDocument}
+                  className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 border border-slate-200 bg-[#f8fafd] px-3 py-2 text-xs font-black text-slate-700 transition-colors hover:bg-white dark:border-slate-800 dark:bg-[#111827] dark:text-slate-200 dark:hover:bg-[#151c30]"
+                >
+                  <Plus size={14} />
+                  Baru
+                </button>
+              </div>
+
+              {secretaryDocuments.length === 0 ? (
+                <div className="mt-4 flex min-h-[240px] flex-col items-center justify-center bg-[#f8fafd] px-4 text-center dark:bg-[#111827]">
+                  <FileText size={30} className="mb-3 text-slate-300 dark:text-slate-700" />
+                  <p className="text-sm font-black text-slate-700 dark:text-slate-300">Belum ada dokumen</p>
+                  <button
+                    type="button"
+                    onClick={createSecretaryDocument}
+                    className="mt-4 inline-flex min-h-[40px] items-center justify-center gap-2 border border-m-blue/20 bg-[#e8f0fe] px-4 py-2 text-xs font-black text-m-blue transition-colors hover:bg-[#d2e3fc] dark:bg-m-blue/20 dark:text-[#8ab4f8]"
+                  >
+                    <Plus size={14} />
+                    Buat Dokumen
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-3 divide-y divide-slate-100 border border-slate-100 dark:divide-slate-800 dark:border-slate-800">
+                  {secretaryDocuments.map((document) => (
+                    <button
+                      key={document.id}
+                      type="button"
+                      onClick={() => selectSecretaryDocument(document)}
+                      className={`group block w-full px-3 py-3 text-left transition-colors hover:bg-[#f8fafd] dark:hover:bg-[#111827] ${
+                        selectedSecretaryDocumentId === document.id ? 'bg-[#e8f0fe] dark:bg-[#12325f]/45' : 'bg-white dark:bg-[#0d1320]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h4 className="truncate text-sm font-black text-slate-950 dark:text-white">{document.title || 'Dokumen Tanpa Judul'}</h4>
+                          <p className="mt-1 truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                            {document.updatedByName ? `Update: ${document.updatedByName}` : document.date}
+                          </p>
+                        </div>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteSecretaryDocument(document);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              deleteSecretaryDocument(document);
+                            }
+                          }}
+                          className="shrink-0 p-1.5 text-red-500 opacity-70 transition hover:bg-red-50 hover:opacity-100 dark:hover:bg-red-950/30"
+                          title="Hapus dokumen"
+                        >
+                          <Trash2 size={14} />
+                        </span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-400">
+                        {document.plainText || 'Dokumen kosong.'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </aside>
+
+            <div className="min-w-0 border border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-[#0d1320]">
+              <input
+                ref={secretaryImageInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleSecretaryImageUpload}
+                className="hidden"
+              />
+              <div className="border-b border-slate-200 bg-[#f8fafd] dark:border-slate-800 dark:bg-[#111827]">
+                <div className="flex flex-col gap-3 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-m-blue text-white shadow-sm shadow-m-blue/25">
+                      <FileText size={24} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <input
+                          value={editingSecretaryDocument.title}
+                          onChange={(event) => updateSecretaryDocumentDraft({ title: event.target.value })}
+                          onBlur={() => updateSecretaryDocumentDraft({ title: editingSecretaryDocument.title }, true)}
+                          className="h-8 min-w-0 flex-1 border-0 bg-transparent px-1 text-xl font-medium text-slate-800 outline-none transition-colors hover:bg-white focus:bg-white dark:text-white dark:hover:bg-slate-900 dark:focus:bg-slate-900"
+                          placeholder="Dokumen tanpa judul"
+                        />
+                      </div>
+
+                      <div className="mt-1 flex items-center gap-1 overflow-x-auto pb-1 text-sm text-slate-700 dark:text-slate-200">
+                        <select
+                          value=""
+                          onChange={(event) => {
+                            handleSecretaryFileMenu(event.target.value);
+                            event.currentTarget.value = '';
+                          }}
+                          className="h-7 shrink-0 rounded-md border-0 bg-transparent px-1 font-medium outline-none hover:bg-slate-200/80 dark:hover:bg-slate-800"
+                          aria-label="File"
+                        >
+                          <option value="">File</option>
+                          <option value="new">Dokumen baru</option>
+                          <option value="download">Download .doc</option>
+                          <option value="print">Print</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mx-4 mb-3 flex items-center gap-1 overflow-x-auto rounded-full bg-slate-100 px-3 py-2 dark:bg-slate-900">
+                  <button type="button" onClick={() => applySecretaryCommand('undo')} className={secretaryToolbarIconButtonClass} title="Undo">
+                    <Undo2 size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryCommand('redo')} className={secretaryToolbarIconButtonClass} title="Redo">
+                    <Redo2 size={16} />
+                  </button>
+                  <button type="button" onClick={printSecretaryDocument} className={secretaryToolbarIconButtonClass} title="Print">
+                    <Printer size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryCommand('removeFormat')} className={secretaryToolbarIconButtonClass} title="Hapus format">
+                    <Paintbrush size={16} />
+                  </button>
+
+                  <span className="mx-2 h-7 w-px shrink-0 bg-slate-300 dark:bg-slate-700" />
+
+                  <select className={secretaryToolbarSelectClass} defaultValue="100%" aria-label="Zoom">
+                    <option>75%</option>
+                    <option>90%</option>
+                    <option>100%</option>
+                    <option>125%</option>
+                    <option>150%</option>
+                  </select>
+                  <select
+                    className={`${secretaryToolbarSelectClass} w-36`}
+                    defaultValue="p"
+                    onChange={(event) => applySecretaryCommand('formatBlock', event.target.value)}
+                    aria-label="Style teks"
+                  >
+                    <option value="p">Teks normal</option>
+                    <option value="h1">Judul 1</option>
+                    <option value="h2">Judul 2</option>
+                    <option value="h3">Judul 3</option>
+                    <option value="blockquote">Kutipan</option>
+                  </select>
+                  <select
+                    className={`${secretaryToolbarSelectClass} w-28`}
+                    defaultValue="Arial"
+                    onChange={(event) => applySecretaryCommand('fontName', event.target.value)}
+                    aria-label="Font"
+                  >
+                    <option>Arial</option>
+                    <option>Times New Roman</option>
+                    <option>Georgia</option>
+                    <option>Courier New</option>
+                    <option>Verdana</option>
+                  </select>
+
+                  <span className="mx-2 h-7 w-px shrink-0 bg-slate-300 dark:bg-slate-700" />
+
+                  <button type="button" onClick={() => applySecretaryCommand('fontSize', '2')} className={secretaryToolbarIconButtonClass} title="Kecil">
+                    <Minus size={16} />
+                  </button>
+                  <select
+                    className={`${secretaryToolbarSelectClass} w-16 text-center`}
+                    defaultValue="3"
+                    onChange={(event) => applySecretaryCommand('fontSize', event.target.value)}
+                    aria-label="Ukuran font"
+                  >
+                    <option value="2">10</option>
+                    <option value="3">11</option>
+                    <option value="4">14</option>
+                    <option value="5">18</option>
+                    <option value="6">24</option>
+                  </select>
+                  <button type="button" onClick={() => applySecretaryCommand('fontSize', '4')} className={secretaryToolbarIconButtonClass} title="Besar">
+                    <Plus size={16} />
+                  </button>
+
+                  <span className="mx-2 h-7 w-px shrink-0 bg-slate-300 dark:bg-slate-700" />
+
+                  <button type="button" onClick={() => applySecretaryFormat('bold')} className={secretaryToolbarIconButtonClass} title="Bold">
+                    <Bold size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryFormat('italic')} className={secretaryToolbarIconButtonClass} title="Italic">
+                    <Italic size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryFormat('underline')} className={secretaryToolbarIconButtonClass} title="Underline">
+                    <Underline size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryFormat('strikeThrough')} className={secretaryToolbarIconButtonClass} title="Coret">
+                    <Strikethrough size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryCommand('foreColor', '#0f172a')} className={secretaryToolbarIconButtonClass} title="Warna teks">
+                    <Type size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryCommand('hiliteColor', '#fef3c7')} className={secretaryToolbarIconButtonClass} title="Highlight">
+                    <Paintbrush size={16} />
+                  </button>
+
+                  <span className="mx-2 h-7 w-px shrink-0 bg-slate-300 dark:bg-slate-700" />
+
+                  <button type="button" onClick={insertSecretaryLink} className={secretaryToolbarIconButtonClass} title="Link">
+                    <Link size={16} />
+                  </button>
+                  <button type="button" onClick={insertSecretaryImage} className={secretaryToolbarIconButtonClass} title="Gambar">
+                    <ImageIcon size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryAlignment('justifyLeft', 'left')} className={secretaryToolbarIconButtonClass} title="Rata kiri">
+                    <AlignLeft size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryAlignment('justifyCenter', 'center')} className={secretaryToolbarIconButtonClass} title="Rata tengah">
+                    <AlignCenter size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryAlignment('justifyRight', 'right')} className={secretaryToolbarIconButtonClass} title="Rata kanan">
+                    <AlignRight size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryAlignment('justifyFull', 'full')} className={secretaryToolbarIconButtonClass} title="Rata kiri kanan">
+                    <AlignJustify size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryFormat('insertUnorderedList')} className={secretaryToolbarIconButtonClass} title="Bullet">
+                    <List size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryFormat('insertOrderedList')} className={secretaryToolbarIconButtonClass} title="Nomor">
+                    <ListOrdered size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryCommand('outdent')} className={secretaryToolbarIconButtonClass} title="Kurangi indent">
+                    <IndentDecrease size={16} />
+                  </button>
+                  <button type="button" onClick={() => applySecretaryCommand('indent')} className={secretaryToolbarIconButtonClass} title="Tambah indent">
+                    <IndentIncrease size={16} />
+                  </button>
+
+                  <span className="mx-2 h-7 w-px shrink-0 bg-slate-300 dark:bg-slate-700" />
+
+                  <button type="button" onClick={downloadSecretaryDocument} className={secretaryToolbarIconButtonClass} title="Download">
+                    <Download size={16} />
+                  </button>
+                  <div className="ml-auto flex shrink-0 items-center gap-2 px-2 text-sm font-bold text-slate-600 dark:text-slate-300">
+                    <Edit size={16} />
+                    <span>Mengedit</span>
+                    <span className="hidden text-slate-400 sm:inline">|</span>
+                    <span className="hidden sm:inline">{secretaryDocumentPageCount} halaman</span>
+                    <ChevronDown size={15} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-auto bg-slate-100 p-4 dark:bg-slate-950 md:p-8">
+                <div
+                  className="mx-auto shrink-0 shadow-xl shadow-slate-950/10"
+                  style={{
+                    width: `${A4_WIDTH_MM}mm`,
+                    minHeight: `calc(${secretaryDocumentPageCount * A4_HEIGHT_MM}mm + ${(secretaryDocumentPageCount - 1) * SECRETARY_DOC_PAGE_GAP_PX}px)`,
+                    backgroundImage: `repeating-linear-gradient(to bottom, #ffffff 0mm, #ffffff ${A4_HEIGHT_MM}mm, transparent ${A4_HEIGHT_MM}mm, transparent calc(${A4_HEIGHT_MM}mm + ${SECRETARY_DOC_PAGE_GAP_PX}px))`,
+                    backgroundSize: `100% calc(${A4_HEIGHT_MM}mm + ${SECRETARY_DOC_PAGE_GAP_PX}px)`,
+                    filter: 'drop-shadow(0 1px 2px rgba(15, 23, 42, 0.12))',
+                  }}
+                >
+                  <div
+                    ref={secretaryEditorRef}
+                    contentEditable
+                    dir="ltr"
+                    spellCheck
+                    suppressContentEditableWarning
+                    onInput={handleSecretaryDocumentInput}
+                    onClick={handleSecretaryEditorClick}
+                    onDragStart={handleSecretaryEditorDragStart}
+                    onDragOver={handleSecretaryEditorDragOver}
+                    onDrop={handleSecretaryEditorDrop}
+                    onBlur={() => updateSecretaryDocumentDraft(getSecretaryEditorSnapshot(), true)}
+                    className="secretary-doc-editor box-border w-full outline-none prose prose-slate max-w-none px-8 py-10 text-[15px] leading-7 text-slate-900 prose-headings:text-slate-950 prose-p:my-3 prose-ul:my-3 prose-ol:my-3 md:px-16 md:py-14"
+                    style={{
+                      direction: 'ltr',
+                      textAlign: 'left',
+                      unicodeBidi: 'normal',
+                      width: `${A4_WIDTH_MM}mm`,
+                      minHeight: `calc(${secretaryDocumentPageCount * A4_HEIGHT_MM}mm + ${(secretaryDocumentPageCount - 1) * SECRETARY_DOC_PAGE_GAP_PX}px)`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           </section>
         )}
 
@@ -6603,13 +7421,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const isAcaraOperator = currentDivisionAccessGroup === 'acara';
   const requiresDivisionOtp = currentProfile?.role === 'division' && otpVerifiedUid !== currentUid;
   const allowedTabs: Tab[] = isAdmin
-    ? ['overview', 'accounts', 'content', 'maintenance', 'event', 'team', 'programs', 'gallery', 'testimonials', 'reviews', 'messages', 'competitions', 'competition-registrations']
+    ? ADMIN_TABS
     : isPddOperator
       ? ['content', 'team', 'gallery']
       : isAcaraOperator
         ? ['event', 'competitions', 'competition-registrations']
         : [];
   const canUseAdminPanel = allowedTabs.length > 0;
+  const allowedTabsSignature = allowedTabs.join('|');
 
   const stats = useMemo(
     () => [
@@ -6627,7 +7446,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     if (canUseAdminPanel && !allowedTabs.includes(activeTab)) {
       setActiveTab(allowedTabs[0]);
     }
-  }, [activeTab, allowedTabs, canUseAdminPanel]);
+  }, [activeTab, allowedTabsSignature, canUseAdminPanel]);
+
+  useEffect(() => {
+    if (!currentUid || !canUseAdminPanel) return;
+    const saved = localStorage.getItem(getAdminTabStorageKey(currentUid)) || '';
+    if (isAdminTab(saved) && allowedTabs.includes(saved) && saved !== activeTab) {
+      setActiveTab(saved);
+    }
+  }, [currentUid, canUseAdminPanel, allowedTabsSignature]);
+
+  useEffect(() => {
+    if (!currentUid || !canUseAdminPanel || !allowedTabs.includes(activeTab)) return;
+    localStorage.setItem(getAdminTabStorageKey(currentUid), activeTab);
+  }, [currentUid, canUseAdminPanel, activeTab, allowedTabsSignature]);
 
   useEffect(() => {
     if (!otpSending || !otpSendStartedAt) return;
@@ -7245,7 +8077,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     placeholder="123456"
-                    className={`${googleInputClass} h-16 rounded-2xl text-center text-2xl font-black tracking-[0.45em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
+                    className={`${googleInputClass} h-16 py-0 rounded-2xl text-center text-4xl font-black tracking-[0.35em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
                   />
                 </label>
 
@@ -7273,7 +8105,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     placeholder="123456"
-                    className={`${googleInputClass} h-16 rounded-2xl text-center text-2xl font-black tracking-[0.45em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
+                    className={`${googleInputClass} h-16 py-0 rounded-2xl text-center text-4xl font-black tracking-[0.35em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
                   />
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
@@ -8212,7 +9044,7 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
     await storage.deleteCompetition(id);
   };
 
-  const PreviewIcon = (LucideIcons as Record<string, React.FC<{ size?: number; className?: string }>>)[form.iconName] ?? LucideIcons.Trophy;
+  const PreviewIcon = lucideIconMap[form.iconName] ?? LucideIcons.Trophy;
 
   return (
     <div className="w-full space-y-3">
@@ -8406,7 +9238,7 @@ const CompetitionManager: React.FC<{ competitions: CompetitionItem[] }> = ({ com
         ) : (
           <div className="grid sm:grid-cols-2 gap-4">
             {competitions.map((comp) => {
-              const IconComp = (LucideIcons as Record<string, React.FC<{ size?: number; className?: string }>>)[comp.iconName] ?? LucideIcons.Trophy;
+              const IconComp = lucideIconMap[comp.iconName] ?? LucideIcons.Trophy;
               return (
                 <div key={comp.id} className="flex items-start gap-4 border border-slate-200 bg-white p-4 shadow-none transition-colors hover:bg-[#f8fafd] dark:border-slate-800 dark:bg-[#0d1320] dark:hover:bg-[#111827]">
                   <div className="w-11 h-11 rounded-2xl border border-slate-200 bg-[#e8f0fe] text-[#1a73e8] dark:border-slate-800 dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8] flex items-center justify-center shrink-0">

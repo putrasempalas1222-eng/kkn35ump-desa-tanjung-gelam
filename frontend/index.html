@@ -407,8 +407,9 @@
       html::-webkit-scrollbar-track,
       body::-webkit-scrollbar-track,
       *::-webkit-scrollbar-track {
-        background: #101827 !important;
-        border: 4px solid #0b1220 !important;
+        background: rgba(0, 0, 0, 0.05) !important;
+        border: 3px solid transparent !important;
+        background-clip: padding-box !important;
         border-radius: 999px !important;
       }
 
@@ -416,56 +417,61 @@
       body::-webkit-scrollbar-thumb,
       *::-webkit-scrollbar-thumb {
         min-height: 48px;
-        background: #94a3b8 !important;
-        border: 4px solid #0b1220 !important;
+        background: rgba(0, 0, 0, 0.2) !important;
+        border: 3px solid transparent !important;
+        background-clip: padding-box !important;
         border-radius: 999px !important;
-        transition: background 200ms ease;
       }
 
       html::-webkit-scrollbar-thumb:hover,
       body::-webkit-scrollbar-thumb:hover,
       *::-webkit-scrollbar-thumb:hover {
-        background: #cbd5e1 !important;
+        background: rgba(0, 0, 0, 0.35) !important;
       }
 
       html::-webkit-scrollbar-corner,
       body::-webkit-scrollbar-corner,
       *::-webkit-scrollbar-corner {
-        background: #0b1220 !important;
+        background: transparent !important;
       }
 
       /* Dark mode scrollbar */
-      .dark html::-webkit-scrollbar-track,
-      .dark body::-webkit-scrollbar-track,
-      .dark *::-webkit-scrollbar-track,
-      .dark html::-webkit-scrollbar-corner,
-      .dark body::-webkit-scrollbar-corner,
-      .dark *::-webkit-scrollbar-corner {
-        background: #0b1220 !important;
-        border-color: #050814 !important;
+      html.dark::-webkit-scrollbar-track,
+      html.dark body::-webkit-scrollbar-track,
+      html.dark *::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.08) !important;
+        border: 3px solid transparent !important;
+        background-clip: padding-box !important;
       }
 
-      .dark html::-webkit-scrollbar-thumb,
-      .dark body::-webkit-scrollbar-thumb,
-      .dark *::-webkit-scrollbar-thumb {
-        background: #64748b !important;
-        border-color: #050814 !important;
+      html.dark::-webkit-scrollbar-thumb,
+      html.dark body::-webkit-scrollbar-thumb,
+      html.dark *::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.25) !important;
+        border: 3px solid transparent !important;
+        background-clip: padding-box !important;
       }
 
-      .dark html::-webkit-scrollbar-thumb:hover,
-      .dark body::-webkit-scrollbar-thumb:hover,
-      .dark *::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8 !important;
+      html.dark::-webkit-scrollbar-thumb:hover,
+      html.dark body::-webkit-scrollbar-thumb:hover,
+      html.dark *::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.4) !important;
+      }
+
+      html.dark::-webkit-scrollbar-corner,
+      html.dark body::-webkit-scrollbar-corner,
+      html.dark *::-webkit-scrollbar-corner {
+        background: transparent !important;
       }
 
       /* Firefox */
-      * {
+      html, * {
         scrollbar-width: thin;
-        scrollbar-color: #94a3b8 #0b1220;
+        scrollbar-color: rgba(0, 0, 0, 0.25) rgba(0, 0, 0, 0.05);
       }
 
-      .dark * {
-        scrollbar-color: #64748b #050814;
+      html.dark, html.dark * {
+        scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.08);
       }
 
       @media (hover: none), (pointer: coarse), (max-width: 768px) {
@@ -512,6 +518,7 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
       }
+
     </style>
       </head>
   <body class="bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50 transition-colors duration-300">

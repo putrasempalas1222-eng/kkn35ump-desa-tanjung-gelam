@@ -42,6 +42,7 @@ import {
   CompetitionItem,
   CompetitionRegistration,
   DivisionNote,
+  SecretarySharedDocument,
   DivisionChatMessage,
   MoneyCollection,
   MoneyCollectionPayment,
@@ -69,9 +70,10 @@ const DEFAULT_FIREBASE_ENV: Record<string, string> = {
   VITE_FIREBASE_VAPID_KEY: '',
 };
 
-const getFirebaseEnv = (key: string) => import.meta.env[key] || DEFAULT_FIREBASE_ENV[key] || '';
+const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | boolean | undefined> }).env || {};
+const getFirebaseEnv = (key: string) => String(viteEnv[key] || DEFAULT_FIREBASE_ENV[key] || '');
 const getBackendApiBaseUrl = () => {
-  const configured = String(import.meta.env.VITE_BACKEND_API_BASE_URL || '').replace(/\/$/, '');
+  const configured = String(viteEnv.VITE_BACKEND_API_BASE_URL || '').replace(/\/$/, '');
   if (configured) return configured;
   return '';
 };
@@ -89,7 +91,7 @@ const buildBackendApiUrl = (url: string) => {
   const baseUrl = isBackendRoute ? getBackendApiBaseUrl() : '';
   if (baseUrl) return `${baseUrl}${url}`;
   if (!isBackendRoute) return url;
-  if (import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname)) return url;
+  if (viteEnv.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname)) return url;
   return `/api${url}`;
 };
 
@@ -130,6 +132,7 @@ const COLLECTIONS = {
   weeklyReports: 'weeklyReports',
   financialReports: 'financialReports',
   divisionNotes: 'divisionNotes',
+  secretaryDocuments: 'secretaryDocuments',
   divisionChats: 'divisionChats',
   moneyCollections: 'moneyCollections',
   liveLocations: 'liveLocations',
@@ -736,6 +739,24 @@ export const storage = {
   },
   deleteDivisionNote: (uid: string, id: string) => remove(ref(database, `${COLLECTIONS.divisionNotes}/${uid}/${id}`)),
 
+  subscribeSecretaryDocuments: (callback: (data: SecretarySharedDocument[]) => void) =>
+    subscribeList<SecretarySharedDocument>(COLLECTIONS.secretaryDocuments, (documents) =>
+      callback(documents.sort((a, b) => Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0)))
+    ),
+  saveSecretaryDocument: async (document: SecretarySharedDocument) => {
+    const id = document.id || `doc_${Date.now()}`;
+    const now = Date.now();
+    await set(ref(database, `${COLLECTIONS.secretaryDocuments}/${id}`), {
+      ...document,
+      id,
+      updatedAtMs: now,
+      updatedAt: serverTimestamp(),
+      createdAt: document.createdAt || serverTimestamp(),
+    });
+    return id;
+  },
+  deleteSecretaryDocument: (id: string) => remove(ref(database, `${COLLECTIONS.secretaryDocuments}/${id}`)),
+
   subscribeMoneyCollections: (callback: (data: MoneyCollection[]) => void) =>
     subscribeList<MoneyCollection>(COLLECTIONS.moneyCollections, (collections) =>
       callback(collections.sort((a, b) => String(b.updatedAt || b.date).localeCompare(String(a.updatedAt || a.date))))
@@ -893,7 +914,7 @@ export const storage = {
   },
 
   subscribeLiveLocations: (callback: (data: LiveLocation[]) => void) =>
-    subscribeList<LiveLocation>(COLLECTIONS.liveLocations, (locations) =>
+    subscribeList<LiveLocation & { id: string }>(COLLECTIONS.liveLocations, (locations) =>
       callback(locations.sort((a, b) => String(a.division).localeCompare(String(b.division)) || a.name.localeCompare(b.name)))
     ),
   saveLiveLocation: async (location: LiveLocation) => {

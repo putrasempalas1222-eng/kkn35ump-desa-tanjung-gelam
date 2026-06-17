@@ -191,6 +191,21 @@ export interface DivisionNote {
   updatedAt?: number | object;
 }
 
+export interface SecretarySharedDocument {
+  id: string;
+  title: string;
+  contentHtml: string;
+  plainText?: string;
+  createdByUid: string;
+  createdByName: string;
+  updatedByUid?: string;
+  updatedByName?: string;
+  date: string;
+  updatedAtMs?: number;
+  createdAt?: number | object;
+  updatedAt?: number | object;
+}
+
 export interface DivisionChatMessage {
   id: string;
   chatType: 'public' | 'private';
