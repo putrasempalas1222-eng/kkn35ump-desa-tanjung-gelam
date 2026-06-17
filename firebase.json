@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "source": "backend",
+    "runtime": "nodejs22"
+  },
   "database": {
     "rules": "database.rules.json"
   }
