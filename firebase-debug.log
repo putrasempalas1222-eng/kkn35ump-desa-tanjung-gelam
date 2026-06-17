@@ -1,0 +1,39 @@
+[debug] [2026-06-17T00:00:51.681Z] ----------------------------------------------------------------------
+[debug] [2026-06-17T00:00:51.684Z] Command:       D:\node js\node.exe C:\Users\USER\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only database
+[debug] [2026-06-17T00:00:51.685Z] CLI Version:   15.18.0
+[debug] [2026-06-17T00:00:51.685Z] Platform:      win32
+[debug] [2026-06-17T00:00:51.685Z] Node Version:  v22.14.0
+[debug] [2026-06-17T00:00:51.685Z] Time:          Wed Jun 17 2026 07:00:51 GMT+0700 (Waktu Indonesia Barat)
+[debug] [2026-06-17T00:00:51.686Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-06-17T00:01:18.801Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-17T00:01:18.801Z] > authorizing via signed-in user (putrasempalas1222@gmail.com)
+[debug] [2026-06-17T00:01:18.802Z] [iam] checking project project-3dfa8c97-bc93-4195-a5a for permissions ["firebase.projects.get","firebasedatabase.instances.update"]
+[debug] [2026-06-17T00:01:18.803Z] Checked if tokens are valid: false, expires at: 1781637433730
+[debug] [2026-06-17T00:01:18.803Z] Checked if tokens are valid: false, expires at: 1781637433730
+[debug] [2026-06-17T00:01:18.804Z] > refreshing access token with scopes: []
+[debug] [2026-06-17T00:01:18.806Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-06-17T00:01:18.806Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-06-17T00:01:18.914Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-06-17T00:01:18.915Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-06-17T00:01:18.933Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/project-3dfa8c97-bc93-4195-a5a:testIamPermissions [none]
+[debug] [2026-06-17T00:01:18.933Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/project-3dfa8c97-bc93-4195-a5a:testIamPermissions  x-goog-user-project=project-3dfa8c97-bc93-4195-a5a
+[debug] [2026-06-17T00:01:18.933Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/project-3dfa8c97-bc93-4195-a5a:testIamPermissions {"permissions":["firebase.projects.get","firebasedatabase.instances.update"]}
+[debug] [2026-06-17T00:01:19.386Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/project-3dfa8c97-bc93-4195-a5a:testIamPermissions 403
+[debug] [2026-06-17T00:01:19.386Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/project-3dfa8c97-bc93-4195-a5a:testIamPermissions {"error":{"code":403,"message":"Caller does not have required permission to use project project-3dfa8c97-bc93-4195-a5a. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console.developers.google.com/iam-admin/iam?project=project-3dfa8c97-bc93-4195-a5a and then retry. Propagation of the new permission may take a few minutes.","status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"USER_PROJECT_DENIED","domain":"googleapis.com","metadata":{"service":"cloudresourcemanager.googleapis.com","consoleUrl":"https://console.developers.google.com/iam-admin/iam?project=project-3dfa8c97-bc93-4195-a5a","consumer":"projects/project-3dfa8c97-bc93-4195-a5a","containerInfo":"project-3dfa8c97-bc93-4195-a5a"}},{"@type":"type.googleapis.com/google.rpc.LocalizedMessage","locale":"en-US","message":"Caller does not have required permission to use project project-3dfa8c97-bc93-4195-a5a. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console.developers.google.com/iam-admin/iam?project=project-3dfa8c97-bc93-4195-a5a and then retry. Propagation of the new permission may take a few minutes."},{"@type":"type.googleapis.com/google.rpc.Help","links":[{"description":"Google developer console IAM admin","url":"https://console.developers.google.com/iam-admin/iam?project=project-3dfa8c97-bc93-4195-a5a"}]}]}}
+[debug] [2026-06-17T00:01:19.387Z] [iam] error while checking permissions, command may fail: Request to https://cloudresourcemanager.googleapis.com/v1/projects/project-3dfa8c97-bc93-4195-a5a:testIamPermissions had HTTP Error: 403, Caller does not have required permission to use project project-3dfa8c97-bc93-4195-a5a. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console.developers.google.com/iam-admin/iam?project=project-3dfa8c97-bc93-4195-a5a and then retry. Propagation of the new permission may take a few minutes.
+[debug] [2026-06-17T00:01:19.387Z] Checked if tokens are valid: true, expires at: 1781658077915
+[debug] [2026-06-17T00:01:19.387Z] Checked if tokens are valid: true, expires at: 1781658077915
+[debug] [2026-06-17T00:01:19.387Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/project-3dfa8c97-bc93-4195-a5a [none]
+[debug] [2026-06-17T00:01:19.802Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/project-3dfa8c97-bc93-4195-a5a 403
+[debug] [2026-06-17T00:01:19.802Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/project-3dfa8c97-bc93-4195-a5a {"error":{"code":403,"message":"The caller does not have permission","status":"PERMISSION_DENIED"}}
+[debug] [2026-06-17T00:01:19.802Z] Request to https://firebase.googleapis.com/v1beta1/projects/project-3dfa8c97-bc93-4195-a5a had HTTP Error: 403, The caller does not have permission
+[debug] [2026-06-17T00:01:19.882Z] FirebaseError: Failed to get Firebase project project-3dfa8c97-bc93-4195-a5a. Please make sure the project exists and your account has permission to access it.
+    at getFirebaseProject (C:\Users\USER\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:384:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async getDefaultDatabaseInstance (C:\Users\USER\AppData\Roaming\npm\node_modules\firebase-tools\lib\getDefaultDatabaseInstance.js:6:28)
+    at async requireDatabaseInstance (C:\Users\USER\AppData\Roaming\npm\node_modules\firebase-tools\lib\requireDatabaseInstance.js:15:20)
+    at async Object.fn (C:\Users\USER\AppData\Roaming\npm\node_modules\firebase-tools\lib\commands\deploy.js:116:9)
+    at async C:\Users\USER\AppData\Roaming\npm\node_modules\firebase-tools\lib\command.js:271:17
+[error] 
+[error] Error: Failed to get details for project: project-3dfa8c97-bc93-4195-a5a.

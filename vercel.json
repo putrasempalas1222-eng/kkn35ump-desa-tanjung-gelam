@@ -2,6 +2,12 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "frontend/dist",
+  "crons": [
+    {
+      "path": "/api/money-collections/remind-due",
+      "schedule": "0 0 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/auth/:path*",
@@ -14,6 +20,10 @@
     {
       "source": "/division-chat/:path*",
       "destination": "/api/division-chat/:path*"
+    },
+    {
+      "source": "/money-collections/:path*",
+      "destination": "/api/money-collections/:path*"
     },
     {
       "source": "/api-proxy/:path*",

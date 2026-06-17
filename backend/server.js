@@ -318,6 +318,130 @@ const sendOtpEmail = async ({ email, name, code }) => {
   console.log(`[Auth OTP] Email OTP terkirim ke ${email} dalam ${Date.now() - startedAt}ms. messageId=${info?.messageId || '-'}`);
 };
 
+const getJakartaDateString = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+const addDaysToIsoDate = (isoDate, days) => {
+  const match = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return '';
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days));
+  return date.toISOString().slice(0, 10);
+};
+
+const getMoneyCollectionPayments = (collection) => {
+  const payments = collection?.payments || {};
+  if (Array.isArray(payments)) return payments.filter(Boolean);
+  return Object.entries(payments)
+    .map(([id, payment]) => ({ id, ...(payment || {}) }))
+    .filter((payment) => payment && typeof payment === 'object');
+};
+
+const sendMoneyCollectionEmail = async ({ to, bcc, name, collection, appUrl, reminder = false, daysUntilDue = 3 }) => {
+  const transporter = getSmtpTransport();
+  const from = process.env.SMTP_FROM || process.env.SMTP_SENDER_ADDRESS || process.env.SMTP_USER;
+  const startedAt = Date.now();
+  const displayName = name || 'Divisi KKN 35';
+  const publicBaseUrl = (process.env.PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL || 'https://kkn35ump-desa-gelam.vercel.app').replace(/\/$/, '');
+  const logoUrl = `${publicBaseUrl}/report-assets/logokknv1.png`;
+  const dueDateText = collection.dueDate || '-';
+  const descriptionText = collection.description || '-';
+  const paymentMethodText = collection.paymentMethod || '-';
+  const paymentAccountText = collection.paymentAccount || '-';
+  const headline = reminder ? 'Pengingat Tagihan KKN 35' : 'Pengumpulan Uang KKN 35';
+  const introText = reminder
+    ? `Sistem mendeteksi divisi Anda belum mengunggah bukti pembayaran untuk pengumpulan uang berikut. Deadline tersisa ${daysUntilDue} hari.`
+    : 'Bendahara membuat informasi pengumpulan uang baru pada dashboard KKN 35 UMP. Silakan lihat detail dan upload bukti pembayaran melalui tombol di bawah.';
+  const subject = reminder
+    ? `Pengingat Tagihan KKN 35 H-${daysUntilDue} - ${collection.title}`
+    : `Pengumpulan Uang KKN 35 - ${collection.title}`;
+  const cautionText =
+    'Informasi: Email ini dikirim otomatis oleh sistem KKN 35 UMP sebagai pemberitahuan resmi dari bendahara. ' +
+    'Silakan login ke dashboard divisi untuk melihat detail dan mengunggah bukti pembayaran. ' +
+    'Abaikan email ini jika Anda bukan bagian dari akun divisi KKN 35 UMP.';
+
+  const info = await Promise.race([
+    transporter.sendMail({
+      from,
+      to,
+      bcc,
+      subject,
+      text:
+        `${headline}\n\n` +
+        `Halo ${displayName},\n\n` +
+        `${introText}\n\n` +
+        `Nama Pengumpulan: ${collection.title}\n` +
+        `Jumlah: ${collection.amount}\n` +
+        `Metode Pembayaran: ${paymentMethodText}\n` +
+        `Nomor Rekening/E-Wallet: ${paymentAccountText}\n` +
+        `Deadline: ${dueDateText}\n` +
+        `Keterangan: ${descriptionText}\n\n` +
+        `Buka dashboard divisi untuk melihat detail dan upload bukti pembayaran: ${appUrl}\n\n${cautionText}`,
+      html: `
+        <div style="margin:0;padding:0;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+          <div style="max-width:720px;margin:0 auto;padding:32px 16px">
+            <div style="background:#ffffff;border-radius:10px;padding:36px 36px 30px;box-shadow:0 8px 28px rgba(15,23,42,0.08)">
+              <img src="${logoUrl}" alt="Logo KKN 35" width="96" style="display:block;width:96px;max-width:96px;height:auto;margin:0 0 34px" />
+
+              <h1 style="margin:0 0 22px;font-size:31px;line-height:1.18;font-weight:800;color:#020617">
+                ${headline}
+              </h1>
+
+              <p style="margin:0 0 8px;font-size:20px;line-height:1.6;color:#334155">
+                Halo <strong style="color:#1e293b">${displayName}</strong>,
+              </p>
+              <p style="margin:0;font-size:20px;line-height:1.6;color:#334155">
+                ${introText}
+              </p>
+
+              <div style="margin:44px 0 32px;padding:28px 24px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa">
+                <p style="margin:0 0 10px;font-size:13px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#f97316">
+                  ${reminder ? 'Pengingat Pembayaran' : 'Informasi Pengumpulan'}
+                </p>
+                <h2 style="margin:0 0 18px;font-size:28px;line-height:1.25;font-weight:800;color:#0f172a">
+                  ${collection.title}
+                </h2>
+                <p style="margin:0 0 10px;font-size:18px;line-height:1.5;color:#334155"><strong>Jumlah:</strong> ${collection.amount}</p>
+                <p style="margin:0 0 10px;font-size:18px;line-height:1.5;color:#334155"><strong>Metode:</strong> ${paymentMethodText}</p>
+                <p style="margin:0 0 10px;font-size:18px;line-height:1.5;color:#334155"><strong>Nomor:</strong> ${paymentAccountText}</p>
+                <p style="margin:0 0 10px;font-size:18px;line-height:1.5;color:#334155"><strong>Deadline:</strong> ${dueDateText}</p>
+                <p style="margin:0;font-size:18px;line-height:1.5;color:#334155"><strong>Keterangan:</strong> ${descriptionText}</p>
+              </div>
+
+              <a href="${appUrl}" style="display:block;border-radius:999px;background:#1a73e8;color:#ffffff;text-decoration:none;text-align:center;padding:16px 20px;font-size:16px;font-weight:800">
+                Lihat Pengumpulan & Upload Bukti
+              </a>
+
+              <p style="margin:26px 0 0;font-size:16px;line-height:1.7;color:#94a3b8">
+                Jika sudah melakukan pembayaran, buka menu Pengumpulan Uang lalu pilih riwayat yang sesuai untuk mengunggah bukti.
+              </p>
+            </div>
+
+            <div style="margin-top:20px;padding:22px 8px 0;border-top:1px solid #9ca3af">
+              <p style="margin:0;font-size:15px;line-height:1.55;color:#111827">
+                ${cautionText}
+              </p>
+            </div>
+          </div>
+        </div>
+      `,
+    }),
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('SMTP timeout. Cek koneksi internet, SMTP Gmail, dan App Password.')), SMTP_TIMEOUT_MS + 2000);
+    }),
+  ]);
+
+  console.log(`[Money Collection Email] Email terkirim ke ${Array.isArray(bcc) ? `${bcc.length} penerima BCC` : to} dalam ${Date.now() - startedAt}ms. messageId=${info?.messageId || '-'}`);
+  return info;
+};
+
 function getFirebaseAdminApp() {
   if (getApps().length) return getApp();
 
@@ -1072,6 +1196,313 @@ app.post('/division-chat/send', async (req, res) => {
     return res.status(500).json({
       error: 'Division chat send failed',
       message: error?.message || 'Pesan belum berhasil dikirim.',
+    });
+  }
+});
+
+app.post('/money-collections/notify', async (req, res) => {
+  try {
+    const authContext = await getAuthenticatedUser(req, res);
+    if (!authContext) return;
+
+    const sender = req.body?.sender || {};
+    const collection = req.body?.collection || {};
+    const recipients = Array.isArray(req.body?.recipients) ? req.body.recipients : [];
+    const senderDivision = String(sender.division || '').toLowerCase();
+
+    if (!senderDivision.startsWith('bendahara') && authContext.accountEmail !== ADMIN_EMAIL) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Hanya bendahara yang boleh mengirim informasi pengumpulan uang.' });
+    }
+
+    if (!collection?.title || !collection?.amount) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Data pengumpulan uang belum lengkap.' });
+    }
+
+    const appUrl = req.body?.appUrl || 'https://kkn35ump-desa-gelam.vercel.app/#admin';
+    const databaseRecipients = [];
+    try {
+      const profilesSnapshot = await withTimeout(firebaseDatabase.ref('userProfiles').get(), 8000, 'Baca userProfiles terlalu lama.');
+      profilesSnapshot.forEach((child) => {
+        const profile = child.val();
+        const email = String(profile?.email || '').trim().toLowerCase();
+        if (email && email !== ADMIN_EMAIL) {
+          databaseRecipients.push({
+            uid: profile?.uid || child.key,
+            name: profile?.name || email.split('@')[0] || 'Divisi KKN 35',
+            email,
+            division: profile?.division || '',
+            role: profile?.role || 'division',
+          });
+        }
+      });
+    } catch (profileReadError) {
+      console.warn('[Money Collection Notify] userProfiles backend read skipped:', profileReadError?.message || profileReadError);
+    }
+    const authRecipients = [];
+    try {
+      let pageToken;
+      do {
+        const page = await withTimeout(firebaseAuth.listUsers(1000, pageToken), 8000, 'Baca users Auth terlalu lama.');
+        page.users.forEach((userRecord) => {
+          const email = String(userRecord.email || '').trim().toLowerCase();
+          if (!email || email === ADMIN_EMAIL) return;
+          authRecipients.push({
+            uid: userRecord.uid,
+            name: userRecord.displayName || email.split('@')[0] || 'Divisi KKN 35',
+            email,
+            role: 'division',
+          });
+        });
+        pageToken = page.pageToken;
+      } while (pageToken);
+    } catch (authListError) {
+      console.warn('[Money Collection Notify] Firebase Auth users fallback skipped:', authListError?.message || authListError);
+    }
+
+    const uniqueRecipients = [...databaseRecipients, ...authRecipients, ...recipients, sender]
+      .filter((item) => {
+        const email = String(item?.email || '').trim().toLowerCase();
+        return email && email !== ADMIN_EMAIL;
+      })
+      .reduce((acc, item) => {
+        acc.set(String(item.email).toLowerCase(), item);
+        return acc;
+      }, new Map());
+
+    if (uniqueRecipients.size === 0) {
+      return res.status(400).json({
+        error: 'No recipients',
+        message: 'Tidak ada email akun divisi/Auth yang ditemukan untuk dikirimi notifikasi.',
+      });
+    }
+
+    const recipientList = [...uniqueRecipients.values()].map((item) => ({
+      ...item,
+      email: String(item.email || '').trim().toLowerCase(),
+      name: item.name || item.division || String(item.email || '').split('@')[0] || 'Divisi KKN 35',
+    }));
+    const recipientEmails = recipientList.map((item) => item.email);
+    console.log('[Money Collection Notify] Recipients:', {
+      userProfiles: databaseRecipients.length,
+      authUsers: authRecipients.length,
+      frontendRecipients: recipients.length,
+      unique: recipientEmails.length,
+      emails: recipientEmails,
+    });
+
+    const emailResults = [];
+    for (const recipient of recipientList) {
+      try {
+        await sendMoneyCollectionEmail({
+          to: recipient.email,
+          name: recipient.name,
+          collection,
+          appUrl,
+        });
+        emailResults.push({ ok: true, email: recipient.email });
+      } catch (emailError) {
+        emailResults.push({
+          ok: false,
+          email: recipient.email,
+          error: emailError?.message || 'SMTP gagal mengirim email.',
+        });
+      }
+    }
+
+    const sentCount = emailResults.filter((result) => result.ok).length;
+    const failedResults = emailResults.filter((result) => !result.ok);
+    if (failedResults.length) {
+      console.warn('[Money Collection Notify] Some emails failed:', failedResults);
+    }
+    if (sentCount === 0) {
+      const firstError = failedResults[0]?.error || 'SMTP gagal mengirim email.';
+      return res.status(502).json({
+        error: 'Email send failed',
+        message: `Notifikasi email belum terkirim. ${firstError}`,
+        sent: 0,
+        failed: failedResults.length,
+        recipients: uniqueRecipients.size,
+        profileRecipients: databaseRecipients.length,
+        authRecipients: authRecipients.length,
+      });
+    }
+
+    const messageRef = firebaseDatabase.ref('divisionChats/public').push();
+    const message = {
+      id: messageRef.key || `money_${Date.now()}`,
+      chatType: 'public',
+      senderUid: sender.uid || authContext.decodedToken.uid,
+      senderName: sender.name || 'Bendahara',
+      senderEmail: authContext.accountEmail,
+      senderDivision: sender.division || 'bendahara',
+      text: `INFORMASI RESMI PENGUMPULAN UANG\n${collection.title}\nJumlah: ${collection.amount}${collection.dueDate ? `\nDeadline: ${collection.dueDate}` : ''}\n${collection.description || ''}\nSilakan buka menu Pengumpulan Uang untuk upload bukti pembayaran.`,
+      date: new Date().toLocaleString('id-ID'),
+      createdAtMs: Date.now(),
+      createdAt: Date.now(),
+      systemType: 'moneyCollection',
+      collectionId: collection.id || '',
+    };
+
+    await withTimeout(messageRef.set(message), 8000, 'Pesan resmi belum berhasil disimpan ke chat publik.').catch((error) => {
+      console.warn('[Money Collection Notify] Chat public write skipped:', error?.message || error);
+      return null;
+    });
+
+    return res.json({
+      ok: true,
+      sent: sentCount,
+      failed: failedResults.length,
+      recipients: uniqueRecipients.size,
+      profileRecipients: databaseRecipients.length,
+      authRecipients: authRecipients.length,
+      message,
+    });
+  } catch (error) {
+    console.error('[Money Collection Notify] Failed:', error);
+    return res.status(500).json({
+      error: 'Money collection notify failed',
+      message: error?.message || 'Informasi resmi pengumpulan uang belum berhasil dikirim.',
+    });
+  }
+});
+
+const isMoneyReminderCronAllowed = (req) => {
+  const cronSecret = process.env.CRON_SECRET || process.env.MONEY_COLLECTION_CRON_SECRET || '';
+  const authHeader = req.get('authorization') || '';
+  const querySecret = String(req.query?.secret || '');
+
+  if (!process.env.VERCEL) return true;
+  if (req.get('x-vercel-cron')) return true;
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) return true;
+  if (cronSecret && querySecret === cronSecret) return true;
+  return false;
+};
+
+const runMoneyCollectionDueReminders = async ({ appUrl, dryRun = false } = {}) => {
+  const todayIso = getJakartaDateString();
+  const targetDueDate = addDaysToIsoDate(todayIso, 3);
+  const publicAppUrl = appUrl || 'https://kkn35ump-desa-gelam.vercel.app/#admin';
+
+  const [profilesSnapshot, collectionsSnapshot, remindersSnapshot] = await Promise.all([
+    firebaseDatabase.ref('userProfiles').get(),
+    firebaseDatabase.ref('moneyCollections').get(),
+    firebaseDatabase.ref('moneyCollectionReminders').get(),
+  ]);
+
+  const profiles = [];
+  profilesSnapshot.forEach((child) => {
+    const profile = child.val();
+    if (profile?.role === 'division' && profile?.email) {
+      profiles.push({ ...profile, uid: profile.uid || child.key });
+    }
+  });
+
+  const reminders = remindersSnapshot.val() || {};
+  const candidates = [];
+  collectionsSnapshot.forEach((child) => {
+    const collection = { id: child.key, ...(child.val() || {}) };
+    if (collection.dueDate !== targetDueDate) return;
+
+    const paidUids = new Set(
+      getMoneyCollectionPayments(collection)
+        .map((payment) => payment.payerUid)
+        .filter(Boolean)
+    );
+
+    profiles.forEach((profile) => {
+      if (paidUids.has(profile.uid)) return;
+      const reminderKey = reminders?.[collection.id]?.[profile.uid]?.h3;
+      if (reminderKey) return;
+      candidates.push({ profile, collection });
+    });
+  });
+
+  if (dryRun) {
+    return {
+      ok: true,
+      dryRun: true,
+      today: todayIso,
+      targetDueDate,
+      candidates: candidates.length,
+    };
+  }
+
+  const results = await Promise.allSettled(
+    candidates.map(({ profile, collection }) =>
+      sendMoneyCollectionEmail({
+        to: profile.email,
+        name: profile.name,
+        collection,
+        appUrl: publicAppUrl,
+        reminder: true,
+        daysUntilDue: 3,
+      })
+    )
+  );
+
+  const reminderUpdates = {};
+  results.forEach((result, index) => {
+    if (result.status !== 'fulfilled') return;
+    const { profile, collection } = candidates[index];
+    reminderUpdates[`moneyCollectionReminders/${collection.id}/${profile.uid}/h3`] = {
+      sentAt: Date.now(),
+      sentAtText: new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
+      email: profile.email,
+      dueDate: collection.dueDate,
+    };
+  });
+
+  if (Object.keys(reminderUpdates).length > 0) {
+    await firebaseDatabase.ref().update(reminderUpdates);
+  }
+
+  return {
+    ok: true,
+    today: todayIso,
+    targetDueDate,
+    checkedProfiles: profiles.length,
+    candidates: candidates.length,
+    sent: results.filter((result) => result.status === 'fulfilled').length,
+    failed: results.filter((result) => result.status === 'rejected').length,
+  };
+};
+
+app.get('/money-collections/remind-due', async (req, res) => {
+  try {
+    if (!isMoneyReminderCronAllowed(req)) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Cron secret tidak valid.' });
+    }
+
+    const result = await runMoneyCollectionDueReminders({
+      appUrl: req.query?.appUrl ? String(req.query.appUrl) : undefined,
+      dryRun: String(req.query?.dryRun || '') === '1',
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('[Money Collection Reminder] Failed:', error);
+    return res.status(500).json({
+      error: 'Money collection reminder failed',
+      message: error?.message || 'Pengingat pengumpulan uang belum berhasil dikirim.',
+    });
+  }
+});
+
+app.post('/money-collections/remind-due', async (req, res) => {
+  try {
+    if (!isMoneyReminderCronAllowed(req)) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Cron secret tidak valid.' });
+    }
+
+    const result = await runMoneyCollectionDueReminders({
+      appUrl: req.body?.appUrl,
+      dryRun: Boolean(req.body?.dryRun),
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('[Money Collection Reminder] Failed:', error);
+    return res.status(500).json({
+      error: 'Money collection reminder failed',
+      message: error?.message || 'Pengingat pengumpulan uang belum berhasil dikirim.',
     });
   }
 });

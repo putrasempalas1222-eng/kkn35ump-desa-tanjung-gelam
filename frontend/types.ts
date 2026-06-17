@@ -128,6 +128,14 @@ export interface UserProfile {
   createdAt?: number | object;
 }
 
+export interface DivisionSlot {
+  id: string;
+  value: DivisionName;
+  label: string;
+  defaultName: string;
+  createdAt?: number | object;
+}
+
 export interface LiveLocation {
   uid: string;
   name: string;
@@ -198,4 +206,33 @@ export interface DivisionChatMessage {
   date: string;
   createdAtMs: number;
   createdAt?: number | object;
+}
+
+export interface MoneyCollectionPayment {
+  id: string;
+  collectionId: string;
+  payerUid: string;
+  payerName: string;
+  payerDivision: DivisionName;
+  amount: string;
+  evidenceUrl: string;
+  note?: string;
+  date: string;
+  createdAt?: number | object;
+}
+
+export interface MoneyCollection {
+  id: string;
+  title: string;
+  description: string;
+  amount: string;
+  paymentMethod?: string;
+  paymentAccount?: string;
+  dueDate: string;
+  createdByUid: string;
+  createdByName: string;
+  createdByDivision: DivisionName;
+  date: string;
+  updatedAt?: number | object;
+  payments?: Record<string, MoneyCollectionPayment>;
 }

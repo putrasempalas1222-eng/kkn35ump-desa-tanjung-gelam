@@ -37,11 +37,14 @@ import {
   TeamMember,
   Testimonial,
   UserProfile,
+  DivisionSlot,
   WeeklyReport,
   CompetitionItem,
   CompetitionRegistration,
   DivisionNote,
   DivisionChatMessage,
+  MoneyCollection,
+  MoneyCollectionPayment,
 } from '../types';
 
 export interface ContactMessage {
@@ -101,10 +104,12 @@ const COLLECTIONS = {
   reviewSubmissions: 'reviewSubmissions',
   messages: 'messages',
   userProfiles: 'userProfiles',
+  divisionSlots: 'divisionSlots',
   weeklyReports: 'weeklyReports',
   financialReports: 'financialReports',
   divisionNotes: 'divisionNotes',
   divisionChats: 'divisionChats',
+  moneyCollections: 'moneyCollections',
   liveLocations: 'liveLocations',
   competitions: 'competitions',
   competitionRegistrations: 'competitionRegistrations',
@@ -229,6 +234,13 @@ const PROFANE_WORDS = [
   'bitch',
 ];
 
+const formatDivisionLabelLocal = (value: string) =>
+  value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => (/\d+/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()))
+    .join(' ');
+
 const normalizeText = (text: string) =>
   text
     .toLowerCase()
@@ -313,7 +325,7 @@ const fetchJsonWithTimeout = async (url: string, options: RequestInit, timeoutMs
     const payload = await response.json().catch(() => ({}));
     if (
       response.status === 502 &&
-      url.startsWith('/auth/') &&
+      (url.startsWith('/auth/') || url.startsWith('/money-collections/')) &&
       ['localhost', '127.0.0.1'].includes(window.location.hostname)
     ) {
       const fallbackResponse = await fetch(`http://127.0.0.1:5000${url}`, { ...options, signal: controller.signal });
@@ -323,6 +335,9 @@ const fetchJsonWithTimeout = async (url: string, options: RequestInit, timeoutMs
     return { response, payload };
   } catch (error: any) {
     if (error?.name === 'AbortError') {
+      if (url.startsWith('/money-collections/')) {
+        throw new Error('Notifikasi email terlalu lama. Cek backend/Vercel env SMTP Gmail, lalu coba kirim ulang.');
+      }
       throw new Error('Kirim OTP terlalu lama. Cek backend/Vercel env SMTP dan Firebase, lalu tekan Kirim ulang OTP.');
     }
     throw error;
@@ -466,6 +481,24 @@ export const storage = {
     subscribeList<UserProfile>(COLLECTIONS.userProfiles, (profiles) =>
       callback(profiles.sort((a, b) => a.division.localeCompare(b.division) || a.name.localeCompare(b.name)))
     ),
+  subscribeDivisionSlots: (callback: (data: DivisionSlot[]) => void) =>
+    subscribeList<DivisionSlot>(COLLECTIONS.divisionSlots, (slots) =>
+      callback(slots.sort((a, b) => a.label.localeCompare(b.label)))
+    ),
+  saveDivisionSlot: async (slot: Omit<DivisionSlot, 'id'> & { id?: string }) => {
+    const value = slot.value.trim().toLowerCase().replace(/\s+/g, ' ');
+    const id = slot.id || value.replace(/[.#$/[\]]/g, '_');
+    await set(ref(database, `${COLLECTIONS.divisionSlots}/${id}`), {
+      ...slot,
+      id,
+      value,
+      label: slot.label.trim() || formatDivisionLabelLocal(value),
+      defaultName: slot.defaultName || '',
+      createdAt: serverTimestamp(),
+    });
+    return id;
+  },
+  deleteDivisionSlot: (id: string) => remove(ref(database, `${COLLECTIONS.divisionSlots}/${id}`)),
   createDivisionAccount: async (account: {
     email: string;
     password: string;
@@ -679,6 +712,78 @@ export const storage = {
     return id;
   },
   deleteDivisionNote: (uid: string, id: string) => remove(ref(database, `${COLLECTIONS.divisionNotes}/${uid}/${id}`)),
+
+  subscribeMoneyCollections: (callback: (data: MoneyCollection[]) => void) =>
+    subscribeList<MoneyCollection>(COLLECTIONS.moneyCollections, (collections) =>
+      callback(collections.sort((a, b) => String(b.updatedAt || b.date).localeCompare(String(a.updatedAt || a.date))))
+    ),
+  saveMoneyCollection: async (collection: MoneyCollection) => {
+    const id = collection.id || `money_${Date.now()}`;
+    await set(ref(database, `${COLLECTIONS.moneyCollections}/${id}`), {
+      ...collection,
+      id,
+      updatedAt: serverTimestamp(),
+    });
+    return id;
+  },
+  submitMoneyCollectionPayment: async (collectionId: string, payment: Omit<MoneyCollectionPayment, 'id' | 'collectionId' | 'date'>) => {
+    const paymentRef = push(ref(database, `${COLLECTIONS.moneyCollections}/${collectionId}/payments`));
+    const id = paymentRef.key || `payment_${Date.now()}`;
+    const payload: MoneyCollectionPayment = {
+      ...payment,
+      id,
+      collectionId,
+      date: new Date().toLocaleString('id-ID'),
+      createdAt: serverTimestamp(),
+    };
+    await set(paymentRef, payload);
+    return id;
+  },
+  deleteMoneyCollectionPayment: (collectionId: string, paymentId: string) =>
+    remove(ref(database, `${COLLECTIONS.moneyCollections}/${collectionId}/payments/${paymentId}`)),
+  deleteMoneyCollection: (collectionId: string) => remove(ref(database, `${COLLECTIONS.moneyCollections}/${collectionId}`)),
+  notifyMoneyCollection: async ({
+    collection,
+    sender,
+    recipients,
+  }: {
+    collection: MoneyCollection;
+    sender: UserProfile;
+    recipients: UserProfile[];
+  }) => {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+    let finalRecipients = recipients;
+    if (!finalRecipients.length) {
+      const profilesSnapshot = await get(ref(database, COLLECTIONS.userProfiles));
+      if (profilesSnapshot.exists()) {
+        const value = profilesSnapshot.val() as Record<string, UserProfile>;
+        finalRecipients = Object.values(value || {}).filter((item) => Boolean(item?.email));
+      }
+    }
+
+    const { response, payload } = await fetchJsonWithTimeout('/money-collections/notify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        collection,
+        sender,
+        recipients: finalRecipients.map((item) => ({
+          uid: item.uid,
+          name: item.name,
+          email: item.email,
+          division: item.division,
+        })),
+        appUrl: 'https://kkn35ump-desa-gelam.vercel.app/#admin',
+      }),
+    }, 60000);
+
+    if (!response.ok) throw new Error(payload?.message || 'Informasi resmi belum berhasil dikirim.');
+    return payload as { ok: boolean; sent: number; failed: number; recipients?: number };
+  },
 
   subscribePublicDivisionChat: (callback: (data: DivisionChatMessage[]) => void) =>
     subscribeList<DivisionChatMessage>(`${COLLECTIONS.divisionChats}/public`, (messages) =>

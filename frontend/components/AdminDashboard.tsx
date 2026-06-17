@@ -23,6 +23,7 @@ import {
   Menu,
   MessageSquare,
   MapPinned,
+  WalletCards,
   Home,
   Globe,
   StickyNote,
@@ -43,6 +44,7 @@ import * as LucideIcons from 'lucide-react';
 import { auth, storage, ContactMessage } from '../services/storage';
 import {
   DivisionName,
+  DivisionSlot,
   DivisionNote,
   EventContent,
   GalleryImage,
@@ -58,6 +60,8 @@ import {
   CompetitionItem,
   CompetitionRegistration,
   DivisionChatMessage,
+  MoneyCollection,
+  MoneyCollectionPayment,
 } from '../types';
 
 interface AdminDashboardProps {
@@ -67,7 +71,7 @@ interface AdminDashboardProps {
 type Tab = 'overview' | 'accounts' | 'content' | 'maintenance' | 'event' | 'team' | 'programs' | 'gallery' | 'testimonials' | 'reviews' | 'messages' | 'competitions' | 'competition-registrations';
 type EditableType = 'team' | 'programs' | 'gallery' | 'testimonials';
 type EditableItem = TeamMember | Program | GalleryImage | Testimonial;
-type DivisionDashboardView = 'home' | 'maps' | 'notes' | 'chat' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput' | 'treasurerIncome';
+type DivisionDashboardView = 'home' | 'maps' | 'notes' | 'chat' | 'moneyCollection' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput' | 'treasurerIncome';
 type TwoFactorView = 'select' | 'email' | 'authenticator' | 'authenticatorSetup';
 
 const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
@@ -123,6 +127,38 @@ const A4_HEIGHT_PX = 1123;
 const PUTRA_AI_PROXY_ENDPOINT = '/putra-ai-proxy';
 const OLLAMA_ENDPOINT = 'https://rotunda-elderly-alto.ngrok-free.dev';
 const OLLAMA_REPORT_MODEL = 'llama3.2:3b';
+const PAYMENT_METHOD_OPTIONS = [
+  'Bank BCA',
+  'Bank BNI',
+  'Bank BRI',
+  'Bank Mandiri',
+  'Bank BTN',
+  'Bank BSI',
+  'Bank CIMB Niaga',
+  'Bank Danamon',
+  'Bank Permata',
+  'Bank OCBC NISP',
+  'Bank Panin',
+  'Bank Mega',
+  'Bank Maybank',
+  'Bank Muamalat',
+  'Bank Jago',
+  'Bank Neo Commerce',
+  'SeaBank',
+  'DANA',
+  'GoPay',
+  'OVO',
+  'ShopeePay',
+  'LinkAja',
+  'QRIS',
+  'Tunai',
+];
+
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
+const formatIdrInput = (value: string) => {
+  const digits = onlyDigits(value);
+  return digits ? `Rp ${Number(digits).toLocaleString('id-ID')}` : '';
+};
 
 const getPutraAiProxyUrl = () => {
   const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
@@ -264,6 +300,72 @@ const Field = ({
     )}
   </label>
 );
+
+const EvidencePreviewImage = ({ src, alt }: { src: string; alt: string }) => {
+  const [attempt, setAttempt] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setAttempt(0);
+    setIsLoaded(false);
+    setHasError(false);
+  }, [src]);
+
+  useEffect(() => {
+    if (isLoaded || attempt >= 8) return undefined;
+    const timer = window.setTimeout(() => {
+      setAttempt((current) => current + 1);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [attempt, isLoaded]);
+
+  const imageSrc = src.startsWith('data:image/')
+    ? src
+    : `${src}${src.includes('?') ? '&' : '?'}previewRetry=${attempt}`;
+
+  return (
+    <div className="relative flex min-h-[320px] w-full items-center justify-center">
+      {!isLoaded && !hasError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
+          <ImageIcon size={28} className="text-m-blue dark:text-[#8ab4f8]" />
+          <p className="text-sm font-black text-slate-500 dark:text-slate-300">Memuat bukti pembayaran...</p>
+          <p className="text-xs font-semibold text-slate-400">Jika gambar belum tampil, sistem mencoba refresh otomatis.</p>
+        </div>
+      )}
+      {hasError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+          <ImageIcon size={32} className="text-slate-400" />
+          <p className="text-sm font-black text-slate-600 dark:text-slate-300">Bukti belum bisa ditampilkan.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setHasError(false);
+              setIsLoaded(false);
+              setAttempt((current) => current + 1);
+            }}
+            className="rounded-full bg-[#e8f0fe] px-4 py-2 text-xs font-black text-[#1a73e8] hover:bg-[#d2e3fc] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]"
+          >
+            Muat Ulang Bukti
+          </button>
+        </div>
+      )}
+      <img
+        key={`${src}_${attempt}`}
+        src={imageSrc}
+        alt={alt}
+        onLoad={() => {
+          setIsLoaded(true);
+          setHasError(false);
+        }}
+        onError={() => {
+          if (attempt >= 8) setHasError(true);
+        }}
+        className={`max-h-[74vh] max-w-full object-contain shadow-sm transition-opacity ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+      />
+    </div>
+  );
+};
 
 const SignaturePad = ({
   value,
@@ -798,8 +900,11 @@ const getSelectedTimeOption = (value: string): string => {
 };
 
 const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
-  const [division, setDivision] = useState<DivisionName>('ketua');
-  const [name, setName] = useState(DIVISIONS[0].defaultName);
+  const [divisionSlots, setDivisionSlots] = useState<DivisionSlot[]>([]);
+  const [division, setDivision] = useState<DivisionName>('');
+  const [name, setName] = useState('');
+  const [newDivisionLabel, setNewDivisionLabel] = useState('');
+  const [newDivisionDefaultName, setNewDivisionDefaultName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
@@ -810,7 +915,9 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   const [savingProfileId, setSavingProfileId] = useState('');
   const [deletingProfileId, setDeletingProfileId] = useState('');
   const [resettingProfileId, setResettingProfileId] = useState('');
-  const databaseDivisionSlots = useMemo(() => {
+  useEffect(() => storage.subscribeDivisionSlots(setDivisionSlots), []);
+
+  const profileDivisionSlots = useMemo(() => {
     const divisionValues = Array.from(new Set(
       profiles
         .filter((profile) => profile.role === 'division' && profile.division)
@@ -818,26 +925,35 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
     ));
 
     return divisionValues
-      .filter((value) => !DIVISIONS.some((item) => item.value === value))
       .map((value) => ({
+        id: value.replace(/[.#$/[\]]/g, '_'),
         value,
         label: getDivisionLabel(value),
         defaultName: '',
       }));
   }, [profiles]);
-  const allDivisions = useMemo(() => [...DIVISIONS, ...databaseDivisionSlots], [databaseDivisionSlots]);
+  const allDivisions = useMemo(() => {
+    const map = new Map<string, DivisionSlot>();
+    divisionSlots.forEach((slot) => map.set(slot.value, slot));
+    profileDivisionSlots.forEach((slot) => {
+      if (!map.has(slot.value)) map.set(slot.value, slot);
+    });
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [divisionSlots, profileDivisionSlots]);
   const visibleDivisions = allDivisions;
-  const tableDivisions = useMemo(() => {
-    const divisionValues = Array.from(new Set(
-      profiles
-        .filter((profile) => profile.role === 'division' && profile.division)
-        .map((profile) => profile.division)
-    ));
+  const tableDivisions = visibleDivisions;
 
-    return divisionValues
-      .map((value) => allDivisions.find((item) => item.value === value) || { value, label: getDivisionLabel(value), defaultName: '' })
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [allDivisions, profiles]);
+  useEffect(() => {
+    if (!division && allDivisions[0]) {
+      setDivision(allDivisions[0].value);
+      setName(allDivisions[0].defaultName || '');
+      return;
+    }
+    if (division && allDivisions.length && !allDivisions.some((item) => item.value === division)) {
+      setDivision(allDivisions[0].value);
+      setName(allDivisions[0].defaultName || '');
+    }
+  }, [allDivisions, division]);
   const getProfilesByDivision = (value: DivisionName) => profiles.filter((profile) => profile.role === 'division' && profile.division === value);
   const selectedDivisionProfiles = getProfilesByDivision(division);
   const selectedDivisionHasAccount = selectedDivisionProfiles.length > 0;
@@ -845,6 +961,11 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   const createAccount = async (event: React.FormEvent) => {
     event.preventDefault();
     setMessage('');
+
+    if (!division) {
+      setMessage('Buat/pilih divisi dari Firebase dulu sebelum membuat akun.');
+      return;
+    }
 
     if (selectedDivisionHasAccount) {
       const selectedDivision = allDivisions.find((item) => item.value === division);
@@ -865,6 +986,39 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
       else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') setMessage('Email ini sudah pernah dibuat. Masukkan password akun lama, atau gunakan email baru.');
       else if (code === 'auth/weak-password') setMessage('Password minimal 6 karakter.');
       else setMessage(error?.message || 'Akun belum berhasil dibuat.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const createDivisionSlot = async () => {
+    const label = newDivisionLabel.trim();
+    if (!label) {
+      setMessage('Nama divisi baru wajib diisi.');
+      return;
+    }
+
+    const value = label.toLowerCase().replace(/\s+/g, ' ');
+    if (allDivisions.some((item) => item.value === value)) {
+      setMessage(`Divisi ${label} sudah ada di Firebase.`);
+      return;
+    }
+
+    setSaving(true);
+    setMessage('');
+    try {
+      await storage.saveDivisionSlot({
+        value,
+        label: formatDivisionLabel(value),
+        defaultName: newDivisionDefaultName.trim(),
+      });
+      setDivision(value);
+      setName(newDivisionDefaultName.trim());
+      setNewDivisionLabel('');
+      setNewDivisionDefaultName('');
+      setMessage(`Divisi ${formatDivisionLabel(value)} berhasil dibuat di Firebase.`);
+    } catch (error: any) {
+      setMessage(error?.message || 'Divisi baru belum berhasil dibuat.');
     } finally {
       setSaving(false);
     }
@@ -988,9 +1142,24 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
   const hideDivisionSlot = async (value: DivisionName) => {
     const selectedDivision = allDivisions.find((item) => item.value === value);
     const divisionProfiles = getProfilesByDivision(value);
+    const firebaseSlot = divisionSlots.find((item) => item.value === value);
 
     if (divisionProfiles.length === 0) {
-      setMessage(`Divisi ${selectedDivision?.label || value} tidak punya akun di database.`);
+      if (!firebaseSlot) {
+        setMessage(`Divisi ${selectedDivision?.label || value} tidak ada sebagai slot Firebase.`);
+        return;
+      }
+      if (!window.confirm(`Hapus slot divisi ${selectedDivision?.label || value} dari Firebase?`)) return;
+      setDeletingProfileId(`division:${value}`);
+      setMessage('');
+      try {
+        await storage.deleteDivisionSlot(firebaseSlot.id);
+        setMessage(`Slot divisi ${selectedDivision?.label || value} sudah dihapus dari Firebase.`);
+      } catch (error: any) {
+        setMessage(error?.message || 'Slot divisi belum berhasil dihapus.');
+      } finally {
+        setDeletingProfileId('');
+      }
       return;
     }
 
@@ -1002,6 +1171,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
 
     try {
       await Promise.all(divisionProfiles.map((profile) => storage.deleteUserProfile(profile.uid)));
+      if (firebaseSlot) await storage.deleteDivisionSlot(firebaseSlot.id);
 
       if (divisionProfiles.some((profile) => profile.uid === editingProfileId)) {
         setEditingProfileId('');
@@ -1025,11 +1195,26 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#1a73e8] dark:text-[#8ab4f8]">Manajemen Akun</p>
               <h2 className="mt-1 text-xl font-black text-slate-950 dark:text-white">Buat Akun Baru</h2>
-              <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Setiap divisi hanya boleh memiliki satu akun aktif.</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Daftar divisi diambil dari Firebase, bukan daftar lokal.</p>
             </div>
             <span className="w-fit border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-[#111827] dark:text-slate-300">
               {profiles.filter((profile) => profile.role === 'division').length} akun aktif di database
             </span>
+          </div>
+          <div className="border border-[#d2e3fc] bg-[#f8fbff] p-4 shadow-none dark:border-[#1a73e8]/30 dark:bg-[#111827]">
+            <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+              <Field label="Nama Divisi Baru" value={newDivisionLabel} onChange={setNewDivisionLabel} />
+              <Field label="Nama Default Anggota" value={newDivisionDefaultName} onChange={setNewDivisionDefaultName} />
+              <button
+                type="button"
+                onClick={createDivisionSlot}
+                disabled={saving || !newDivisionLabel.trim()}
+                className={`${googlePrimaryButtonClass} min-h-[44px] disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                <Plus size={16} />
+                Buat Divisi
+              </button>
+            </div>
           </div>
           <div className="border border-slate-200 bg-[#f8fafd] p-4 shadow-none dark:border-slate-800 dark:bg-[#111827]">
             <div className="grid gap-4 lg:grid-cols-4">
@@ -1059,11 +1244,11 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
           </p>
           <button
             type="submit"
-            disabled={saving || selectedDivisionHasAccount}
+            disabled={saving || selectedDivisionHasAccount || !division}
             className={`${googlePrimaryButtonClass} w-full py-3 lg:w-auto lg:px-8`}
           >
             <Plus size={16} />
-            {saving ? 'Membuat akun...' : selectedDivisionHasAccount ? 'Divisi Sudah Punya Akun' : 'Buat Akun'}
+            {saving ? 'Membuat akun...' : !division ? 'Buat Divisi Dulu' : selectedDivisionHasAccount ? 'Divisi Sudah Punya Akun' : 'Buat Akun'}
           </button>
         </div>
       </form>
@@ -1079,7 +1264,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
               </div>
             </div>
             <span className="w-fit border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-[#111827] dark:text-slate-300">
-              {tableDivisions.length} divisi di database
+              {tableDivisions.length} slot divisi
             </span>
           </div>
 
@@ -1092,7 +1277,7 @@ const AccountManager = ({ profiles }: { profiles: UserProfile[] }) => {
             </div>
             {tableDivisions.length === 0 && (
               <div className="px-4 py-10 text-center">
-                <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Belum ada akun divisi di database.</p>
+                <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Belum ada slot divisi di Firebase. Buat divisi baru dulu.</p>
               </div>
             )}
             {tableDivisions.map((item) => {
@@ -1291,6 +1476,9 @@ const formatRupiah = (value: number) =>
     currency: 'IDR',
     maximumFractionDigits: 0,
   }).format(value);
+
+const getMoneyCollectionPayments = (collection: MoneyCollection) =>
+  Object.values(collection.payments || {}).sort((a, b) => String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date)));
 
 const isLiveLocationFresh = (location: LiveLocation) => Date.now() - Number(location.updatedAt || 0) < 2 * 60 * 1000;
 
@@ -2261,6 +2449,7 @@ const DivisionDashboard = ({
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [financialReports, setFinancialReports] = useState<WeeklyReport[]>([]);
   const [notes, setNotes] = useState<DivisionNote[]>([]);
+  const [moneyCollections, setMoneyCollections] = useState<MoneyCollection[]>([]);
   const [divisionProfiles, setDivisionProfiles] = useState<UserProfile[]>([]);
   const [publicChatMessages, setPublicChatMessages] = useState<DivisionChatMessage[]>([]);
   const [privateChatMessages, setPrivateChatMessages] = useState<DivisionChatMessage[]>([]);
@@ -2280,6 +2469,27 @@ const DivisionDashboard = ({
   const [locationError, setLocationError] = useState('');
   const [selectedLocationUid, setSelectedLocationUid] = useState('');
   const [selectedFinancialReportId, setSelectedFinancialReportId] = useState('');
+  const [moneySaving, setMoneySaving] = useState(false);
+  const [moneyNotice, setMoneyNotice] = useState('');
+  const [moneyPaymentSavingId, setMoneyPaymentSavingId] = useState('');
+  const [selectedMoneyCollectionId, setSelectedMoneyCollectionId] = useState('');
+  const [moneyEvidencePreview, setMoneyEvidencePreview] = useState<{ url: string; title: string } | null>(null);
+  const [moneyCollectionPage, setMoneyCollectionPage] = useState(1);
+  const [moneyCollectionDraft, setMoneyCollectionDraft] = useState<MoneyCollection>(() => ({
+    id: `money_${Date.now()}`,
+    title: '',
+    description: '',
+    amount: '',
+    paymentMethod: '',
+    paymentAccount: '',
+    dueDate: '',
+    createdByUid: profile.uid,
+    createdByName: profile.name,
+    createdByDivision: profile.division,
+    date: new Date().toLocaleString('id-ID'),
+    payments: {},
+  }));
+  const [moneyPaymentDrafts, setMoneyPaymentDrafts] = useState<Record<string, { amount: string; evidenceUrl: string; note: string }>>({});
   const [dashboardView, setDashboardView] = useState<DivisionDashboardView>(initialView);
   const reportPageType: WeeklyReport['reportType'] =
     dashboardView === 'individualMatrix'
@@ -2413,6 +2623,7 @@ const DivisionDashboard = ({
   const visibleChatMessages = chatMode === 'public' ? publicChatMessages : activePrivateMessages;
   const incomingChatMessages = [...publicChatMessages, ...privateChatMessages].filter((message) => message.senderUid !== profile.uid);
   const unreadChatCount = incomingChatMessages.filter((message) => Number(message.createdAtMs || 0) > chatLastSeenAt).length;
+  const isDivisionChatEnabled = false;
   const chatMessagesEndRef = useRef<HTMLDivElement | null>(null);
   const notifiedChatIdsRef = useRef<Set<string>>(new Set());
 
@@ -2459,7 +2670,7 @@ const DivisionDashboard = ({
       icon: '/report-assets/logokknv1.png',
       badge: '/report-assets/logokknv1.png',
       tag: `division-chat-${message.id}`,
-      data: { url: `${window.location.origin}/#admin` },
+      data: { url: 'https://kkn35ump-desa-gelam.vercel.app/#admin' },
     };
 
     if ('serviceWorker' in navigator) {
@@ -2476,35 +2687,67 @@ const DivisionDashboard = ({
   useEffect(() => storage.subscribeWeeklyReports(profile.uid, setReports), [profile.uid]);
   useEffect(() => storage.subscribeFinancialReports(setFinancialReports), []);
   useEffect(() => storage.subscribeDivisionNotes(profile.uid, setNotes), [profile.uid]);
+  useEffect(() => storage.subscribeMoneyCollections(setMoneyCollections), []);
   useEffect(() => storage.subscribeUserProfiles((profiles) => setDivisionProfiles(profiles.filter((item) => item.role === 'division'))), []);
-  useEffect(() => storage.subscribePublicDivisionChat(setPublicChatMessages), []);
-  useEffect(() => storage.subscribePrivateDivisionChats(profile.uid, setPrivateChatMessages), [profile.uid]);
+  useEffect(() => {
+    if (!isDivisionChatEnabled) {
+      setPublicChatMessages([]);
+      return () => undefined;
+    }
+    return storage.subscribePublicDivisionChat(setPublicChatMessages);
+  }, [isDivisionChatEnabled]);
+  useEffect(() => {
+    if (!isDivisionChatEnabled) {
+      setPrivateChatMessages([]);
+      return () => undefined;
+    }
+    return storage.subscribePrivateDivisionChats(profile.uid, setPrivateChatMessages);
+  }, [profile.uid, isDivisionChatEnabled]);
   useEffect(() => storage.subscribeLiveLocations(setLiveLocations), []);
 
   useEffect(() => {
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    storage.registerDivisionPushToken(profile).catch(() => undefined);
-  }, [profile.uid]);
+    const totalPages = Math.max(1, Math.ceil(moneyCollections.length / 10));
+    setMoneyCollectionPage((current) => Math.min(Math.max(1, current), totalPages));
+    if (selectedMoneyCollectionId && !moneyCollections.some((collection) => collection.id === selectedMoneyCollectionId)) {
+      setSelectedMoneyCollectionId('');
+    }
+  }, [moneyCollections, selectedMoneyCollectionId]);
 
   useEffect(() => {
+    if (!isDivisionChatEnabled) return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    storage.registerDivisionPushToken(profile).catch(() => undefined);
+  }, [profile.uid, isDivisionChatEnabled]);
+
+  useEffect(() => {
+    if (!isDivisionChatEnabled && dashboardView === 'chat') {
+      setDashboardView('home');
+    }
+  }, [dashboardView, isDivisionChatEnabled]);
+
+  useEffect(() => {
+    if (!isDivisionChatEnabled) return;
     if (!selectedPrivateUid && privateChatPartners[0]?.uid) {
       setSelectedPrivateUid(privateChatPartners[0].uid);
     }
-  }, [privateChatPartners, selectedPrivateUid]);
+  }, [privateChatPartners, selectedPrivateUid, isDivisionChatEnabled]);
 
   useEffect(() => {
+    if (!isDivisionChatEnabled) return;
     chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [visibleChatMessages.length, chatMode, activePrivateUid]);
+  }, [visibleChatMessages.length, chatMode, activePrivateUid, isDivisionChatEnabled]);
 
   useEffect(() => {
+    if (!isDivisionChatEnabled) return;
     if (dashboardView !== 'chat') return;
     const latest = Math.max(0, ...incomingChatMessages.map((message) => Number(message.createdAtMs || 0)));
     if (!latest) return;
     localStorage.setItem(chatLastSeenKey, String(latest));
     setChatLastSeenAt(latest);
-  }, [dashboardView, incomingChatMessages.length, chatLastSeenKey]);
+  }, [dashboardView, incomingChatMessages.length, chatLastSeenKey, isDivisionChatEnabled]);
 
   useEffect(() => {
+    if (!isDivisionChatEnabled) return;
     incomingChatMessages.forEach((message) => {
       if (notifiedChatIdsRef.current.has(message.id)) return;
       notifiedChatIdsRef.current.add(message.id);
@@ -2517,7 +2760,7 @@ const DivisionDashboard = ({
       }
       showChatNotification(message).catch(() => undefined);
     });
-  }, [incomingChatMessages, chatLastSeenAt, dashboardView]);
+  }, [incomingChatMessages, chatLastSeenAt, dashboardView, isDivisionChatEnabled]);
 
   useEffect(() => {
     return () => {
@@ -2880,6 +3123,278 @@ Format lengkap yang juga diterima:
     if (editingNote.id === note.id) resetNoteForm();
   };
 
+  const resetMoneyCollectionDraft = () => {
+    setMoneyCollectionDraft({
+      id: `money_${Date.now()}`,
+      title: '',
+      description: '',
+      amount: '',
+      paymentMethod: '',
+      paymentAccount: '',
+      dueDate: '',
+      createdByUid: profile.uid,
+      createdByName: profile.name,
+      createdByDivision: profile.division,
+      date: new Date().toLocaleString('id-ID'),
+      payments: {},
+    });
+  };
+
+  const saveMoneyCollection = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!isTreasurer) return;
+    if (!moneyCollectionDraft.title.trim() || !moneyCollectionDraft.amount.trim()) {
+      alert('Isi nama pengumpulan dan jumlah uang dulu.');
+      return;
+    }
+    const amountDigits = onlyDigits(moneyCollectionDraft.amount);
+    if (!amountDigits) {
+      alert('Jumlah uang wajib angka saja.');
+      return;
+    }
+    if (moneyCollectionDraft.paymentAccount && !onlyDigits(moneyCollectionDraft.paymentAccount)) {
+      alert('Nomor rekening/nomor e-wallet wajib angka saja.');
+      return;
+    }
+
+    setMoneySaving(true);
+    setMoneyNotice('');
+
+    try {
+      const isEditingCollection = moneyCollections.some((collection) => collection.id === moneyCollectionDraft.id);
+      const payload = {
+        ...moneyCollectionDraft,
+        title: moneyCollectionDraft.title.trim(),
+        description: moneyCollectionDraft.description.trim(),
+        amount: formatIdrInput(amountDigits),
+        paymentMethod: (moneyCollectionDraft.paymentMethod || '').trim(),
+        paymentAccount: onlyDigits(moneyCollectionDraft.paymentAccount || ''),
+        createdByUid: profile.uid,
+        createdByName: profile.name,
+        createdByDivision: profile.division,
+        date: moneyCollectionDraft.date || new Date().toLocaleString('id-ID'),
+      };
+      const collectionId = await storage.saveMoneyCollection(payload);
+      const savedCollection = { ...payload, id: collectionId };
+
+      setMoneySaving(false);
+      setMoneyNotice(`${isEditingCollection ? 'Draft diperbarui' : 'Pengumpulan baru dibuat'}. Mengirim notifikasi email ke akun bendahara dan seluruh divisi...`);
+
+      try {
+        const result = await storage.notifyMoneyCollection({
+          collection: savedCollection,
+          sender: profile,
+          recipients: divisionProfiles,
+        });
+        setMoneyNotice(
+          `${isEditingCollection ? 'Draft diperbarui' : 'Pengumpulan baru dibuat'} dan SMTP menerima notifikasi untuk ${result.sent} dari ${result.recipients || result.sent} email akun divisi${result.failed ? `, gagal ${result.failed} email` : ''}. Cek Inbox, Spam, Promotions, atau Sent Gmail.`
+        );
+      } catch (error: any) {
+        setMoneyNotice(error?.message || 'Pengumpulan tersimpan, tapi notifikasi resmi belum berhasil dikirim.');
+      }
+
+      resetMoneyCollectionDraft();
+    } catch (error: any) {
+      const message = String(error?.message || '');
+      setMoneyNotice(
+        message.includes('PERMISSION_DENIED') || message.toLowerCase().includes('permission')
+          ? 'Pengumpulan belum tersimpan karena akses Firebase ditolak. Deploy database.rules.json terbaru dan pastikan akun ini divisi Bendahara/admin.'
+          : message || 'Pengumpulan belum berhasil disimpan.'
+      );
+    } finally {
+      setMoneySaving(false);
+    }
+  };
+
+  const editMoneyCollection = (collection: MoneyCollection) => {
+    setMoneyCollectionDraft({
+      ...collection,
+      payments: collection.payments || {},
+    });
+    setMoneyNotice(`Mode edit: ${collection.title}`);
+    openDashboardView('moneyCollection');
+  };
+
+  const updateMoneyPaymentDraft = (collectionId: string, patch: Partial<{ amount: string; evidenceUrl: string; note: string }>) => {
+    setMoneyPaymentDrafts((current) => ({
+      ...current,
+      [collectionId]: {
+        amount: '',
+        evidenceUrl: '',
+        note: '',
+        ...(current[collectionId] || {}),
+        ...patch,
+      },
+    }));
+  };
+
+  const submitMoneyPayment = async (collection: MoneyCollection) => {
+    const draft = moneyPaymentDrafts[collection.id] || { amount: '', evidenceUrl: '', note: '' };
+    const existingPayment = getMoneyCollectionPayments(collection).some((payment) => payment.payerUid === profile.uid);
+    if (existingPayment) {
+      alert('Bukti pembayaran sudah terkirim. Jika perlu upload ulang, minta bendahara menghapus data pembayaran kamu dulu.');
+      return;
+    }
+    const amount = (collection.amount || '').trim();
+    if (!amount || !draft.evidenceUrl) {
+      alert('Upload bukti pembayaran dulu. Jumlah uang otomatis mengikuti nominal dari bendahara.');
+      return;
+    }
+    if (!onlyDigits(amount)) {
+      alert('Nominal pengumpulan dari bendahara belum valid. Minta bendahara memperbaiki jumlah uang terlebih dahulu.');
+      return;
+    }
+
+    setMoneyPaymentSavingId(collection.id);
+    try {
+      await storage.submitMoneyCollectionPayment(collection.id, {
+        payerUid: profile.uid,
+        payerName: profile.name,
+        payerDivision: profile.division,
+        amount,
+        evidenceUrl: draft.evidenceUrl,
+        note: draft.note.trim(),
+      });
+      setMoneyPaymentDrafts((current) => ({ ...current, [collection.id]: { amount: collection.amount || '', evidenceUrl: '', note: '' } }));
+    } catch (error: any) {
+      alert(error?.message || 'Bukti pembayaran belum berhasil dikirim.');
+    } finally {
+      setMoneyPaymentSavingId('');
+    }
+  };
+
+  const deleteMoneyPayment = async (collection: MoneyCollection, payment: MoneyCollectionPayment) => {
+    if (!isTreasurer) return;
+    if (!window.confirm(`Hapus pembayaran dari ${payment.payerName} (${getDivisionLabel(payment.payerDivision)})?`)) return;
+    await storage.deleteMoneyCollectionPayment(collection.id, payment.id);
+  };
+
+  const deleteMoneyCollection = async (collection: MoneyCollection) => {
+    if (!isTreasurer) return;
+    if (!window.confirm(`Hapus pengumpulan "${collection.title}" beserta semua pembayaran?`)) return;
+    await storage.deleteMoneyCollection(collection.id);
+  };
+
+  const printMoneyCollection = (collection: MoneyCollection) => {
+    const payments = getMoneyCollectionPayments(collection);
+    const rows = payments.map((payment, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${payment.payerName}</td>
+        <td>${getDivisionLabel(payment.payerDivision)}</td>
+        <td>${payment.amount}</td>
+        <td>${payment.date}</td>
+      </tr>
+    `).join('');
+    const win = window.open('', '_blank', 'width=960,height=720');
+    if (!win) return;
+    win.document.write(`
+      <html>
+        <head>
+          <title>Rekap Pengumpulan Uang</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 28px; color: #111827; }
+            h1 { margin: 0 0 6px; font-size: 24px; }
+            p { margin: 4px 0; color: #475569; }
+            table { width: 100%; border-collapse: collapse; margin-top: 22px; font-size: 13px; }
+            th, td { border: 1px solid #111827; padding: 8px; text-align: left; }
+            th { background: #e8f0fe; }
+          </style>
+        </head>
+        <body>
+          <h1>Rekap Pengumpulan Uang</h1>
+          <p><strong>${collection.title}</strong></p>
+          <p>Jumlah wajib: ${collection.amount}${collection.dueDate ? ` | Deadline: ${collection.dueDate}` : ''}</p>
+          <p>Metode pembayaran: ${collection.paymentMethod || '-'}${collection.paymentAccount ? ` | Nomor: ${collection.paymentAccount}` : ''}</p>
+          <p>Dibuat oleh: ${collection.createdByName} (${getDivisionLabel(collection.createdByDivision)})</p>
+          <table>
+            <thead><tr><th>No</th><th>Nama</th><th>Divisi</th><th>Jumlah Uang</th><th>Tanggal Bayar</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5">Belum ada pembayaran.</td></tr>'}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  const createMoneyCollectionPdf = async (collection: MoneyCollection) => {
+    const { jsPDF } = await import('jspdf');
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const payments = getMoneyCollectionPayments(collection);
+    const margin = 12;
+    let y = 16;
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(16);
+    pdf.text('Rekap Pengumpulan Uang', margin, y);
+    y += 8;
+    pdf.setFontSize(11);
+    pdf.text(collection.title || '-', margin, y);
+    y += 6;
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Jumlah wajib: ${collection.amount || '-'}${collection.dueDate ? ` | Deadline: ${collection.dueDate}` : ''}`, margin, y);
+    y += 6;
+    pdf.text(`Metode pembayaran: ${collection.paymentMethod || '-'}${collection.paymentAccount ? ` | Nomor: ${collection.paymentAccount}` : ''}`, margin, y);
+    y += 6;
+    pdf.text(`Dibuat oleh: ${collection.createdByName} (${getDivisionLabel(collection.createdByDivision)})`, margin, y);
+    y += 10;
+
+    const columns = ['No', 'Nama', 'Divisi', 'Jumlah Uang', 'Tanggal', 'Catatan'];
+    const widths = [12, 45, 40, 34, 48, 95];
+    let x = margin;
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFillColor(232, 240, 254);
+    columns.forEach((column, index) => {
+      pdf.rect(x, y, widths[index], 9, 'FD');
+      pdf.text(column, x + 2, y + 6);
+      x += widths[index];
+    });
+    y += 9;
+
+    pdf.setFont('helvetica', 'normal');
+    if (!payments.length) {
+      pdf.rect(margin, y, widths.reduce((sum, width) => sum + width, 0), 10);
+      pdf.text('Belum ada pembayaran.', margin + 2, y + 7);
+    } else {
+      payments.forEach((payment, index) => {
+        if (y > 185) {
+          pdf.addPage();
+          y = 14;
+        }
+        const values = [
+          String(index + 1),
+          payment.payerName,
+          getDivisionLabel(payment.payerDivision),
+          payment.amount,
+          payment.date,
+          payment.note || '',
+        ];
+        x = margin;
+        values.forEach((value, valueIndex) => {
+          pdf.rect(x, y, widths[valueIndex], 10);
+          pdf.text(String(value).slice(0, valueIndex === 5 ? 48 : 24), x + 2, y + 7);
+          x += widths[valueIndex];
+        });
+        y += 10;
+      });
+    }
+
+    return pdf;
+  };
+
+  const downloadMoneyCollectionPdf = async (collection: MoneyCollection) => {
+    const pdf = await createMoneyCollectionPdf(collection);
+    pdf.save(`Pengumpulan_Uang_${sanitizeFilePart(collection.title)}_${getDownloadTimestamp()}.pdf`);
+  };
+
+  const viewMoneyCollectionPdf = async (collection: MoneyCollection) => {
+    const pdf = await createMoneyCollectionPdf(collection);
+    const blobUrl = pdf.output('bloburl');
+    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+  };
+
   const saveReport = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -3197,6 +3712,33 @@ Format lengkap yang juga diterima:
   const previewReport = isFinancialReadOnly
     ? pageReports.find((report) => report.id === selectedFinancialReportId) || pageReports[0] || null
     : editing;
+  const moneyCollectionPageSize = 10;
+  const moneyCollectionTotalPages = Math.max(1, Math.ceil(moneyCollections.length / moneyCollectionPageSize));
+  const visibleMoneyCollections = moneyCollections.slice(
+    (moneyCollectionPage - 1) * moneyCollectionPageSize,
+    moneyCollectionPage * moneyCollectionPageSize
+  );
+  const selectedMoneyCollection = moneyCollections.find((collection) => collection.id === selectedMoneyCollectionId) || null;
+  const selectedMoneyPayments = selectedMoneyCollection ? getMoneyCollectionPayments(selectedMoneyCollection) : [];
+  const selectedMoneyTotal = selectedMoneyPayments.reduce((sum, payment) => sum + parseCurrencyValue(payment.amount), 0);
+  const selectedMoneyDraft = selectedMoneyCollection
+    ? moneyPaymentDrafts[selectedMoneyCollection.id] || { amount: selectedMoneyCollection.amount || '', evidenceUrl: '', note: '' }
+    : { amount: '', evidenceUrl: '', note: '' };
+  const selectedMoneyOwnPayments = selectedMoneyCollection
+    ? selectedMoneyPayments.filter((payment) => payment.payerUid === profile.uid)
+    : [];
+  const selectedMoneyOwnPayment = selectedMoneyOwnPayments[selectedMoneyOwnPayments.length - 1] || null;
+  const unpaidMoneyCollections = moneyCollections.filter((collection) =>
+    !getMoneyCollectionPayments(collection).some((payment) => payment.payerUid === profile.uid)
+  );
+  const moneyHomeBadgeCount = isTreasurer ? moneyCollections.length : unpaidMoneyCollections.length;
+  const moneyHomeDescription = isTreasurer
+    ? moneyCollections.length
+      ? `${moneyCollections.length} pengumpulan aktif untuk dipantau`
+      : 'Buat dan pantau pengumpulan uang'
+    : unpaidMoneyCollections.length
+      ? `${unpaidMoneyCollections.length} pengumpulan perlu dibayar`
+      : 'Semua pengumpulan sudah dicek';
   const reportPageTitle =
     reportPageType === 'matrix'
       ? 'Matriks Program Kerja Kelompok'
@@ -3211,7 +3753,8 @@ Format lengkap yang juga diterima:
     { label: 'Home', icon: Home, active: dashboardView === 'home', action: () => openDashboardView('home') },
     { label: 'Live Maps', icon: MapPinned, active: dashboardView === 'maps', action: () => openDashboardView('maps') },
     { label: 'Catatan', icon: StickyNote, active: dashboardView === 'notes', action: () => openDashboardView('notes') },
-    { label: unreadChatCount ? `Chat Divisi (${unreadChatCount})` : 'Chat Divisi', icon: MessageSquare, active: dashboardView === 'chat', action: () => openDashboardView('chat') },
+    ...(isDivisionChatEnabled ? [{ label: unreadChatCount ? `Chat Divisi (${unreadChatCount})` : 'Chat Divisi', icon: MessageSquare, active: dashboardView === 'chat', action: () => openDashboardView('chat') }] : []),
+    { label: 'Pengumpulan Uang', icon: WalletCards, active: dashboardView === 'moneyCollection', action: () => openDashboardView('moneyCollection') },
     { label: 'Laporan Mingguan', icon: FileText, active: dashboardView === 'weekly', action: () => openReportPage('weekly') },
     { label: 'Matriks Individu', icon: ClipboardCheck, active: dashboardView === 'individualMatrix', action: () => openReportPage('individualMatrix') },
     ...(isSecretary ? [{ label: 'Matriks Kelompok', icon: ClipboardList, active: dashboardView === 'groupMatrix', action: () => openReportPage('groupMatrix') }] : []),
@@ -3398,7 +3941,30 @@ Format lengkap yang juga diterima:
   return (
     <div className="min-h-screen bg-[#f8fafd] text-slate-900 dark:bg-[#0b0f19] dark:text-white lg:flex lg:h-dvh lg:overflow-hidden">
       {mobileNavDrawer}
-      {chatToast && (
+      {moneyEvidencePreview && (
+        <div className="no-print fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-[#0d1320]">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#8ab4f8]">Bukti Pembayaran</p>
+                <h3 className="truncate text-base font-black text-slate-950 dark:text-white">{moneyEvidencePreview.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMoneyEvidencePreview(null)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                aria-label="Tutup bukti pembayaran"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-auto bg-slate-50 p-4 dark:bg-slate-950">
+              <EvidencePreviewImage src={moneyEvidencePreview.url} alt="Bukti pembayaran" />
+            </div>
+          </div>
+        </div>
+      )}
+      {isDivisionChatEnabled && chatToast && (
         <button
           type="button"
           onClick={() => {
@@ -3640,7 +4206,8 @@ Format lengkap yang juga diterima:
               {[
                 { title: 'Live Maps', desc: `${liveLocations.length} divisi sedang berbagi lokasi`, action: () => openDashboardView('maps', 'live-maps'), tone: 'emerald' },
                 { title: 'Catatan Divisi', desc: `${notes.length} catatan tersimpan untuk divisi kamu`, action: () => openDashboardView('notes'), tone: 'amber' },
-                { title: 'Chat Divisi', desc: unreadChatCount ? `${unreadChatCount} pesan baru dari divisi` : 'Chat publik dan pribadi semua divisi', action: () => openDashboardView('chat'), tone: 'blue' },
+                ...(isDivisionChatEnabled ? [{ title: 'Chat Divisi', desc: unreadChatCount ? `${unreadChatCount} pesan baru dari divisi` : 'Chat publik dan pribadi semua divisi', action: () => openDashboardView('chat'), tone: 'blue' }] : []),
+                { title: 'Pengumpulan Uang', desc: moneyHomeDescription, action: () => openDashboardView('moneyCollection'), tone: 'blue', badge: moneyHomeBadgeCount },
                 { title: 'Laporan Mingguan', desc: 'Isi kegiatan mingguan dan bukti foto', action: () => openReportPage('weekly'), tone: 'blue' },
                 { title: 'Matriks Individu', desc: 'Program kerja individu semua divisi', action: () => openReportPage('individualMatrix'), tone: 'slate' },
                 ...(isSecretary ? [{ title: 'Matriks Kelompok', desc: 'Khusus sekretaris untuk program kerja kelompok', action: () => openReportPage('groupMatrix'), tone: 'emerald' }] : []),
@@ -3656,23 +4223,31 @@ Format lengkap yang juga diterima:
                   action: () => openReportPage('treasurerIncome'),
                   tone: 'emerald',
                 },
-              ].map((item) => (
-                <button
-                  key={item.title}
-                  type="button"
-                  onClick={item.action}
-                  className="group border border-slate-200 bg-white p-4 text-left transition-colors hover:border-m-blue/40 hover:bg-[#f8fafd] dark:border-slate-800 dark:bg-[#0d1320] dark:hover:bg-[#111827]"
-                >
-                  <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl text-white font-black ${item.tone === 'emerald' ? 'bg-emerald-500' : item.tone === 'amber' ? 'bg-amber-500' : item.tone === 'blue' ? 'bg-m-blue' : 'bg-slate-700'}`}>
-                    {item.title[0]}
-                  </span>
-                  <h3 className="mt-4 font-black text-slate-900 dark:text-white">{item.title}</h3>
-                  <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">{item.desc}</p>
-                  <span className="mt-4 inline-flex text-xs font-black text-m-blue group-hover:translate-x-1 transition-transform">
-                    Buka menu
-                  </span>
-                </button>
-              ))}
+              ].map((item) => {
+                const badge = 'badge' in item ? Number(item.badge || 0) : 0;
+                return (
+                  <button
+                    key={item.title}
+                    type="button"
+                    onClick={item.action}
+                    className="group relative border border-slate-200 bg-white p-4 text-left transition-colors hover:border-m-blue/40 hover:bg-[#f8fafd] dark:border-slate-800 dark:bg-[#0d1320] dark:hover:bg-[#111827]"
+                  >
+                    {badge > 0 && (
+                      <span className="absolute right-3 top-3 rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-black leading-5 text-white shadow-sm">
+                        {badge > 99 ? '99+' : badge}
+                      </span>
+                    )}
+                    <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl text-white font-black ${item.tone === 'emerald' ? 'bg-emerald-500' : item.tone === 'amber' ? 'bg-amber-500' : item.tone === 'blue' ? 'bg-m-blue' : 'bg-slate-700'}`}>
+                      {item.title[0]}
+                    </span>
+                    <h3 className="mt-4 font-black text-slate-900 dark:text-white">{item.title}</h3>
+                    <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">{item.desc}</p>
+                    <span className="mt-4 inline-flex text-xs font-black text-m-blue group-hover:translate-x-1 transition-transform">
+                      Buka menu
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </section>
         )}
@@ -3785,7 +4360,7 @@ Format lengkap yang juga diterima:
         </section>
         )}
 
-        {dashboardView === 'chat' && (
+        {isDivisionChatEnabled && dashboardView === 'chat' && (
           <section className="order-1 flex min-h-[calc(100dvh-89px)] flex-col overflow-hidden border border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-[#0d1320] lg:col-span-2 lg:h-dvh lg:min-h-0">
             <div className="shrink-0 flex flex-col gap-4 border-b border-slate-200 bg-[#f8fafd] px-4 py-5 dark:border-slate-800 dark:bg-[#111827] md:flex-row md:items-start md:justify-between md:px-6">
               <div className="min-w-0">
@@ -4065,6 +4640,566 @@ Format lengkap yang juga diterima:
                 </button>
               </div>
             </form>
+          </section>
+        )}
+
+        {false && dashboardView === 'moneyCollection' && (
+          <section className="order-1 space-y-5 lg:col-span-2">
+            <div className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5">
+              <div className="border-b border-slate-100 pb-4 dark:border-slate-800/60">
+                <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Bendahara</p>
+                <h2 className="mt-1 text-2xl font-black text-slate-900 dark:text-white">Pengumpulan Uang</h2>
+                <p className="mt-2 max-w-2xl text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+                  Bendahara membuat informasi pengumpulan. Semua divisi mengisi jumlah uang dan upload bukti pembayaran; rekapnya masuk ke tabel bendahara.
+                </p>
+              </div>
+
+              {isTreasurer && (
+                <form onSubmit={saveMoneyCollection} className="mt-5 grid gap-4 rounded-2xl border border-m-blue/15 bg-[#f8fafd] p-4 dark:border-m-blue/30 dark:bg-[#111827] md:grid-cols-2">
+                  <Field label="Nama Pengumpulan" value={moneyCollectionDraft.title} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, title: value }))} />
+                  <Field label="Jumlah Uang (IDR)" value={moneyCollectionDraft.amount} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, amount: formatIdrInput(value) }))} />
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Bank / E-Wallet</span>
+                    <select
+                      value={moneyCollectionDraft.paymentMethod || ''}
+                      onChange={(event) => setMoneyCollectionDraft((current) => ({ ...current, paymentMethod: event.target.value }))}
+                      className={googleInputClass}
+                    >
+                      <option value="">Pilih bank atau e-wallet</option>
+                      {PAYMENT_METHOD_OPTIONS.map((method) => (
+                        <option key={method} value={method}>{method}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <Field label="Nomor Rekening / Nomor E-Wallet" value={moneyCollectionDraft.paymentAccount || ''} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, paymentAccount: onlyDigits(value) }))} />
+                  <Field label="Deadline" type="date" value={moneyCollectionDraft.dueDate} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, dueDate: value }))} />
+                  <Field label="Keterangan" rows={3} value={moneyCollectionDraft.description} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, description: value }))} />
+                  <div className="flex flex-wrap gap-2 md:col-span-2">
+                    <button className={`${googlePrimaryButtonClass} min-h-[44px]`} disabled={moneySaving}>
+                      <Save size={16} />
+                      {moneySaving ? 'Menyimpan...' : 'Buat Pengumpulan'}
+                    </button>
+                    <button type="button" onClick={resetMoneyCollectionDraft} className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-black text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      Reset
+                    </button>
+                  </div>
+                </form>
+              )}
+              {moneyNotice && (
+                <p className="mt-4 rounded-2xl border border-[#1a73e8]/15 bg-[#e8f0fe] px-4 py-3 text-sm font-black text-[#1a73e8] dark:border-[#8ab4f8]/20 dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]">
+                  {moneyNotice}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-4">
+              {moneyCollections.map((collection) => {
+                const payments = getMoneyCollectionPayments(collection);
+                const ownPayments = payments.filter((payment) => payment.payerUid === profile.uid);
+                const draft = moneyPaymentDrafts[collection.id] || { amount: collection.amount || '', evidenceUrl: '', note: '' };
+                const total = payments.reduce((sum, payment) => sum + parseCurrencyValue(payment.amount), 0);
+
+                return (
+                  <div key={collection.id} className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5">
+                    <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 dark:border-slate-800/60 xl:flex-row xl:items-start xl:justify-between">
+                      <div>
+                        <h3 className="text-xl font-black text-slate-900 dark:text-white">{collection.title}</h3>
+                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">
+                          Jumlah: <span className="text-slate-900 dark:text-white">{collection.amount}</span>
+                          {collection.dueDate ? ` | Deadline: ${collection.dueDate}` : ''}
+                        </p>
+                        {collection.description && <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">{collection.description}</p>}
+                      </div>
+                      {isTreasurer && (
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => printMoneyCollection(collection)} className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-full border border-m-blue/20 bg-[#e8f0fe] px-4 py-2 text-xs font-black text-m-blue hover:bg-[#d2e3fc] dark:bg-m-blue/20 dark:text-[#7fcfff]">
+                            <Printer size={14} />
+                            Print
+                          </button>
+                          <button type="button" onClick={() => downloadMoneyCollectionPdf(collection)} className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+                            <Download size={14} />
+                            PDF
+                          </button>
+                          <button type="button" onClick={() => deleteMoneyCollection(collection)} className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-black text-red-600 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                            <Trash2 size={14} />
+                            Hapus
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {(
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-[#f8fafd] p-4 dark:border-slate-800 dark:bg-[#111827]">
+                        <h4 className="text-sm font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Form Pembayaran Divisi</h4>
+                        <div className="mt-4 grid gap-4 md:grid-cols-2">
+                          <div className="rounded-2xl bg-white p-4 dark:bg-slate-950">
+                            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Nama</p>
+                            <p className="mt-1 text-base font-black text-slate-950 dark:text-white">{profile.name}</p>
+                          </div>
+                          <div className="rounded-2xl bg-white p-4 dark:bg-slate-950">
+                            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Divisi</p>
+                            <p className="mt-1 text-base font-black text-slate-950 dark:text-white">{getDivisionLabel(profile.division)}</p>
+                          </div>
+                          <div>
+                            <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Jumlah Uang (IDR)</span>
+                            <div className="flex min-h-[48px] items-center rounded-md border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-black text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-white">
+                              {collection.amount || '-'}
+                            </div>
+                          </div>
+                          <Field label="Catatan" value={draft.note} onChange={(value) => updateMoneyPaymentDraft(collection.id, { note: value })} />
+                          <div className="md:col-span-2">
+                            <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Upload Bukti Pembayaran</span>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                              <label className={`flex min-h-[48px] flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-700 transition-colors dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 ${
+                                ownPayments.length > 0 ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-m-blue'
+                              }`}>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  disabled={ownPayments.length > 0}
+                                  onChange={async (event) => {
+                                    const file = event.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      const dataUrl = await fileToImageDataUrl(file);
+                                      updateMoneyPaymentDraft(collection.id, { evidenceUrl: dataUrl });
+                                    } catch (error: any) {
+                                      alert(error?.message || 'Bukti pembayaran gagal dibaca.');
+                                    } finally {
+                                      event.target.value = '';
+                                    }
+                                  }}
+                                  className="sr-only"
+                                />
+                                {ownPayments.length > 0 ? 'Bukti Sudah Terkirim' : draft.evidenceUrl ? 'Ganti Bukti' : 'Pilih Bukti Pembayaran'}
+                              </label>
+                              {(draft.evidenceUrl || ownPayments[ownPayments.length - 1]?.evidenceUrl) && <img src={draft.evidenceUrl || ownPayments[ownPayments.length - 1]?.evidenceUrl} alt="Bukti pembayaran" className="h-24 w-24 rounded-2xl border border-slate-200 object-cover dark:border-slate-800" />}
+                            </div>
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => submitMoneyPayment(collection)} disabled={moneyPaymentSavingId === collection.id || ownPayments.length > 0} className={`${googlePrimaryButtonClass} mt-4 min-h-[44px]`}>
+                          <Save size={16} />
+                          {ownPayments.length > 0 ? 'Bukti Sudah Terkirim' : moneyPaymentSavingId === collection.id ? 'Mengirim...' : 'Kirim Bukti Pembayaran'}
+                        </button>
+                        {ownPayments.length > 0 && (
+                          <p className="mt-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                            Bukti sudah terkirim dan terkunci. Upload ulang hanya bisa setelah bendahara menghapus data pembayaran kamu.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {isTreasurer && (
+                      <div className="mt-4 overflow-x-auto">
+                        <div className="mb-3 flex flex-wrap gap-2 text-sm font-black text-slate-700 dark:text-slate-200">
+                          <span className="rounded-full bg-[#e8f0fe] px-3 py-1 text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff]">{payments.length} pembayaran</span>
+                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">Total {formatRupiah(total)}</span>
+                        </div>
+                        <table className="min-w-[820px] w-full border-collapse text-left text-sm">
+                          <thead>
+                            <tr className="bg-[#e8f0fe] text-xs uppercase tracking-wider text-m-blue dark:bg-m-blue/20 dark:text-[#7fcfff]">
+                              <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">No</th>
+                              <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Nama</th>
+                              <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Divisi</th>
+                              <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Jumlah Uang</th>
+                              <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Bukti</th>
+                              <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {payments.map((payment, index) => (
+                              <tr key={payment.id} className="bg-white dark:bg-[#111827]">
+                                <td className="border border-slate-200 px-3 py-2 font-bold dark:border-slate-800">{index + 1}</td>
+                                <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{payment.payerName}</td>
+                                <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{getDivisionLabel(payment.payerDivision)}</td>
+                                <td className="border border-slate-200 px-3 py-2 font-black dark:border-slate-800">{payment.amount}</td>
+                                <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">
+                                  {payment.evidenceUrl ? (
+                                    <button type="button" onClick={() => setMoneyEvidencePreview({ url: payment.evidenceUrl, title: `${payment.payerName} - ${getDivisionLabel(payment.payerDivision)}` })} className="inline-flex items-center gap-2 text-xs font-black text-m-blue dark:text-[#7fcfff]">
+                                      <Eye size={13} />
+                                      Lihat Bukti
+                                    </button>
+                                  ) : '-'}
+                                </td>
+                                <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">
+                                  <button type="button" onClick={() => deleteMoneyPayment(collection, payment)} className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-black text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-300">
+                                    <Trash2 size={13} />
+                                    Hapus
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                            {payments.length === 0 && (
+                              <tr>
+                                <td colSpan={6} className="border border-slate-200 px-3 py-6 text-center text-sm font-semibold text-slate-400 dark:border-slate-800">
+                                  Belum ada divisi yang mengirim bukti pembayaran.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {moneyCollections.length === 0 && (
+                <div className="border border-dashed border-slate-300 bg-white p-8 text-center dark:border-slate-800 dark:bg-[#0d1320]">
+                  <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Belum ada informasi pengumpulan uang dari bendahara.</p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {dashboardView === 'moneyCollection' && (
+          <section className="order-1 space-y-5 lg:col-span-2">
+            <div className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5">
+              <div className="border-b border-slate-100 pb-4 dark:border-slate-800">
+                <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#7fcfff]">Bendahara</p>
+                <h2 className="mt-2 text-2xl font-black text-slate-950 dark:text-white">Pengumpulan Uang</h2>
+                <p className="mt-1 max-w-3xl text-sm font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+                  Bendahara membuat draft pengumpulan, bisa membuat banyak riwayat, lalu setiap riwayat bisa diedit, dilihat, diprint, dan diunduh PDF.
+                </p>
+              </div>
+
+              {isTreasurer && !selectedMoneyCollection && (
+                <form onSubmit={saveMoneyCollection} className="mt-5 grid gap-4 rounded-2xl border border-[#1a73e8]/15 bg-[#f8fafd] p-4 dark:border-[#8ab4f8]/20 dark:bg-[#111827] md:grid-cols-2">
+                  <div className="md:col-span-2">
+                    <p className="text-xs font-black uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">
+                      {moneyCollections.some((collection) => collection.id === moneyCollectionDraft.id) ? 'Edit Draft Pengumpulan' : 'Draft Pengumpulan Baru'}
+                    </p>
+                  </div>
+                  <Field label="Nama Pengumpulan" value={moneyCollectionDraft.title} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, title: value }))} />
+                  <Field label="Jumlah Uang (IDR)" value={moneyCollectionDraft.amount} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, amount: formatIdrInput(value) }))} />
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Bank / E-Wallet</span>
+                    <select
+                      value={moneyCollectionDraft.paymentMethod || ''}
+                      onChange={(event) => setMoneyCollectionDraft((current) => ({ ...current, paymentMethod: event.target.value }))}
+                      className={googleInputClass}
+                    >
+                      <option value="">Pilih bank atau e-wallet</option>
+                      {PAYMENT_METHOD_OPTIONS.map((method) => (
+                        <option key={method} value={method}>{method}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <Field label="Nomor Rekening / Nomor E-Wallet" value={moneyCollectionDraft.paymentAccount || ''} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, paymentAccount: onlyDigits(value) }))} />
+                  <Field label="Deadline" type="date" value={moneyCollectionDraft.dueDate} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, dueDate: value }))} />
+                  <Field label="Informasi Tambahan" rows={3} value={moneyCollectionDraft.description} onChange={(value) => setMoneyCollectionDraft((current) => ({ ...current, description: value }))} />
+                  <div className="flex flex-wrap gap-2 md:col-span-2">
+                    <button className={`${googlePrimaryButtonClass} min-h-[44px]`} disabled={moneySaving}>
+                      <Save size={16} />
+                      {moneySaving
+                        ? 'Menyimpan...'
+                        : moneyCollections.some((collection) => collection.id === moneyCollectionDraft.id)
+                          ? 'Update & Kirim Ulang'
+                          : 'Buat & Kirim Informasi'}
+                    </button>
+                    <button type="button" onClick={resetMoneyCollectionDraft} className="rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      Draft Baru
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {moneyNotice && (
+                <p className="mt-4 rounded-2xl border border-[#1a73e8]/15 bg-[#e8f0fe] px-4 py-3 text-sm font-black text-[#1a73e8] dark:border-[#8ab4f8]/20 dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]">
+                  {moneyNotice}
+                </p>
+              )}
+            </div>
+
+            {!selectedMoneyCollection && moneyCollections.length > 0 && (
+              <div className="overflow-hidden border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#0d1320]">
+                <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Daftar Riwayat</p>
+                  <h3 className="mt-1 text-xl font-black text-slate-950 dark:text-white">Riwayat Pengumpulan Uang</h3>
+                  <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                    Semua draft yang sudah dibuat bendahara muncul di bawah. Pilih salah satu riwayat untuk melihat detail atau upload bukti pembayaran.
+                  </p>
+                </div>
+                {visibleMoneyCollections.map((collection) => {
+                  const payments = getMoneyCollectionPayments(collection);
+                  const total = payments.reduce((sum, payment) => sum + parseCurrencyValue(payment.amount), 0);
+                  const isActiveMoneyCollection = selectedMoneyCollectionId === collection.id;
+                  return (
+                    <div key={collection.id} className={`flex flex-col gap-3 border-b border-slate-200 px-4 py-4 last:border-b-0 dark:border-slate-800 md:flex-row md:items-center md:justify-between ${isActiveMoneyCollection ? 'bg-[#e8f0fe] dark:bg-[#1a73e8]/10' : ''}`}>
+                      <div className="min-w-0">
+                        <h3 className="truncate text-lg font-black text-slate-950 dark:text-white">{collection.title}</h3>
+                        <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">
+                          Jumlah: {collection.amount || '-'}{collection.dueDate ? ` | Deadline: ${collection.dueDate}` : ''} | {payments.length} pembayaran | Total {formatRupiah(total)}
+                        </p>
+                        {(collection.paymentMethod || collection.paymentAccount) && (
+                          <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">
+                            Metode: {collection.paymentMethod || '-'}{collection.paymentAccount ? ` | No: ${collection.paymentAccount}` : ''}
+                          </p>
+                        )}
+                        {collection.description && <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-500 dark:text-slate-400">{collection.description}</p>}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => setSelectedMoneyCollectionId(collection.id)} className={`inline-flex min-h-[40px] items-center gap-2 rounded-full px-4 py-2 text-xs font-black ${isActiveMoneyCollection ? 'bg-[#1a73e8] text-white' : 'bg-[#e8f0fe] text-[#1a73e8] hover:bg-[#d2e3fc] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]'}`}>
+                          <Eye size={14} /> {isActiveMoneyCollection ? 'Sedang Dilihat' : 'Lihat'}
+                        </button>
+                        {isTreasurer && (
+                          <>
+                            <button type="button" onClick={() => editMoneyCollection(collection)} className="inline-flex min-h-[40px] items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200">
+                              <Edit size={14} /> Edit
+                            </button>
+                            <button type="button" onClick={() => deleteMoneyCollection(collection)} className="inline-flex min-h-[40px] items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-xs font-black text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-300">
+                              <Trash2 size={14} /> Hapus
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {moneyCollections.length > 0 && (
+                  <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                      Halaman {moneyCollectionPage} dari {moneyCollectionTotalPages} | Total {moneyCollections.length} riwayat
+                    </p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setMoneyCollectionPage((page) => Math.max(1, page - 1))} disabled={moneyCollectionPage <= 1} className="rounded-full border border-slate-200 px-4 py-2 text-xs font-black text-slate-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300">
+                        Sebelumnya
+                      </button>
+                      <button type="button" onClick={() => setMoneyCollectionPage((page) => Math.min(moneyCollectionTotalPages, page + 1))} disabled={moneyCollectionPage >= moneyCollectionTotalPages} className="rounded-full border border-slate-200 px-4 py-2 text-xs font-black text-slate-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300">
+                        Berikutnya
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedMoneyCollection && (
+              <div className="border border-slate-200 bg-white p-4 shadow-none dark:border-slate-800 dark:bg-[#0d1320] md:p-5">
+                <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 dark:border-slate-800 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <button type="button" onClick={() => setSelectedMoneyCollectionId('')} className="mb-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200">
+                      <ArrowLeft size={14} /> Kembali ke daftar
+                    </button>
+                    <h3 className="text-xl font-black text-slate-950 dark:text-white">{selectedMoneyCollection.title}</h3>
+                    <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                      Jumlah: <span className="text-slate-950 dark:text-white">{selectedMoneyCollection.amount}</span>
+                      {selectedMoneyCollection.dueDate ? ` | Deadline: ${selectedMoneyCollection.dueDate}` : ''}
+                    </p>
+                    {(selectedMoneyCollection.paymentMethod || selectedMoneyCollection.paymentAccount) && (
+                      <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                        Metode: <span className="text-slate-950 dark:text-white">{selectedMoneyCollection.paymentMethod || '-'}</span>
+                        {selectedMoneyCollection.paymentAccount ? ` | No: ${selectedMoneyCollection.paymentAccount}` : ''}
+                      </p>
+                    )}
+                    {selectedMoneyCollection.description && <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">{selectedMoneyCollection.description}</p>}
+                  </div>
+                  {isTreasurer && (
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => printMoneyCollection(selectedMoneyCollection)} className="inline-flex items-center gap-2 rounded-full bg-[#e8f0fe] px-4 py-2 text-xs font-black text-[#1a73e8] hover:bg-[#d2e3fc] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]">
+                        <Printer size={14} /> Print
+                      </button>
+                      <button type="button" onClick={() => viewMoneyCollectionPdf(selectedMoneyCollection)} className="inline-flex items-center gap-2 rounded-full bg-violet-50 px-4 py-2 text-xs font-black text-violet-700 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-300">
+                        <Eye size={14} /> View PDF
+                      </button>
+                      <button type="button" onClick={() => downloadMoneyCollectionPdf(selectedMoneyCollection)} className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300">
+                        <Download size={14} /> Unduh PDF
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {(
+                  <div className={`mt-4 border border-slate-200 bg-[#f8fafd] dark:border-slate-800 dark:bg-[#111827] ${isTreasurer ? 'overflow-hidden' : ''}`}>
+                    <div className="border-b border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-950">
+                      <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#8ab4f8]">Upload Pembayaran</p>
+                      <h4 className="mt-1 text-lg font-black text-slate-950 dark:text-white">{isTreasurer ? 'Upload Bukti Bendahara' : 'Kirim Bukti ke Bendahara'}</h4>
+                    </div>
+
+                    <div className={`grid gap-0 border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 ${isTreasurer ? 'md:grid-cols-4' : 'md:grid-cols-2'}`}>
+                      <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-4 dark:border-slate-800 md:border-b-0 md:border-r">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe] text-m-blue dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]">
+                          <User size={19} />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Nama</span>
+                          <span className="mt-0.5 block truncate text-base font-black text-slate-950 dark:text-white">{profile.name}</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 px-4 py-4">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                          <Users size={19} />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Divisi</span>
+                          <span className="mt-0.5 block truncate text-base font-black text-slate-950 dark:text-white">{getDivisionLabel(profile.division)}</span>
+                        </span>
+                      </div>
+                      {isTreasurer && (
+                        <>
+                          <div className="flex items-center gap-3 border-t border-slate-100 px-4 py-4 dark:border-slate-800 md:border-l md:border-t-0">
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                              <WalletCards size={19} />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Nominal</span>
+                              <span className="mt-0.5 block truncate text-base font-black text-slate-950 dark:text-white">{selectedMoneyCollection.amount || '-'}</span>
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 border-t border-slate-100 px-4 py-4 dark:border-slate-800 md:border-l md:border-t-0">
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe] text-m-blue dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]">
+                              <ClipboardCheck size={19} />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Status</span>
+                              <span className="mt-0.5 block truncate text-base font-black text-slate-950 dark:text-white">{selectedMoneyOwnPayments.length > 0 ? 'Sudah terkirim' : 'Belum upload'}</span>
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className={`grid gap-4 p-4 ${isTreasurer ? 'xl:grid-cols-[280px_1fr]' : 'lg:grid-cols-2'}`}>
+                      <div className={isTreasurer ? 'hidden' : ''}>
+                        <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Jumlah Uang (IDR)</span>
+                        <div className="flex min-h-[48px] items-center rounded-md border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-black text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-white">
+                          {selectedMoneyCollection.amount || '-'}
+                        </div>
+                      </div>
+                      <Field label="Catatan" value={selectedMoneyDraft.note} onChange={(value) => updateMoneyPaymentDraft(selectedMoneyCollection.id, { note: value })} rows={3} />
+                    </div>
+
+                    <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+                      <span className="mb-2 block text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Upload Bukti Pembayaran</span>
+                      <div className={`grid gap-3 ${isTreasurer ? 'lg:grid-cols-[1fr_180px_260px] lg:items-stretch' : 'lg:grid-cols-[1fr_220px]'}`}>
+                        <label className={`flex ${isTreasurer ? 'min-h-[88px]' : 'min-h-[108px]'} flex-col items-center justify-center gap-2 border border-dashed border-slate-300 bg-white px-5 py-5 text-center text-sm font-black text-slate-700 transition-colors dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 ${
+                          selectedMoneyOwnPayments.length > 0
+                            ? 'cursor-not-allowed opacity-70'
+                            : 'cursor-pointer hover:border-[#1a73e8] hover:bg-[#f8fbff] dark:hover:border-[#8ab4f8] dark:hover:bg-[#111827]'
+                        }`}>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={selectedMoneyOwnPayments.length > 0}
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                const dataUrl = await fileToImageDataUrl(file);
+                                updateMoneyPaymentDraft(selectedMoneyCollection.id, { evidenceUrl: dataUrl });
+                              } catch (error: any) {
+                                alert(error?.message || 'Bukti pembayaran gagal dibaca.');
+                              } finally {
+                                event.target.value = '';
+                              }
+                            }}
+                            className="sr-only"
+                          />
+                          <ImageIcon size={24} className="text-m-blue dark:text-[#8ab4f8]" />
+                          <span>{selectedMoneyOwnPayments.length > 0 ? 'Bukti Sudah Terkirim' : selectedMoneyDraft.evidenceUrl ? 'Ganti Bukti Pembayaran' : 'Pilih Bukti Pembayaran'}</span>
+                          <span className="text-xs font-semibold text-slate-400">
+                            {selectedMoneyOwnPayments.length > 0 ? 'Minta bendahara hapus data kamu jika perlu upload ulang.' : 'Format gambar, maksimal mengikuti batas aplikasi.'}
+                          </span>
+                        </label>
+
+                        <div className={`flex ${isTreasurer ? 'min-h-[88px]' : 'min-h-[108px]'} items-center justify-center border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-950`}>
+                          {selectedMoneyDraft.evidenceUrl || selectedMoneyOwnPayment?.evidenceUrl ? (
+                            <img src={selectedMoneyDraft.evidenceUrl || selectedMoneyOwnPayment?.evidenceUrl} alt="Bukti pembayaran" className={`${isTreasurer ? 'h-24' : 'h-32'} w-full object-contain`} />
+                          ) : (
+                            <div className="text-center text-xs font-bold text-slate-400">
+                              Preview bukti belum ada.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className={`${isTreasurer ? 'mt-0 flex flex-col justify-between gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950 lg:col-start-3 lg:row-start-1' : 'mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'}`}>
+                        {selectedMoneyOwnPayments.length > 0 ? (
+                          <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Bukti sudah terkirim dan terkunci. Upload ulang hanya bisa setelah bendahara menghapus data pembayaran kamu.</p>
+                        ) : (
+                          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Pastikan nominal dan bukti sudah benar sebelum dikirim.</p>
+                        )}
+                        <button type="button" onClick={() => submitMoneyPayment(selectedMoneyCollection)} disabled={moneyPaymentSavingId === selectedMoneyCollection.id || selectedMoneyOwnPayments.length > 0} className={`${googlePrimaryButtonClass} min-h-[44px] w-full sm:w-auto`}>
+                          <Save size={16} />
+                          {selectedMoneyOwnPayments.length > 0 ? 'Bukti Sudah Terkirim' : moneyPaymentSavingId === selectedMoneyCollection.id ? 'Mengirim...' : 'Kirim Bukti Pembayaran'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isTreasurer && (
+                  <div className="mt-4 overflow-hidden border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#111827]">
+                    <div className="flex flex-col gap-3 border-b border-slate-200 bg-[#f8fafd] px-4 py-4 dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest text-m-blue dark:text-[#8ab4f8]">Rekap Bendahara</p>
+                        <h4 className="mt-1 text-lg font-black text-slate-950 dark:text-white">Tabel Rekap Pembayaran</h4>
+                        <p className="mt-1 max-w-3xl text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
+                          Lihat siapa saja yang sudah mengumpulkan, buka bukti pembayaran, atau hapus data salah.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-sm font-black">
+                        <span className="rounded-full bg-[#e8f0fe] px-3 py-1 text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]">{selectedMoneyPayments.length} pembayaran</span>
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">Total {formatRupiah(selectedMoneyTotal)}</span>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto p-4">
+                    <table className="min-w-[760px] w-full border-collapse text-left text-sm">
+                      <thead>
+                        <tr className="bg-[#e8f0fe] text-xs uppercase tracking-wider text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]">
+                          <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">No</th>
+                          <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Nama</th>
+                          <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Divisi</th>
+                          <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Jumlah Uang</th>
+                          <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Bukti</th>
+                          <th className="border border-slate-200 px-3 py-2 dark:border-slate-800">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedMoneyPayments.map((payment, index) => (
+                          <tr key={payment.id}>
+                            <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{index + 1}</td>
+                            <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{payment.payerName}</td>
+                            <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">{getDivisionLabel(payment.payerDivision)}</td>
+                            <td className="border border-slate-200 px-3 py-2 font-black dark:border-slate-800">{payment.amount}</td>
+                            <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">
+                              {payment.evidenceUrl ? (
+                                <button type="button" onClick={() => setMoneyEvidencePreview({ url: payment.evidenceUrl, title: `${payment.payerName} - ${getDivisionLabel(payment.payerDivision)}` })} className="font-black text-[#1a73e8] dark:text-[#8ab4f8]">
+                                  Lihat Bukti
+                                </button>
+                              ) : '-'}
+                            </td>
+                            <td className="border border-slate-200 px-3 py-2 dark:border-slate-800">
+                              <button type="button" onClick={() => deleteMoneyPayment(selectedMoneyCollection, payment)} className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-black text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-300">
+                                Hapus
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {selectedMoneyPayments.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="border border-slate-200 px-3 py-6 text-center text-sm font-semibold text-slate-400 dark:border-slate-800">Belum ada pembayaran.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!selectedMoneyCollection && moneyCollections.length === 0 && (
+              <div className="overflow-hidden border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#0d1320]">
+                <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Daftar Riwayat</p>
+                  <h3 className="mt-1 text-xl font-black text-slate-950 dark:text-white">Riwayat Pengumpulan Uang</h3>
+                </div>
+                <p className="p-8 text-center text-sm font-bold text-slate-500 dark:text-slate-400">Belum ada informasi pengumpulan uang.</p>
+              </div>
+            )}
           </section>
         )}
 
@@ -5814,6 +6949,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     ? [
       { label: 'Home', icon: Home, action: () => openDivisionDashboard('home') },
       { label: 'Live Maps', icon: MapPinned, action: () => openDivisionDashboard('maps') },
+      { label: 'Pengumpulan Uang', icon: WalletCards, action: () => openDivisionDashboard('moneyCollection') },
       { label: 'Laporan Mingguan', icon: FileText, action: () => openDivisionDashboard('weekly') },
       { label: 'Matriks Individu', icon: ClipboardCheck, action: () => openDivisionDashboard('individualMatrix') },
       ...(getDivisionAccessGroup(currentProfile.division) === 'sekretaris'
