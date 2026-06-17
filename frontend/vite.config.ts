@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
         port: 5173,
         proxy: {
           //Target your Node.js backend
+          '/api': 'http://127.0.0.1:5000',
           '/api-proxy': 'http://127.0.0.1:5000',
           '/putra-ai-proxy': 'http://127.0.0.1:5000',
           '/admin': 'http://127.0.0.1:5000',

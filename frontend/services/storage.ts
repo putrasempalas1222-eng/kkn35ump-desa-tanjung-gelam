@@ -87,7 +87,8 @@ const buildBackendApiUrl = (url: string) => {
     '/putra-ai-proxy/',
   ].some((prefix) => url.startsWith(prefix));
   const baseUrl = isBackendRoute ? getBackendApiBaseUrl() : '';
-  return baseUrl ? `${baseUrl}${url}` : url;
+  if (baseUrl) return `${baseUrl}${url}`;
+  return isBackendRoute ? `/api${url}` : url;
 };
 
 const firebaseConfig = {
