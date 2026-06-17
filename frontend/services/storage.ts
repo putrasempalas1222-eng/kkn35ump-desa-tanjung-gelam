@@ -70,14 +70,9 @@ const DEFAULT_FIREBASE_ENV: Record<string, string> = {
 };
 
 const getFirebaseEnv = (key: string) => import.meta.env[key] || DEFAULT_FIREBASE_ENV[key] || '';
-const DEFAULT_BACKEND_API_BASE_URL = 'https://asia-southeast2-project-3dfa8c97-bc93-4195-a5a.cloudfunctions.net/apiDataKkn35';
-
 const getBackendApiBaseUrl = () => {
   const configured = String(import.meta.env.VITE_BACKEND_API_BASE_URL || '').replace(/\/$/, '');
   if (configured) return configured;
-  if (typeof window !== 'undefined' && window.location.hostname === 'kkn35ump-desa-gelam.vercel.app') {
-    return DEFAULT_BACKEND_API_BASE_URL;
-  }
   return '';
 };
 
