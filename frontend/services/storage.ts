@@ -88,7 +88,9 @@ const buildBackendApiUrl = (url: string) => {
   ].some((prefix) => url.startsWith(prefix));
   const baseUrl = isBackendRoute ? getBackendApiBaseUrl() : '';
   if (baseUrl) return `${baseUrl}${url}`;
-  return isBackendRoute ? `/api${url}` : url;
+  if (!isBackendRoute) return url;
+  if (import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname)) return url;
+  return `/api${url}`;
 };
 
 const firebaseConfig = {
