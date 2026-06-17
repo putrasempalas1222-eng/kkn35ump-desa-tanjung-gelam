@@ -58,14 +58,14 @@ export interface ContactMessage {
 }
 
 const DEFAULT_FIREBASE_ENV: Record<string, string> = {
-  VITE_FIREBASE_API_KEY: 'AIzaSyCxFcWI6vLfGNcQMnTVRsRtXsDJfzqiWEw',
-  VITE_FIREBASE_AUTH_DOMAIN: 'project-3dfa8c97-bc93-4195-a5a.firebaseapp.com',
-  VITE_FIREBASE_DATABASE_URL: 'https://project-3dfa8c97-bc93-4195-a5a-default-rtdb.firebaseio.com',
-  VITE_FIREBASE_PROJECT_ID: 'project-3dfa8c97-bc93-4195-a5a',
-  VITE_FIREBASE_STORAGE_BUCKET: 'project-3dfa8c97-bc93-4195-a5a.firebasestorage.app',
-  VITE_FIREBASE_MESSAGING_SENDER_ID: '275478991025',
-  VITE_FIREBASE_APP_ID: '1:275478991025:web:80d97124eb119cc039d290',
-  VITE_FIREBASE_MEASUREMENT_ID: 'G-YL95DFEMDK',
+  VITE_FIREBASE_API_KEY: 'AIzaSyCMdkeIeIQToOSwO6zRj04rbAvZaI2A5KE',
+  VITE_FIREBASE_AUTH_DOMAIN: 'play-integrity-2adpr7x4a8xhyex.firebaseapp.com',
+  VITE_FIREBASE_DATABASE_URL: 'https://play-integrity-2adpr7x4a8xhyex-default-rtdb.firebaseio.com',
+  VITE_FIREBASE_PROJECT_ID: 'play-integrity-2adpr7x4a8xhyex',
+  VITE_FIREBASE_STORAGE_BUCKET: 'play-integrity-2adpr7x4a8xhyex.firebasestorage.app',
+  VITE_FIREBASE_MESSAGING_SENDER_ID: '520643585460',
+  VITE_FIREBASE_APP_ID: '1:520643585460:web:5cbe22c0ddb7c8e7df3ee1',
+  VITE_FIREBASE_MEASUREMENT_ID: 'G-LV896XYVZR',
   VITE_FIREBASE_VAPID_KEY: '',
 };
 

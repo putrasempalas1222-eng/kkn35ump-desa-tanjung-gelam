@@ -27,11 +27,18 @@
       ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')"
     },
     "userProfiles": {
-      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".read": "auth != null",
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
         ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
         ".validate": "newData.hasChildren(['id', 'uid', 'email', 'name', 'division', 'role']) && newData.child('id').val() == $uid && newData.child('uid').val() == $uid && newData.child('email').isString() && newData.child('name').isString() && newData.child('name').val().length >= 2 && newData.child('division').isString() && (newData.child('role').val() == 'admin' || newData.child('role').val() == 'division')"
+      }
+    },
+    "divisionSlots": {
+      ".read": "auth != null",
+      "$slotId": {
+        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin')",
+        ".validate": "!newData.exists() || (newData.hasChildren(['id', 'value', 'label', 'defaultName']) && newData.child('id').val() == $slotId && newData.child('value').isString() && newData.child('label').isString())"
       }
     },
     "weeklyReports": {
@@ -43,9 +50,24 @@
     "financialReports": {
       ".read": "auth != null",
       "$reportId": {
-        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || ((newData.exists() ? newData.child('userId').val() : data.child('userId').val()) == auth.uid && root.child('userProfiles').child(auth.uid).child('division').val().matches(/^bendahara(\\s.*)?$/)))",
-        ".validate": "!newData.exists() || (newData.hasChildren(['id', 'userId', 'name', 'division', 'week', 'entries', 'reportType']) && newData.child('id').val() == $reportId && (newData.child('reportType').val() == 'treasurerOutput' || newData.child('reportType').val() == 'treasurerIncome'))"
+        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^[Bb][Ee][Nn][Dd][Aa][Hh][Aa][Rr][Aa]( .*)?$/))",
+        ".validate": "!newData.exists() || (newData.child('id').val() == $reportId && newData.child('userId').isString() && newData.child('name').isString() && newData.child('division').isString() && newData.child('entries').exists() && (newData.child('reportType').val() == 'treasurerOutput' || newData.child('reportType').val() == 'treasurerIncome'))"
       }
+    },
+    "moneyCollections": {
+      ".read": "auth != null",
+      "$collectionId": {
+        ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^[Bb]endahara(\\s.*)?$/))",
+        "payments": {
+          "$paymentId": {
+            ".write": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^[Bb]endahara(\\s.*)?$/) || ((!data.exists() || data.child('payerUid').val() == auth.uid) && newData.child('payerUid').val() == auth.uid))"
+          }
+        }
+      }
+    },
+    "moneyCollectionReminders": {
+      ".read": "auth != null && (auth.token.email == 'kamikkn35ump@kknump.plg' || root.child('userProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('userProfiles').child(auth.uid).child('division').val().matches(/^[Bb]endahara(\\s.*)?$/))",
+      ".write": false
     },
     "liveLocations": {
       ".read": "auth != null",
