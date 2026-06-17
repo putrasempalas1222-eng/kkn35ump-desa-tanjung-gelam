@@ -76,6 +76,14 @@ const getFirebaseAdmin = () => {
 
 const json = (res, status, payload) => res.status(status).json(payload);
 
+const escapeHtml = (value = '') =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
 const getAuthenticatedUser = async (req, res) => {
   const app = getFirebaseAdmin();
   if (!app) {
@@ -132,12 +140,58 @@ const sendOtpEmail = async ({ email, name, code }) => {
     throw new Error('SMTP belum dikonfigurasi di Vercel Environment Variables.');
   }
 
+  const displayName = escapeHtml(name || 'Divisi KKN 35');
+  const publicBaseUrl = (process.env.PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL || 'https://kkn35ump-desa-gelam.vercel.app').replace(/\/$/, '');
+  const logoUrl = `${publicBaseUrl}/report-assets/logokknv1.png`;
+  const spacedCode = escapeHtml(String(code).split('').join('     '));
+  const cautionText =
+    'Informasi: Email ini dikirim otomatis oleh sistem KKN 35 UMP untuk proses keamanan akun. ' +
+    'Kode OTP bersifat rahasia, hanya ditujukan untuk pemilik akun yang tertera, dan tidak boleh dibagikan kepada siapa pun. ' +
+    'Jika Anda tidak sedang melakukan proses login, abaikan email ini dan segera ubah password akun Anda.';
+
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_SENDER_ADDRESS || process.env.SMTP_USER,
     to: email,
-    subject: 'Kode OTP Login KKN Kelompok 35',
-    text: `Halo ${name || 'akun divisi'},\n\nKode OTP login kamu: ${code}\n\nKode berlaku 10 menit.`,
-    html: `<div style="font-family:Arial,sans-serif;padding:24px"><p>Halo ${name || 'akun divisi'},</p><p>Kode OTP login kamu:</p><div style="font-size:32px;font-weight:800;letter-spacing:8px">${code}</div><p>Kode berlaku 10 menit.</p></div>`,
+    subject: `Verifikasi OTP Login KKN 35 - ${code}`,
+    text: `Verifikasi OTP Login KKN 35\n\nHalo ${name || 'Divisi KKN 35'},\n\nAnda menerima email ini karena sedang melakukan proses verifikasi pada dashboard KKN 35 UMP. Gunakan kode di bawah ini untuk menyelesaikan proses verifikasi. Kode ini berlaku selama 10 menit.\n\n${code}\n\nJika Anda tidak meminta kode ini, silakan abaikan email ini.\n\n${cautionText}`,
+    html: `
+      <div style="margin:0;padding:0;background:#f3f6fb;font-family:Arial,Helvetica,sans-serif;color:#001b44">
+        <div style="max-width:720px;margin:0 auto;padding:14px 16px 0">
+          <div style="background:#ffffff;border-radius:6px;padding:30px 34px 22px">
+            <img src="${logoUrl}" alt="Logo KKN 35" width="86" style="display:block;width:86px;max-width:86px;height:auto;margin:0 0 28px;border-radius:50%" />
+
+            <h1 style="margin:0 0 20px;font-size:24px;line-height:1.2;font-weight:800;color:#000000">
+              Verifikasi OTP Login KKN 35
+            </h1>
+
+            <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#001b44">
+              Halo <strong>${displayName}</strong>,
+            </p>
+            <p style="margin:0;font-size:14px;line-height:1.65;color:#001b44">
+              Anda menerima email ini karena sedang melakukan proses verifikasi pada
+              <strong>dashboard KKN 35 UMP</strong>. Gunakan kode di bawah ini untuk menyelesaikan
+              proses verifikasi. Kode ini berlaku selama <strong>10 menit</strong>.
+            </p>
+
+            <div style="margin:36px 0 32px;padding:18px 14px;border-radius:8px;background:#fff8f0;text-align:center">
+              <div style="font-size:25px;line-height:1;font-weight:800;letter-spacing:12px;color:#ff7300">
+                ${spacedCode}
+              </div>
+            </div>
+
+            <p style="margin:0;font-size:11px;line-height:1.65;color:#7f8ba7">
+              Jika Anda tidak meminta kode ini, silakan abaikan email ini. Terima kasih atas perhatian Anda.
+            </p>
+          </div>
+
+          <div style="margin-top:14px;padding:16px 6px 0;border-top:1px solid #8b95aa">
+            <p style="margin:0;font-size:10px;line-height:1.45;color:#001b44">
+              ${escapeHtml(cautionText)}
+            </p>
+          </div>
+        </div>
+      </div>
+    `,
   });
 };
 
