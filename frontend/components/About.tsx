@@ -6,6 +6,7 @@ import { SiteContent } from '../types';
 
 export const About: React.FC = () => {
   const [content, setContent] = useState<SiteContent>(storage.defaults.siteContent);
+  const aboutImage = content.aboutImage.trim();
 
   useEffect(() => {
     return storage.subscribeSiteContent(setContent);
@@ -27,11 +28,17 @@ export const About: React.FC = () => {
           >
             <div className="relative">
               <div className="absolute -inset-4 bg-m-blue/10 dark:bg-m-blue/5 rounded-[2rem] transform -rotate-3"></div>
-              <img 
-                src={content.aboutImage} 
-                alt="Ilustrasi Kegiatan KKN" 
-                className="relative rounded-3xl shadow-xl w-full object-cover aspect-[4/3] border border-slate-200/40 dark:border-slate-800/40"
-              />
+              {aboutImage ? (
+                <img
+                  src={aboutImage}
+                  alt="Ilustrasi Kegiatan KKN"
+                  className="relative rounded-3xl shadow-xl w-full object-cover aspect-[4/3] border border-slate-200/40 dark:border-slate-800/40"
+                />
+              ) : (
+                <div className="relative flex aspect-[4/3] w-full items-center justify-center rounded-3xl border border-slate-200/40 bg-slate-100 shadow-xl dark:border-slate-800/40 dark:bg-slate-800">
+                  <img src="/report-assets/logokknv1.png" alt="Logo KKN 35" className="h-24 w-24 object-contain opacity-35" />
+                </div>
+              )}
               <div className="absolute -bottom-6 -right-6 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-5 rounded-[2rem] shadow-xl border border-slate-250/50 dark:border-slate-800/80 hover:scale-105 transition-transform duration-300">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#30D158]/20 to-[#30D158]/40 flex items-center justify-center text-m-green font-black text-2xl shadow-[0_8px_20px_rgba(48,209,88,0.2)]">

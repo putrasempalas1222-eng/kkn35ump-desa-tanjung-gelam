@@ -164,77 +164,116 @@ const getAuthenticatedUser = async (req, res) => {
 const sendMoneyEmail = async ({ transporter, to, name, collection, appUrl }) => {
   const publicBaseUrl = (process.env.PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL || 'https://kkn35ump-desa-gelam.vercel.app').replace(/\/$/, '');
   const logoUrl = `${publicBaseUrl}/report-assets/logokknv1.png`;
-  const safeName = escapeHtml(name || 'Divisi KKN 35');
-  const title = escapeHtml(collection.title || 'Pengumpulan Uang KKN 35');
-  const amount = escapeHtml(collection.amount || '-');
-  const paymentMethod = escapeHtml(collection.paymentMethod || '-');
-  const paymentAccount = escapeHtml(collection.paymentAccount || '-');
-  const dueDate = escapeHtml(collection.dueDate || '-');
-  const description = escapeHtml(collection.description || '-');
-  const safeAppUrl = escapeHtml(appUrl || 'https://kkn35ump-desa-gelam.vercel.app/#admin');
+  const displayName = name || 'Divisi KKN 35';
+  const safeName = escapeHtml(displayName);
+  const titleText = collection.title || 'Pengumpulan Uang KKN 35';
+  const amountText = collection.amount || '-';
+  const paymentMethodText = collection.paymentMethod || '-';
+  const paymentAccountText = collection.paymentAccount || '-';
+  const dueDateText = collection.dueDate || '-';
+  const descriptionText = collection.description || '-';
+  const headline = 'Pengumpulan Uang KKN 35';
+  const introText = 'Bendahara membuat informasi pengumpulan uang baru pada dashboard KKN 35 UMP. Silakan lihat detail dan upload bukti pembayaran melalui tombol di bawah.';
+  const cautionText =
+    'Informasi: Email ini dikirim otomatis oleh sistem KKN 35 UMP sebagai pemberitahuan resmi dari bendahara. ' +
+    'Silakan login ke dashboard divisi untuk melihat detail dan mengunggah bukti pembayaran. ' +
+    'Abaikan email ini jika Anda bukan bagian dari akun divisi KKN 35 UMP.';
 
   return withTimeout(
     transporter.sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_SENDER_ADDRESS || process.env.SMTP_USER,
       to,
-      subject: `Pengumpulan Uang KKN 35 - ${collection.title || 'Informasi Resmi'}`,
+      subject: `[TAGIHAN] Pengumpulan Uang KKN 35: ${titleText}`,
       text:
-        `Pengumpulan Uang KKN 35\n\n` +
-        `Halo ${name || 'Divisi KKN 35'},\n\n` +
-        `Bendahara membuat informasi pengumpulan uang baru pada dashboard KKN 35 UMP.\n\n` +
-        `Nama Pengumpulan: ${collection.title || '-'}\n` +
-        `Jumlah: ${collection.amount || '-'}\n` +
-        `Metode Pembayaran: ${collection.paymentMethod || '-'}\n` +
-        `Nomor Rekening/E-Wallet: ${collection.paymentAccount || '-'}\n` +
-        `Deadline: ${collection.dueDate || '-'}\n` +
-        `Keterangan: ${collection.description || '-'}\n\n` +
-        `Buka dashboard untuk upload bukti pembayaran: ${appUrl || 'https://kkn35ump-desa-gelam.vercel.app/#admin'}`,
+        `Halo ${displayName},\n\n` +
+        `${introText}\n\n` +
+        `=========================================\n` +
+        `DETAIL TAGIHAN PEMBAYARAN\n` +
+        `=========================================\n` +
+        `Nama Kegiatan : ${titleText}\n` +
+        `Jumlah Tagihan: ${amountText}\n` +
+        `Metode Bayar  : ${paymentMethodText}\n` +
+        `No. Rek/E-Wallet: ${paymentAccountText}\n` +
+        `Batas Waktu   : ${dueDateText}\n` +
+        `Keterangan    : ${descriptionText}\n` +
+        `=========================================\n\n` +
+        `Buka dashboard divisi untuk melihat detail dan upload bukti pembayaran:\n${appUrl || 'https://kkn35ump-desa-gelam.vercel.app/#admin'}\n\n` +
+        `---\n${cautionText}`,
       html: `
-      <div style="margin:0;padding:0;background:#f3f6fb;font-family:Arial,Helvetica,sans-serif;color:#001b44">
-        <div style="max-width:720px;margin:0 auto;padding:14px 16px 0">
-          <div style="background:#ffffff;border-radius:6px;padding:30px 34px 22px">
-            <img src="${logoUrl}" alt="Logo KKN 35" width="86" style="display:block;width:86px;max-width:86px;height:auto;margin:0 0 28px;border-radius:50%" />
-
-            <h1 style="margin:0 0 20px;font-size:24px;line-height:1.2;font-weight:800;color:#000000">
-              Pengumpulan Uang KKN 35
-            </h1>
-
-            <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#001b44">
-              Halo <strong>${safeName}</strong>,
-            </p>
-            <p style="margin:0;font-size:14px;line-height:1.65;color:#001b44">
-              Bendahara membuat informasi pengumpulan uang baru pada
-              <strong>dashboard KKN 35 UMP</strong>. Silakan lihat detail dan upload bukti pembayaran.
-            </p>
-
-            <div style="margin:34px 0 28px;padding:22px 18px;border-radius:8px;background:#fff8f0;border:1px solid #fed7aa">
-              <div style="margin:0 0 12px;font-size:12px;font-weight:800;letter-spacing:1.3px;text-transform:uppercase;color:#ff7300">
-                Informasi Pengumpulan
+        <!--[if !mso]><!-->
+        <div style="display:none;max-height:0px;overflow:hidden;">
+          Halo ${safeName}, ${escapeHtml(introText)}
+        </div>
+        <!--<![endif]-->
+        <div style="margin:0;padding:40px 16px;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">
+          <div style="max-width:580px;margin:0 auto;">
+            <div style="background-color:#ffffff;border:1px solid #e2e8f0;border-top:4px solid #10b981;border-radius:12px;padding:44px 36px 36px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05),0 2px 4px -2px rgba(0,0,0,0.05);">
+              <div style="text-align:center;margin-bottom:28px;">
+                <img src="${logoUrl}" alt="Logo KKN 35" width="80" height="80" style="display:inline-block;width:80px;height:80px;border-radius:50%;border:2px solid #f1f5f9;background-color:#ffffff;padding:4px;object-fit:contain;" />
               </div>
-              <h2 style="margin:0 0 16px;font-size:22px;line-height:1.25;font-weight:800;color:#000000">${title}</h2>
-              <p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#001b44"><strong>Jumlah:</strong> ${amount}</p>
-              <p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#001b44"><strong>Metode:</strong> ${paymentMethod}</p>
-              <p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#001b44"><strong>Nomor:</strong> ${paymentAccount}</p>
-              <p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#001b44"><strong>Deadline:</strong> ${dueDate}</p>
-              <p style="margin:0;font-size:14px;line-height:1.5;color:#001b44"><strong>Keterangan:</strong> ${description}</p>
+
+              <h1 style="margin:0 0 20px;font-size:24px;line-height:1.3;font-weight:800;color:#0f172a;text-align:center;">
+                ${headline}
+              </h1>
+
+              <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#334155;">
+              Halo <strong>${safeName}</strong>,
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+                ${escapeHtml(introText)}
+              </p>
+
+              <div style="margin:32px 0;padding:24px;border-radius:8px;background-color:#f0fdf4;border:1px solid #d1fae5;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#047857;margin-bottom:16px;font-family:sans-serif;">
+                  INFORMASI PEMBAYARAN
+                </div>
+
+                <h3 style="margin:0 0 16px;font-size:18px;font-weight:800;color:#0f172a;">
+                  ${escapeHtml(titleText)}
+                </h3>
+
+                <table style="width:100%;border-collapse:collapse;font-size:14px;color:#334155;">
+                  <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+                    <td style="padding:10px 0;font-weight:600;color:#64748b;width:40%;">Jumlah Tagihan</td>
+                    <td style="padding:10px 0;font-weight:700;color:#0f172a;text-align:right;">${escapeHtml(amountText)}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+                    <td style="padding:10px 0;font-weight:600;color:#64748b;">Metode Pembayaran</td>
+                    <td style="padding:10px 0;color:#0f172a;text-align:right;">${escapeHtml(paymentMethodText)}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+                    <td style="padding:10px 0;font-weight:600;color:#64748b;">No. Rekening / E-Wallet</td>
+                    <td style="padding:10px 0;font-weight:700;color:#0f172a;text-align:right;font-family:monospace;">${escapeHtml(paymentAccountText)}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+                    <td style="padding:10px 0;font-weight:600;color:#64748b;">Batas Waktu (Deadline)</td>
+                    <td style="padding:10px 0;font-weight:700;color:#ef4444;text-align:right;">${escapeHtml(dueDateText)}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:10px 0 0;font-weight:600;color:#64748b;vertical-align:top;">Keterangan</td>
+                    <td style="padding:10px 0 0;color:#475569;text-align:right;font-size:13px;line-height:1.4;">${escapeHtml(descriptionText)}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <div style="text-align:center;margin:32px 0 24px;">
+                <a href="${escapeHtml(appUrl || 'https://kkn35ump-desa-gelam.vercel.app/#admin')}" style="display:inline-block;padding:14px 32px;background-color:#10b981;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1),0 2px 4px -1px rgba(0,0,0,0.06);">
+                  Upload Bukti Pembayaran
+                </a>
+              </div>
+
+              <p style="margin:24px 0 0;font-size:14px;line-height:1.6;color:#64748b;text-align:center;">
+                Jika Anda sudah membayar dan mengunggah bukti, silakan abaikan email ini atau hubungi Bendahara untuk verifikasi manual.
+              </p>
             </div>
 
-            <a href="${safeAppUrl}" style="display:block;border-radius:8px;background:#ff7300;color:#ffffff;text-decoration:none;text-align:center;padding:14px 18px;font-size:14px;font-weight:800">
-              Buka Dashboard & Upload Bukti
-            </a>
-
-            <p style="margin:24px 0 0;font-size:11px;line-height:1.65;color:#7f8ba7">
-              Email ini dikirim otomatis oleh sistem KKN 35 UMP sebagai pemberitahuan resmi dari bendahara.
-            </p>
-          </div>
-
-          <div style="margin-top:14px;padding:16px 6px 0;border-top:1px solid #8b95aa">
-            <p style="margin:0;font-size:10px;line-height:1.45;color:#001b44">
-              Informasi: Abaikan email ini jika Anda bukan bagian dari akun divisi KKN 35 UMP.
-            </p>
+            <div style="margin-top:24px;padding:0 8px;text-align:center;">
+              <p style="margin:0;font-size:12px;line-height:1.6;color:#94a3b8;">
+                ${escapeHtml(cautionText)}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
     `,
     }),
     25000,

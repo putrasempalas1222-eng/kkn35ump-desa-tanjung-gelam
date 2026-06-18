@@ -72,6 +72,7 @@ export const Event: React.FC = () => {
   const [content, setContent] = useState<EventContent>(storage.defaults.eventContent);
   const eventDate = useMemo(() => new Date(content.date), [content.date]);
   const [timeLeft, setTimeLeft] = useState<TimeLeft>(() => getTimeLeft(new Date(storage.defaults.eventContent.date)));
+  const eventImage = content.image.trim();
 
   useEffect(() => {
     return storage.subscribeEventContent(setContent);
@@ -113,11 +114,17 @@ export const Event: React.FC = () => {
             viewport={{ once: true }}
             className="relative min-h-[460px] rounded-[2rem] overflow-hidden shadow-2xl shadow-slate-900/10 border border-slate-200/20 dark:border-slate-800/20"
           >
-            <img
-              src={content.image}
-              alt="Event KKN Kelompok 35"
-              className="absolute inset-0 h-full w-full object-cover"
-            />
+            {eventImage ? (
+              <img
+                src={eventImage}
+                alt="Event KKN Kelompok 35"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-950">
+                <img src="/report-assets/logokknv1.png" alt="Logo KKN 35" className="h-32 w-32 object-contain opacity-20" />
+              </div>
+            )}
             <div className="absolute inset-0 bg-gradient-to-br from-slate-950/90 via-slate-900/55 to-m-blue/70"></div>
             <div className="relative z-10 h-full p-8 md:p-10 flex flex-col justify-between text-white">
               <div>

@@ -6,6 +6,7 @@ import { SiteContent } from '../types';
 
 export const VillageProfile: React.FC = () => {
   const [content, setContent] = useState<SiteContent>(storage.defaults.siteContent);
+  const villageMapUrl = content.villageMapUrl.trim();
 
   useEffect(() => {
     return storage.subscribeSiteContent(setContent);
@@ -97,17 +98,24 @@ export const VillageProfile: React.FC = () => {
             transition={{ delay: 0.2 }}
             className="h-full min-h-[420px] rounded-[2rem] overflow-hidden shadow-xl border border-slate-200/50 dark:border-slate-800/80 relative group"
           >
-            <iframe 
-              src={content.villageMapUrl} 
-              width="100%" 
-              height="100%" 
-              style={{ border: 0, minHeight: '420px' }} 
-              allowFullScreen={true} 
-              loading="lazy" 
-              referrerPolicy="no-referrer-when-downgrade"
-              title="Peta Desa Tanjung Gelam"
-              className="absolute inset-0 w-full h-full grayscale group-hover:grayscale-0 transition-all duration-500"
-            ></iframe>
+            {villageMapUrl ? (
+              <iframe
+                src={villageMapUrl}
+                width="100%"
+                height="100%"
+                style={{ border: 0, minHeight: '420px' }}
+                allowFullScreen={true}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                title="Peta Desa Tanjung Gelam"
+                className="absolute inset-0 w-full h-full grayscale group-hover:grayscale-0 transition-all duration-500"
+              ></iframe>
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                <MapPin size={34} />
+                <p className="mt-3 text-sm font-semibold">Peta desa belum diatur.</p>
+              </div>
+            )}
           </motion.div>
         </div>
       </div>

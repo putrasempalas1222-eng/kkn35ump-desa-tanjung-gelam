@@ -126,10 +126,16 @@ const getTransporter = () => {
   if (!user || !pass) return null;
 
   return nodemailer.createTransport({
+    pool: true,
     host,
     port,
     secure: port === 465 || mode === 'ssl',
     requireTLS: mode === 'tls' || port === 587,
+    maxConnections: 1,
+    maxMessages: 50,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
     auth: { user, pass },
   });
 };
@@ -140,52 +146,68 @@ const sendOtpEmail = async ({ email, name, code }) => {
     throw new Error('SMTP belum dikonfigurasi di Vercel Environment Variables.');
   }
 
-  const displayName = escapeHtml(name || 'Divisi KKN 35');
+  const displayName = name || 'Divisi KKN 35';
+  const safeDisplayName = escapeHtml(displayName);
   const publicBaseUrl = (process.env.PUBLIC_SITE_URL || process.env.VITE_PUBLIC_SITE_URL || 'https://kkn35ump-desa-gelam.vercel.app').replace(/\/$/, '');
   const logoUrl = `${publicBaseUrl}/report-assets/logokknv1.png`;
-  const spacedCode = escapeHtml(String(code).split('').join('     '));
   const cautionText =
     'Informasi: Email ini dikirim otomatis oleh sistem KKN 35 UMP untuk proses keamanan akun. ' +
     'Kode OTP bersifat rahasia, hanya ditujukan untuk pemilik akun yang tertera, dan tidak boleh dibagikan kepada siapa pun. ' +
     'Jika Anda tidak sedang melakukan proses login, abaikan email ini dan segera ubah password akun Anda.';
+  const safeCode = escapeHtml(code);
 
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_SENDER_ADDRESS || process.env.SMTP_USER,
     to: email,
-    subject: `Verifikasi OTP Login KKN 35 - ${code}`,
-    text: `Verifikasi OTP Login KKN 35\n\nHalo ${name || 'Divisi KKN 35'},\n\nAnda menerima email ini karena sedang melakukan proses verifikasi pada dashboard KKN 35 UMP. Gunakan kode di bawah ini untuk menyelesaikan proses verifikasi. Kode ini berlaku selama 10 menit.\n\n${code}\n\nJika Anda tidak meminta kode ini, silakan abaikan email ini.\n\n${cautionText}`,
+    subject: `Kode OTP Verifikasi Login KKN 35: ${code}`,
+    text: `Halo ${displayName},\n\nAnda menerima email ini karena sedang melakukan proses verifikasi masuk pada Dashboard KKN 35 UMP. Gunakan kode keamanan sekali pakai (OTP) di bawah ini untuk menyelesaikan proses verifikasi:\n\nKODE OTP: ${code}\n\nKode ini berlaku selama 10 menit. Mohon tidak membagikan kode ini kepada siapapun demi keamanan akun Anda.\n\n---\n${cautionText}`,
     html: `
-      <div style="margin:0;padding:0;background:#f3f6fb;font-family:Arial,Helvetica,sans-serif;color:#001b44">
-        <div style="max-width:720px;margin:0 auto;padding:14px 16px 0">
-          <div style="background:#ffffff;border-radius:6px;padding:30px 34px 22px">
-            <img src="${logoUrl}" alt="Logo KKN 35" width="86" style="display:block;width:86px;max-width:86px;height:auto;margin:0 0 28px;border-radius:50%" />
+      <!--[if !mso]><!-->
+      <div style="display:none;max-height:0px;overflow:hidden;">
+        Halo ${safeDisplayName}, gunakan kode OTP ${safeCode} ini untuk verifikasi masuk ke dashboard KKN 35 UMP.
+      </div>
+      <!--<![endif]-->
+      <div style="margin:0;padding:40px 16px;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">
+        <div style="max-width:580px;margin:0 auto;">
+          <div style="background-color:#ffffff;border:1px solid #e2e8f0;border-top:4px solid #0284c7;border-radius:12px;padding:44px 36px 36px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05),0 2px 4px -2px rgba(0,0,0,0.05);">
+            <div style="text-align:center;margin-bottom:28px;">
+              <img src="${logoUrl}" alt="Logo KKN 35" width="80" height="80" style="display:inline-block;width:80px;height:80px;border-radius:50%;border:2px solid #f1f5f9;background-color:#ffffff;padding:4px;object-fit:contain;" />
+            </div>
 
-            <h1 style="margin:0 0 20px;font-size:24px;line-height:1.2;font-weight:800;color:#000000">
+            <h1 style="margin:0 0 20px;font-size:24px;line-height:1.3;font-weight:800;color:#0f172a;text-align:center;">
               Verifikasi OTP Login KKN 35
             </h1>
 
-            <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#001b44">
-              Halo <strong>${displayName}</strong>,
+            <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#334155;">
+              Halo <strong>${safeDisplayName}</strong>,
             </p>
-            <p style="margin:0;font-size:14px;line-height:1.65;color:#001b44">
-              Anda menerima email ini karena sedang melakukan proses verifikasi pada
-              <strong>dashboard KKN 35 UMP</strong>. Gunakan kode di bawah ini untuk menyelesaikan
-              proses verifikasi. Kode ini berlaku selama <strong>10 menit</strong>.
+            <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#475569;">
+              Anda menerima email ini karena sedang melakukan proses verifikasi masuk pada <strong style="color:#0f172a;">dashboard KKN 35 UMP</strong>. Gunakan kode keamanan sekali pakai (OTP) di bawah ini untuk menyelesaikan proses verifikasi:
             </p>
 
-            <div style="margin:36px 0 32px;padding:18px 14px;border-radius:8px;background:#fff8f0;text-align:center">
-              <div style="font-size:25px;line-height:1;font-weight:800;letter-spacing:12px;color:#ff7300">
-                ${spacedCode}
+            <div style="margin:32px 0;padding:24px 16px;border-radius:8px;background-color:#f0f9ff;border:1px solid #e0f2fe;text-align:center;">
+              <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#0369a1;margin-bottom:12px;font-family:sans-serif;">
+                Kode Verifikasi Anda
+              </div>
+              <div style="margin:10px 0;text-align:center;">
+                <div style="display:inline-block;">
+                  ${String(code).split('').map((char) => `
+                    <span style="display:inline-block;width:38px;height:44px;line-height:44px;text-align:center;font-size:24px;font-weight:700;color:#0284c7;background-color:#ffffff;border:1px solid #bde0fe;border-radius:6px;margin:0 3px;box-shadow:0 1px 2px rgba(0,0,0,0.05);">${escapeHtml(char)}</span>
+                  `).join('')}
+                </div>
+              </div>
+              <div style="font-size:12px;color:#0369a1;margin-top:16px;">
+                Kode ini berlaku selama <strong>10 menit</strong>
               </div>
             </div>
 
-            <p style="margin:0;font-size:11px;line-height:1.65;color:#7f8ba7">
-              Jika Anda tidak meminta kode ini, silakan abaikan email ini. Terima kasih atas perhatian Anda.
+            <p style="margin:24px 0 0;font-size:14px;line-height:1.6;color:#64748b;text-align:center;">
+              Jika Anda tidak meminta kode ini, silakan abaikan email ini dengan aman.
             </p>
           </div>
 
-          <div style="margin-top:14px;padding:16px 6px 0;border-top:1px solid #8b95aa">
-            <p style="margin:0;font-size:10px;line-height:1.45;color:#001b44">
+          <div style="margin-top:24px;padding:0 8px;text-align:center;">
+            <p style="margin:0;font-size:12px;line-height:1.6;color:#94a3b8;">
               ${escapeHtml(cautionText)}
             </p>
           </div>

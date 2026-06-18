@@ -10,6 +10,7 @@ interface HeroProps {
 
 export const Hero: React.FC<HeroProps> = ({ introCompleted = true }) => {
   const [content, setContent] = useState<SiteContent>(storage.defaults.siteContent);
+  const heroImage = content.heroImage.trim();
 
   useEffect(() => {
     return storage.subscribeSiteContent(setContent);
@@ -19,14 +20,29 @@ export const Hero: React.FC<HeroProps> = ({ introCompleted = true }) => {
     <section id="home" className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black">
       {/* Background Image with Overlay */}
       <div className="absolute inset-0 z-0 overflow-hidden">
-        <motion.img
-          src={content.heroImage}
-          alt="Kegiatan KKN"
-          initial={{ scale: 1.15, opacity: 0 }}
-          animate={introCompleted ? { scale: 1, opacity: 0.8 } : { scale: 1.15, opacity: 0 }}
-          transition={{ duration: 2.2, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full h-full object-cover"
-        />
+        {heroImage ? (
+          <motion.img
+            src={heroImage}
+            alt="Kegiatan KKN"
+            initial={{ scale: 1.15, opacity: 0 }}
+            animate={introCompleted ? { scale: 1, opacity: 0.8 } : { scale: 1.15, opacity: 0 }}
+            transition={{ duration: 2.2, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <motion.div
+            initial={{ scale: 1.08, opacity: 0 }}
+            animate={introCompleted ? { scale: 1, opacity: 1 } : { scale: 1.08, opacity: 0 }}
+            transition={{ duration: 2.2, ease: [0.16, 1, 0.3, 1] }}
+            className="flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,#020617_0%,#0f172a_48%,#064e3b_100%)]"
+          >
+            <img
+              src="/report-assets/logokknv1.png"
+              alt="Logo KKN 35"
+              className="h-36 w-36 object-contain opacity-20 sm:h-48 sm:w-48"
+            />
+          </motion.div>
+        )}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_25%,rgba(255,255,255,0.18),transparent_28rem)]"></div>
         <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/36 to-black/84"></div>
       </div>

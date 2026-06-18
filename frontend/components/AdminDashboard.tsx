@@ -176,7 +176,8 @@ const getChatSenderLabel = (name: string, division: DivisionName) =>
 
 const REPORT_LOGO_UMP = '/report-assets/logo-ump.png';
 const REPORT_LOGO_KKN = '/report-assets/logo-kkn.png';
-const LOGIN_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const LOGIN_SESSION_TIMEOUT_MS = 60 * 60 * 1000;
+const SESSION_CHECK_INTERVAL_MS = 30 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 4 * 60 * 1000;
 const getSessionActivityKey = (uid: string) => `kkn_session_last_active_${uid}`;
 const getOtpVerifiedKey = (uid: string) => `kkn_login_otp_verified_${uid}`;
@@ -7299,6 +7300,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [otpEmail, setOtpEmail] = useState('');
   const [otpSending, setOtpSending] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
+  const [twoFactorSuccess, setTwoFactorSuccess] = useState(false);
   const [otpVerifiedUid, setOtpVerifiedUid] = useState('');
   const [otpSendStartedAt, setOtpSendStartedAt] = useState(0);
   const [otpResendAvailableAt, setOtpResendAvailableAt] = useState(0);
@@ -7308,6 +7310,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [totpCode, setTotpCode] = useState('');
   const [otpValues, setOtpValues] = useState<string[]>(Array(6).fill(''));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const lastAutoVerifyCodeRef = useRef('');
   const [totpSecret, setTotpSecret] = useState('');
   const [totpOtpauthUrl, setTotpOtpauthUrl] = useState('');
   const [totpLoading, setTotpLoading] = useState(false);
@@ -7335,6 +7338,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     const unsubscribeAuth = storage.onAuthChange((user) => {
       setAdminUser(user?.email || null);
       setCurrentUid(user?.uid || '');
+      if (user?.email) {
+        setOtpEmail(user.email);
+        setEmail((currentEmail) => currentEmail || user.email || '');
+      }
       if (!user) {
         setOtpVerifiedUid('');
         setOtpCode('');
@@ -7342,6 +7349,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         setOtpEmail('');
         setOtpResendAvailableAt(0);
         setTwoFactorView('select');
+        setTwoFactorSuccess(false);
         setTotpEnabled(false);
         setTotpCode('');
         setTotpSecret('');
@@ -7390,35 +7398,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     if (!currentUid) return;
 
     const activityKey = getSessionActivityKey(currentUid);
+    const otpVerifiedKey = getOtpVerifiedKey(currentUid);
+    const getLastActivity = () => Number(localStorage.getItem(activityKey) || 0) || Number(localStorage.getItem(otpVerifiedKey) || 0);
+    const isSessionExpired = () => {
+      const lastActivity = getLastActivity();
+      return Boolean(lastActivity && Date.now() - lastActivity > LOGIN_SESSION_TIMEOUT_MS);
+    };
     const expireSession = () => {
       localStorage.removeItem(activityKey);
-      localStorage.removeItem(getOtpVerifiedKey(currentUid));
+      localStorage.removeItem(otpVerifiedKey);
       setOtpVerifiedUid('');
       setOtpCode('');
       setOtpMessage('');
+      setOtpValues(Array(6).fill(''));
+      setTwoFactorSuccess(false);
       setOtpResendAvailableAt(0);
+      setLoginError('Sesi berakhir karena tidak aktif selama 1 jam. Silakan login ulang.');
       storage.logout();
     };
-    const lastActivity = Number(localStorage.getItem(activityKey) || 0);
-    if (lastActivity && Date.now() - lastActivity > LOGIN_SESSION_TIMEOUT_MS) {
+    if (isSessionExpired()) {
       expireSession();
       return;
     }
 
-    const touchSession = () => localStorage.setItem(activityKey, String(Date.now()));
+    const touchSession = () => {
+      if (isSessionExpired()) {
+        expireSession();
+        return;
+      }
+      localStorage.setItem(activityKey, String(Date.now()));
+    };
+    const checkSession = () => {
+      if (isSessionExpired()) {
+        expireSession();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        touchSession();
+      }
+    };
     touchSession();
 
     const events: Array<keyof WindowEventMap> = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
     events.forEach((eventName) => window.addEventListener(eventName, touchSession, { passive: true }));
-    const timer = window.setInterval(() => {
-      const last = Number(localStorage.getItem(activityKey) || 0);
-      if (last && Date.now() - last > LOGIN_SESSION_TIMEOUT_MS) {
-        expireSession();
-      }
-    }, 60 * 1000);
+    window.addEventListener('focus', touchSession);
+    window.addEventListener('online', touchSession);
+    window.addEventListener('pageshow', touchSession);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const timer = window.setInterval(checkSession, SESSION_CHECK_INTERVAL_MS);
 
     return () => {
       events.forEach((eventName) => window.removeEventListener(eventName, touchSession));
+      window.removeEventListener('focus', touchSession);
+      window.removeEventListener('online', touchSession);
+      window.removeEventListener('pageshow', touchSession);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.clearInterval(timer);
     };
   }, [currentUid]);
@@ -7501,6 +7536,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     setOtpCode('');
     setTotpCode('');
     setOtpMessage('');
+    setTwoFactorSuccess(false);
     setOtpResendAvailableAt(0);
   };
 
@@ -7511,6 +7547,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     setOtpMessage('');
     setOtpMessageType('info');
     setOtpCode('');
+    setOtpValues(Array(6).fill(''));
+    setTwoFactorSuccess(false);
+    lastAutoVerifyCodeRef.current = '';
 
     try {
       const credential = await storage.login(email, password);
@@ -7582,6 +7621,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     setLoginError('');
     setOtpMessage('');
     setOtpMessageType('info');
+    setOtpValues(Array(6).fill(''));
+    setTwoFactorSuccess(false);
+    lastAutoVerifyCodeRef.current = '';
     setOtpSending(true);
     setOtpSendStartedAt(Date.now());
     setOtpCooldownNow(Date.now());
@@ -7606,6 +7648,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     setOtpMessage('');
     setOtpMessageType('info');
     setTotpCode('');
+    setOtpValues(Array(6).fill(''));
+    setTwoFactorSuccess(false);
+    lastAutoVerifyCodeRef.current = '';
     setTotpLoading(true);
 
     try {
@@ -7658,8 +7703,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       } else {
         await storage.verifyLoginTotp(cleanCode);
       }
-      markTwoFactorVerified();
+      setTwoFactorSuccess(true);
+      setOtpMessageType('success');
+      setOtpMessage('Kode benar. Mengarahkan...');
+      window.setTimeout(markTwoFactorVerified, 1900);
     } catch (error: any) {
+      lastAutoVerifyCodeRef.current = '';
+      setOtpValues(Array(6).fill(''));
+      window.setTimeout(() => inputRefs.current[0]?.focus(), 50);
       setLoginError(error?.message || 'Kode Authenticator salah.');
     } finally {
       setTotpLoading(false);
@@ -7689,8 +7740,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     setOtpVerifying(true);
     try {
       await storage.verifyLoginOtp(cleanCode);
-      markTwoFactorVerified();
+      setTwoFactorSuccess(true);
+      setOtpMessageType('success');
+      setOtpMessage('Kode benar. Mengarahkan...');
+      window.setTimeout(markTwoFactorVerified, 1900);
     } catch (error: any) {
+      lastAutoVerifyCodeRef.current = '';
+      setOtpValues(Array(6).fill(''));
+      window.setTimeout(() => inputRefs.current[0]?.focus(), 50);
       setLoginError(error?.message || 'Kode OTP salah.');
     } finally {
       setOtpVerifying(false);
@@ -7700,22 +7757,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   // Sync 6-digit inputs with the main state and trigger auto-submit
   useEffect(() => {
     setOtpValues(Array(6).fill(''));
+    setTwoFactorSuccess(false);
+    lastAutoVerifyCodeRef.current = '';
   }, [twoFactorView]);
 
   useEffect(() => {
     const code = otpValues.join('');
+    if (code.length !== 6) {
+      lastAutoVerifyCodeRef.current = '';
+    }
+
     if (twoFactorView === 'email') {
       setOtpCode(code);
-      if (code.length === 6 && !otpVerifying) {
+      if (code.length === 6 && !otpVerifying && !twoFactorSuccess && lastAutoVerifyCodeRef.current !== code) {
+        lastAutoVerifyCodeRef.current = code;
         verifyLoginOtp(code);
       }
     } else if (twoFactorView === 'authenticator' || twoFactorView === 'authenticatorSetup') {
       setTotpCode(code);
-      if (code.length === 6 && !totpLoading) {
+      if (code.length === 6 && !totpLoading && !twoFactorSuccess && lastAutoVerifyCodeRef.current !== code) {
+        lastAutoVerifyCodeRef.current = code;
         verifyLoginTotp(code);
       }
     }
-  }, [otpValues, twoFactorView]);
+  }, [otpValues, twoFactorView, otpVerifying, totpLoading, twoFactorSuccess]);
 
   // Auto-dismiss success messages and errors in the 2FA flow after 5 seconds
   useEffect(() => {
@@ -8091,19 +8156,158 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
   if (requiresDivisionOtp) {
     const isAuthenticatorView = twoFactorView === 'authenticator' || twoFactorView === 'authenticatorSetup';
+    const twoFactorEmailLabel = otpEmail || auth.currentUser?.email || adminUser || email.trim() || 'email akun';
     
     const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
-      const code = otpValues.join('');
-      if (twoFactorView === 'email') {
-        verifyLoginOtp(code);
-      } else if (isAuthenticatorView) {
-        verifyLoginTotp(code);
-      }
     };
 
     return (
       <div className="min-h-screen bg-[#f2f2f2] dark:bg-[#0b0f19] flex items-center justify-center p-4 relative font-sans select-none">
+        <style>{`
+          @keyframes kknOtpTileMerge {
+            0% {
+              opacity: 1;
+              transform: translateX(calc(var(--otp-x) - 20px)) translateY(0) rotate(0deg) scale(1);
+              border-color: rgb(203 213 225);
+              box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+            }
+            28% {
+              opacity: 1;
+              transform: translateX(calc(var(--otp-x) - 20px)) translateY(-3px) rotate(0deg) scale(1.04);
+              border-color: rgb(14 165 233);
+              box-shadow: 0 10px 22px rgba(14, 165, 233, 0.13);
+            }
+            56% {
+              opacity: 1;
+              transform: translateX(-20px) translateY(0) rotate(0deg) scale(0.96);
+              border-color: rgb(16 185 129);
+              box-shadow: 0 12px 28px rgba(16, 185, 129, 0.16);
+            }
+            78% {
+              opacity: 1;
+              transform: translateX(-20px) translateY(0) rotate(210deg) scale(0.62);
+            }
+            100% {
+              opacity: 0;
+              transform: translateX(-20px) translateY(0) rotate(420deg) scale(0.18);
+            }
+          }
+
+          @keyframes kknOtpSuccessBar {
+            0% {
+              opacity: 0;
+              transform: scaleX(0.14) scaleY(0.72);
+              border-radius: 999px;
+              box-shadow: 0 0 0 rgba(16, 185, 129, 0);
+            }
+            58% {
+              opacity: 1;
+              transform: scaleX(1.025) scaleY(1.02);
+              border-radius: 12px;
+              box-shadow: 0 18px 42px rgba(16, 185, 129, 0.12);
+            }
+            100% {
+              opacity: 1;
+              transform: scaleX(1) scaleY(1);
+              border-radius: 0;
+              box-shadow: 0 10px 28px rgba(16, 185, 129, 0.10);
+            }
+          }
+
+          @keyframes kknOtpCheckEnter {
+            0% {
+              opacity: 0;
+              transform: rotate(-160deg) scale(0.38);
+            }
+            62% {
+              opacity: 1;
+              transform: rotate(8deg) scale(1.16);
+            }
+            100% {
+              opacity: 1;
+              transform: rotate(0deg) scale(1);
+            }
+          }
+
+          @keyframes kknOtpCheckDraw {
+            to {
+              stroke-dashoffset: 0;
+            }
+          }
+
+          @keyframes kknOtpSuccessGlow {
+            0%, 100% {
+              opacity: 0.18;
+              transform: scale(0.92);
+            }
+            50% {
+              opacity: 0.38;
+              transform: scale(1.08);
+            }
+          }
+
+          .kkn-otp-success-stage {
+            position: relative;
+            width: min(100%, 292px);
+            height: 52px;
+            margin: 0 auto 1rem;
+            isolation: isolate;
+          }
+
+          .kkn-otp-success-tile {
+            position: absolute;
+            left: 50%;
+            top: 2px;
+            width: 40px;
+            height: 48px;
+            border: 1px solid rgb(203 213 225);
+            background: white;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+            animation: kknOtpTileMerge 1080ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation-delay: var(--otp-delay);
+            will-change: transform, opacity;
+            z-index: 2;
+          }
+
+          .kkn-otp-success-bar {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgb(134 239 172);
+            background: linear-gradient(180deg, rgb(240 253 244), rgb(220 252 231));
+            color: rgb(4 120 87);
+            opacity: 0;
+            transform-origin: center;
+            animation: kknOtpSuccessBar 660ms cubic-bezier(0.16, 1, 0.3, 1) 760ms forwards;
+            overflow: hidden;
+            z-index: 1;
+          }
+
+          .kkn-otp-success-bar::before {
+            content: '';
+            position: absolute;
+            inset: 6px 36px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.28), rgba(16, 185, 129, 0));
+            animation: kknOtpSuccessGlow 1300ms ease-in-out 760ms infinite;
+          }
+
+          .kkn-otp-success-check {
+            position: relative;
+            opacity: 0;
+            animation: kknOtpCheckEnter 520ms cubic-bezier(0.2, 1.25, 0.3, 1) 1060ms forwards;
+            z-index: 1;
+          }
+
+          .kkn-otp-success-check-path {
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+            animation: kknOtpCheckDraw 520ms cubic-bezier(0.22, 1, 0.36, 1) 1240ms forwards;
+          }
+        `}</style>
         <div className="w-full max-w-[440px] bg-white dark:bg-[#151c30] p-6 sm:p-8 shadow-[0_2px_6px_rgba(0,0,0,0.2)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)] relative text-left">
           
           {/* Back Arrow button */}
@@ -8142,7 +8346,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
           <div className="flex justify-center mb-3">
             <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 text-[11px] font-normal max-w-full truncate">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>{otpEmail || email.trim() || 'email akun'}</span>
+              <span>{twoFactorEmailLabel}</span>
             </div>
           </div>
 
@@ -8228,23 +8432,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               )}
 
               {/* 6 individual input boxes */}
-              <div className="flex items-center justify-center gap-2 mb-4" dir="ltr">
-                {otpValues.map((value, idx) => (
-                  <input
-                    key={idx}
-                    ref={(el) => { inputRefs.current[idx] = el; }}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={value}
-                    onChange={(e) => handleOtpChange(idx, e.target.value)}
-                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                    onPaste={idx === 0 ? handleOtpPaste : undefined}
-                    className="w-[36px] h-[44px] sm:w-[40px] sm:h-[48px] text-center text-xl font-normal border border-slate-300 focus:border-[#0067b8] focus:ring-1 focus:ring-[#0067b8] outline-none rounded-none bg-white dark:bg-slate-900 text-slate-900 dark:text-white transition-all shadow-sm"
-                    autoFocus={idx === 0}
-                  />
-                ))}
-              </div>
+              {twoFactorSuccess ? (
+                <div className="kkn-otp-success-stage" aria-live="polite" aria-label="Kode berhasil diverifikasi">
+                  <div className="kkn-otp-success-bar dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <svg className="kkn-otp-success-check" width="30" height="30" viewBox="0 0 30 30" fill="none" aria-hidden="true">
+                      <path
+                        className="kkn-otp-success-check-path"
+                        d="M8 15.4L12.7 20L22.5 10"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+                  {Array.from({ length: 6 }).map((_, idx) => (
+                    <span
+                      key={idx}
+                      className="kkn-otp-success-tile dark:border-slate-700 dark:bg-slate-900"
+                      style={{
+                        '--otp-x': `${(idx - 2.5) * 50}px`,
+                        '--otp-delay': `${idx * 28}ms`,
+                      } as React.CSSProperties}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 mb-4" dir="ltr">
+                  {otpValues.map((value, idx) => (
+                    <input
+                      key={idx}
+                      ref={(el) => { inputRefs.current[idx] = el; }}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={value}
+                      onChange={(e) => handleOtpChange(idx, e.target.value)}
+                      onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                      onPaste={idx === 0 ? handleOtpPaste : undefined}
+                      disabled={otpVerifying || totpLoading || otpSending}
+                      className={`w-[36px] h-[44px] sm:w-[40px] sm:h-[48px] text-center text-xl font-normal border outline-none rounded-none bg-white dark:bg-slate-900 text-slate-900 dark:text-white transition-all shadow-sm disabled:cursor-wait disabled:bg-slate-50 dark:disabled:bg-slate-950 ${
+                        loginError
+                          ? 'border-red-300 focus:border-red-500 focus:ring-1 focus:ring-red-500'
+                          : 'border-slate-300 focus:border-[#0067b8] focus:ring-1 focus:ring-[#0067b8]'
+                      }`}
+                      autoFocus={idx === 0}
+                    />
+                  ))}
+                </div>
+              )}
 
               {/* Description and link actions */}
               <div className="flex items-center justify-between w-full gap-4 text-[13px] mt-4">
@@ -8294,19 +8530,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                 </div>
               )}
 
-              {/* Submit button centered */}
-              <div className="flex justify-center mt-6">
-                <button
-                  type="submit"
-                  disabled={
-                    (twoFactorView === 'email' && (otpVerifying || otpCode.length !== 6)) ||
-                    (isAuthenticatorView && (totpLoading || totpCode.length !== 6))
-                  }
-                  className="bg-[#0067b8] hover:bg-[#005da6] text-white text-[15px] font-normal px-12 py-2 min-w-[120px] text-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                >
-                  {otpVerifying || totpLoading ? 'Verifikasi...' : 'Masuk'}
-                </button>
-              </div>
+              {(otpVerifying || totpLoading) && (
+                <p className="text-center text-[12px] text-slate-500 dark:text-slate-400 font-medium">
+                  Memeriksa kode...
+                </p>
+              )}
             </form>
           )}
 
