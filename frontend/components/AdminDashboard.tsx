@@ -7273,6 +7273,14 @@ const ReportTemplate = ({
   );
 };
 
+const renderPremiumLoading = () => {
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19] flex items-center justify-center p-4 select-none transition-colors duration-300">
+      <div className="w-10 h-10 rounded-full border-[3px] border-slate-300 dark:border-slate-700/30 border-t-[#0071E3] animate-spin" />
+    </div>
+  );
+};
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [adminUser, setAdminUser] = useState<string | null>(null);
   const [currentUid, setCurrentUid] = useState('');
@@ -7298,6 +7306,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
   const [twoFactorView, setTwoFactorView] = useState<TwoFactorView>('select');
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [totpCode, setTotpCode] = useState('');
+  const [otpValues, setOtpValues] = useState<string[]>(Array(6).fill(''));
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [totpSecret, setTotpSecret] = useState('');
   const [totpOtpauthUrl, setTotpOtpauthUrl] = useState('');
   const [totpLoading, setTotpLoading] = useState(false);
@@ -7552,10 +7562,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       const otp = await storage.requestLoginOtp();
       setOtpEmail(otp.email || otpEmail);
       setOtpMessageType('success');
-      setOtpMessage(`Kode OTP baru sudah dikirim ke ${otp.email || otpEmail}.`);
+      setOtpMessage('OTP baru terkirim.');
     } catch (error: any) {
       setOtpMessage('');
-      setLoginError(error?.message || 'Kode OTP belum berhasil dikirim.');
+      setLoginError(error?.message || 'OTP gagal dikirim.');
     } finally {
       setOtpSending(false);
       setOtpSendStartedAt(0);
@@ -7581,10 +7591,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       const otp = await storage.requestLoginOtp();
       setOtpEmail(otp.email || otpEmail || email.trim());
       setOtpMessageType('success');
-      setOtpMessage(`Kode OTP sudah dikirim ke ${otp.email || otpEmail || email.trim()}. Cek inbox atau spam.`);
+      setOtpMessage('OTP dikirim. Cek inbox/spam.');
     } catch (error: any) {
       setOtpMessage('');
-      setLoginError(error?.message || 'Kode OTP belum berhasil dikirim. Cek SMTP Gmail dan coba kirim ulang.');
+      setLoginError(error?.message || 'OTP gagal dikirim. Cek SMTP.');
     } finally {
       setOtpSending(false);
       setOtpSendStartedAt(0);
@@ -7621,12 +7631,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     }
   };
 
-  const verifyLoginTotp = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const verifyLoginTotp = async (eventOrCode?: React.FormEvent | string) => {
+    let codeVal = '';
+    if (eventOrCode && typeof eventOrCode !== 'string') {
+      eventOrCode.preventDefault();
+      codeVal = totpCode;
+    } else if (typeof eventOrCode === 'string') {
+      codeVal = eventOrCode;
+    } else {
+      codeVal = totpCode;
+    }
     setLoginError('');
     setOtpMessage('');
 
-    const cleanCode = totpCode.replace(/\D/g, '');
+    const cleanCode = codeVal.replace(/\D/g, '');
     if (cleanCode.length !== 6) {
       setLoginError('Masukkan kode Google Authenticator 6 digit.');
       return;
@@ -7642,19 +7660,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       }
       markTwoFactorVerified();
     } catch (error: any) {
-      setLoginError(error?.message || 'Kode Google Authenticator belum cocok.');
+      setLoginError(error?.message || 'Kode Authenticator salah.');
     } finally {
       setTotpLoading(false);
     }
   };
 
-  const verifyLoginOtp = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const verifyLoginOtp = async (eventOrCode?: React.FormEvent | string) => {
+    let codeVal = '';
+    if (eventOrCode && typeof eventOrCode !== 'string') {
+      eventOrCode.preventDefault();
+      codeVal = otpCode;
+    } else if (typeof eventOrCode === 'string') {
+      codeVal = eventOrCode;
+    } else {
+      codeVal = otpCode;
+    }
     setLoginError('');
     setOtpMessage('');
     setOtpMessageType('info');
 
-    const cleanCode = otpCode.replace(/\D/g, '');
+    const cleanCode = codeVal.replace(/\D/g, '');
     if (cleanCode.length !== 6) {
       setLoginError('Masukkan kode OTP 6 digit.');
       return;
@@ -7665,9 +7691,95 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
       await storage.verifyLoginOtp(cleanCode);
       markTwoFactorVerified();
     } catch (error: any) {
-      setLoginError(error?.message || 'Kode OTP belum cocok.');
+      setLoginError(error?.message || 'Kode OTP salah.');
     } finally {
       setOtpVerifying(false);
+    }
+  };
+
+  // Sync 6-digit inputs with the main state and trigger auto-submit
+  useEffect(() => {
+    setOtpValues(Array(6).fill(''));
+  }, [twoFactorView]);
+
+  useEffect(() => {
+    const code = otpValues.join('');
+    if (twoFactorView === 'email') {
+      setOtpCode(code);
+      if (code.length === 6 && !otpVerifying) {
+        verifyLoginOtp(code);
+      }
+    } else if (twoFactorView === 'authenticator' || twoFactorView === 'authenticatorSetup') {
+      setTotpCode(code);
+      if (code.length === 6 && !totpLoading) {
+        verifyLoginTotp(code);
+      }
+    }
+  }, [otpValues, twoFactorView]);
+
+  // Auto-dismiss success messages and errors in the 2FA flow after 5 seconds
+  useEffect(() => {
+    if (otpMessage) {
+      const timer = setTimeout(() => {
+        setOtpMessage('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [otpMessage]);
+
+  useEffect(() => {
+    if (loginError && requiresDivisionOtp) {
+      const timer = setTimeout(() => {
+        setLoginError('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [loginError, requiresDivisionOtp]);
+
+  const handleOtpChange = (index: number, val: string) => {
+    const digit = val.slice(-1).replace(/\D/g, '');
+    const newValues = [...otpValues];
+    newValues[index] = digit;
+    setOtpValues(newValues);
+
+    if (digit && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      if (!otpValues[index]) {
+        if (index > 0) {
+          const newValues = [...otpValues];
+          newValues[index - 1] = '';
+          setOtpValues(newValues);
+          inputRefs.current[index - 1]?.focus();
+        }
+      } else {
+        const newValues = [...otpValues];
+        newValues[index] = '';
+        setOtpValues(newValues);
+      }
+      e.preventDefault();
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pastedData) {
+      const newValues = [...otpValues];
+      for (let i = 0; i < 6; i++) {
+        newValues[i] = pastedData[i] || '';
+      }
+      setOtpValues(newValues);
+      const focusIndex = Math.min(5, pastedData.length);
+      inputRefs.current[focusIndex]?.focus();
     }
   };
 
@@ -7825,35 +7937,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     : [];
 
   if (checkingAuth) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <div className="font-semibold">Memeriksa sesi admin...</div>
-      </div>
-    );
+    return renderPremiumLoading();
   }
 
   if (!adminUser) {
     return (
-      <div className="min-h-screen bg-[#f8fafd] dark:bg-[#0b0f19] flex items-center justify-center p-4">
-        <div className={`${googleSurfaceClass} w-full max-w-md overflow-hidden`}>
-          <div className="border-b border-slate-100 bg-gradient-to-br from-[#e8f0fe] via-white to-white px-8 py-7 dark:border-slate-800 dark:from-[#1a73e8]/15 dark:via-[#111827] dark:to-[#111827]">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/80 bg-white p-2 shadow-[0_4px_18px_rgba(60,64,67,0.16)] dark:border-slate-700 dark:bg-slate-950">
-                <img
-                  src="/report-assets/logokknv1.png"
-                  alt="Logo KKN"
-                  className="h-full w-full object-contain"
-                />
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">Admin KKN 35</p>
-                <h1 className="text-2xl font-black text-slate-900 dark:text-white">{forgotPasswordMode ? 'Lupa Password' : 'Login'}</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {forgotPasswordMode ? 'Masukkan email akun yang terdaftar.' : 'Masuk untuk melanjutkan.'}
-                </p>
-              </div>
+      <div className="min-h-screen bg-[#f2f2f2] dark:bg-[#0b0f19] flex items-center justify-center p-4 relative font-sans select-none">
+        <div className="w-full max-w-[440px] bg-white dark:bg-[#151c30] p-10 sm:p-11 shadow-[0_2px_6px_rgba(0,0,0,0.2)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)] relative text-left">
+          
+          {/* Back Arrow to close / return to website */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute left-6 top-6 p-2 rounded-full text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
+            aria-label="Kembali ke Website"
+          >
+            <ArrowLeft size={18} />
+          </button>
+
+          {/* Logo KKN centered with text */}
+          <div className="flex items-center justify-center gap-3 mb-6 mt-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-slate-100 bg-white p-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <img
+                src="/report-assets/logokknv1.png"
+                alt="Logo KKN"
+                className="h-full w-full object-contain"
+              />
             </div>
+            <span className="text-[20px] font-bold text-slate-800 dark:text-white tracking-tight leading-none">
+              KKN 35 UMP
+            </span>
           </div>
+
+          <h1 className="text-[24px] font-semibold text-[#1b1b1b] dark:text-white text-center mb-2 tracking-tight leading-snug">
+            {forgotPasswordMode ? 'Lupa Password' : 'Login Admin'}
+          </h1>
+          
+          <p className="text-[14px] text-[#505050] dark:text-[#a0a0a0] text-center mb-6 leading-relaxed">
+            {forgotPasswordMode ? 'Masukkan email akun yang terdaftar.' : 'Masuk untuk melanjutkan.'}
+          </p>
 
           <form
             onSubmit={(event) => {
@@ -7864,12 +7986,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               }
               login(event);
             }}
-            className="space-y-4 px-8 pt-7"
+            className="space-y-4"
           >
-            <Field label="Email" type="email" value={email} onChange={setEmail} />
+            <label className="block">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 transition-colors">
+                Email
+              </span>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="w-full border border-slate-300 focus:border-[#0067b8] focus:ring-1 focus:ring-[#0067b8] outline-none rounded-none bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-4 py-2.5 text-sm font-medium transition-all"
+                placeholder="nama@email.com"
+                required
+              />
+            </label>
+
             {!forgotPasswordMode && (
               <label className="block">
-                <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 transition-colors">
                   Password
                 </span>
                 <div className="relative">
@@ -7877,12 +8012,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className={`${googleInputClass} pr-12`}
+                    className="w-full border border-slate-300 focus:border-[#0067b8] focus:ring-1 focus:ring-[#0067b8] outline-none rounded-none bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-4 py-2.5 pr-12 text-sm font-medium transition-all"
+                    placeholder="Masukkan password"
+                    required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((current) => !current)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
+                    className="absolute right-2 top-0 bottom-0 my-auto h-9 w-9 flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
                     aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -7897,7 +8034,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                       setResetMessage('');
                       setPassword('');
                     }}
-                    className="text-sm font-black text-[#1a73e8] transition-colors hover:text-[#1765cc] dark:text-[#8ab4f8] dark:hover:text-[#aecbfa]"
+                    className="text-xs text-[#0067b8] dark:text-[#4da3ff] hover:underline hover:text-[#005da6] transition-colors"
                   >
                     Lupa password?
                   </button>
@@ -7906,287 +8043,282 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             )}
 
             {loginError && (
-              <p className="rounded-lg bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-300">
+              <p className="mt-4 px-3 py-2 text-[13px] bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-900/30 animate-fadeIn">
                 {loginError}
               </p>
             )}
 
             {resetMessage && (
-              <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+              <p className="mt-4 px-3 py-2 text-[13px] bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-900/30 animate-fadeIn">
                 {resetMessage}
               </p>
             )}
 
-            <button className={`${googlePrimaryButtonClass} w-full py-3`} disabled={forgotPasswordMode && resetSending}>
-              {forgotPasswordMode
-                ? resetSending ? 'Mengirim link reset...' : 'Kirim Link Reset'
-                : 'Masuk'}
-            </button>
+            <div className="flex justify-center mt-6">
+              <button
+                type="submit"
+                disabled={forgotPasswordMode && resetSending}
+                className="bg-[#0067b8] hover:bg-[#005da6] text-white text-[15px] font-normal px-12 py-2 min-w-[120px] text-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                {forgotPasswordMode
+                  ? resetSending ? 'Mengirim...' : 'Kirim Link'
+                  : 'Masuk'}
+              </button>
+            </div>
 
             {forgotPasswordMode && (
-              <button
-                type="button"
-                onClick={() => {
-                  setForgotPasswordMode(false);
-                  setLoginError('');
-                  setResetMessage('');
-                }}
-                className="w-full rounded-full px-4 py-2 text-sm font-black text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
-              >
-                Kembali ke login
-              </button>
+              <div className="text-[13px] mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotPasswordMode(false);
+                    setLoginError('');
+                    setResetMessage('');
+                  }}
+                  className="text-[#0067b8] dark:text-[#4da3ff] hover:underline hover:text-[#005da6] transition-colors cursor-pointer"
+                >
+                  Kembali ke login
+                </button>
+              </div>
             )}
           </form>
 
-          <button
-            onClick={onClose}
-            className="mx-8 mb-8 mt-4 w-[calc(100%-4rem)] rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 py-3 font-semibold flex items-center justify-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            <ArrowLeft size={16} />
-            Kembali ke Website
-          </button>
         </div>
+
       </div>
     );
   }
 
   if (requiresDivisionOtp) {
     const isAuthenticatorView = twoFactorView === 'authenticator' || twoFactorView === 'authenticatorSetup';
-    const twoFactorTitle =
-      twoFactorView === 'select'
-        ? 'Pilih Keamanan'
-        : isAuthenticatorView
-          ? 'Google Authenticator'
-          : 'Cek Email';
-    const twoFactorSubtitle =
-      twoFactorView === 'select'
-        ? 'Pilih salah satu metode verifikasi untuk akun divisi.'
-        : twoFactorView === 'authenticatorSetup'
-          ? 'Tambahkan key ke aplikasi Authenticator, lalu masukkan kode 6 digit pertama.'
-          : isAuthenticatorView
-            ? 'Masukkan kode 6 digit dari aplikasi Authenticator.'
-            : 'Masukkan kode OTP yang dikirim ke email akun divisi.';
+    
+    const handleSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      const code = otpValues.join('');
+      if (twoFactorView === 'email') {
+        verifyLoginOtp(code);
+      } else if (isAuthenticatorView) {
+        verifyLoginTotp(code);
+      }
+    };
 
     return (
-      <div className="min-h-screen bg-[#f8fafd] dark:bg-[#0b0f19] flex items-center justify-center p-4">
-        <div className={`${googleSurfaceClass} w-full max-w-lg overflow-hidden`}>
-          <div className="border-b border-slate-100 bg-gradient-to-br from-[#e8f0fe] via-white to-white px-6 py-6 dark:border-slate-800 dark:from-[#1a73e8]/15 dark:via-[#111827] dark:to-[#111827] sm:px-8 sm:py-7">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] border border-white/80 bg-white p-2 shadow-[0_4px_18px_rgba(60,64,67,0.16)] dark:border-slate-700 dark:bg-slate-950">
-                {twoFactorView === 'email' ? (
-                  <Mail size={30} className="text-[#1a73e8] dark:text-[#8ab4f8]" />
-                ) : (
-                  <ShieldCheck size={30} className="text-[#1a73e8] dark:text-[#8ab4f8]" />
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">Verifikasi 2FA</p>
-                <h1 className="text-3xl font-black tracking-normal text-slate-900 dark:text-white">{twoFactorTitle}</h1>
-                <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">
-                  {twoFactorSubtitle}
-                </p>
-              </div>
+      <div className="min-h-screen bg-[#f2f2f2] dark:bg-[#0b0f19] flex items-center justify-center p-4 relative font-sans select-none">
+        <div className="w-full max-w-[440px] bg-white dark:bg-[#151c30] p-6 sm:p-8 shadow-[0_2px_6px_rgba(0,0,0,0.2)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)] relative text-left">
+          
+          {/* Back Arrow button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (twoFactorView === 'select') {
+                logout();
+              } else {
+                setTwoFactorView('select');
+              }
+              setLoginError('');
+              setOtpMessage('');
+            }}
+            className="absolute left-4 top-4 p-2 rounded-full text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
+            aria-label="Kembali"
+          >
+            <ArrowLeft size={18} />
+          </button>
+
+          {/* Logo KKN centered with text */}
+          <div className="flex items-center justify-center gap-3 mb-4 mt-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-slate-100 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <img
+                src="/report-assets/logokknv1.png"
+                alt="Logo KKN"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <span className="text-[18px] font-bold text-slate-800 dark:text-white tracking-tight leading-none">
+              KKN 35 UMP
+            </span>
+          </div>
+
+          {/* Email Pill centered */}
+          <div className="flex justify-center mb-3">
+            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 text-[11px] font-normal max-w-full truncate">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>{otpEmail || email.trim() || 'email akun'}</span>
             </div>
           </div>
 
-          <div className="space-y-5 px-6 pt-7 sm:px-8">
-            {twoFactorView === 'select' && (
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={startAuthenticatorVerification}
-                  disabled={totpLoading}
-                  className="flex w-full items-center gap-4 rounded-3xl border border-[#1a73e8]/20 bg-[#e8f0fe] p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[#1a73e8]/40 hover:bg-[#dbe9ff] disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#8ab4f8]/20 dark:bg-[#1a73e8]/15 dark:hover:bg-[#1a73e8]/20"
-                >
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-[#1a73e8] shadow-sm dark:bg-slate-950 dark:text-[#8ab4f8]">
-                    <KeyRound size={24} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-base font-black text-slate-950 dark:text-white">Google Authenticator</span>
-                    <span className="mt-1 block text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">
-                      {totpEnabled ? 'Masuk pakai kode kunci dari aplikasi.' : 'Setup sekali pakai key kunci, lalu login berikutnya cukup kode aplikasi.'}
-                    </span>
-                  </span>
-                </button>
+          <h1 className="text-[20px] font-semibold text-[#1b1b1b] dark:text-white text-center mb-1 tracking-tight leading-snug">
+            {twoFactorView === 'select'
+              ? 'Pilih metode verifikasi'
+              : twoFactorView === 'authenticatorSetup'
+                ? 'Siapkan Authenticator'
+                : 'Masukkan kode Anda'}
+          </h1>
 
-                <button
-                  type="button"
-                  onClick={startEmailOtpVerification}
-                  disabled={otpSending}
-                  className="flex w-full items-center gap-4 rounded-3xl border border-slate-200 bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[#1a73e8]/30 hover:bg-[#f8fafd] disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
-                >
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-[#1a73e8] dark:bg-slate-950 dark:text-[#8ab4f8]">
-                    <Mail size={24} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-base font-black text-slate-950 dark:text-white">Kirim OTP ke Email</span>
-                    <span className="mt-1 block text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">
-                      Kode dikirim ke {otpEmail || email.trim() || 'email akun'}.
-                    </span>
-                  </span>
-                </button>
-              </div>
-            )}
+          <p className="text-[13px] text-[#505050] dark:text-[#a0a0a0] text-center mb-4 leading-relaxed">
+            {twoFactorView === 'select'
+              ? 'Pilih salah satu metode verifikasi keamanan untuk melanjutkan ke dashboard divisi.'
+              : twoFactorView === 'authenticatorSetup'
+                ? 'Pindai QR code di bawah atau masukkan key manual ke Google Authenticator, kemudian ketik 6 angka kodenya.'
+                : twoFactorView === 'authenticator'
+                  ? 'Masukkan kode verifikasi 6 digit yang dihasilkan oleh aplikasi Authenticator Anda.'
+                  : 'Masukkan kode verifikasi yang kami kirim ke email Anda.'}
+          </p>
 
-            {isAuthenticatorView && (
-              <form onSubmit={verifyLoginTotp} className="space-y-5">
-                {twoFactorView === 'authenticatorSetup' && (
-                  <div className="space-y-3 rounded-3xl border border-[#1a73e8]/15 bg-[#f8fafd] p-4 dark:border-[#8ab4f8]/20 dark:bg-slate-900">
-                    {totpOtpauthUrl && (
-                      <div className="rounded-3xl bg-white p-4 text-center shadow-sm dark:bg-slate-950">
-                        <p className="mb-3 text-xs font-black uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">
-                          Scan QR Authenticator
-                        </p>
-                        <img
-                          src={getQrCodeUrl(totpOtpauthUrl)}
-                          alt="QR Google Authenticator"
-                          className="mx-auto h-56 w-56 rounded-2xl border border-slate-100 bg-white p-2 object-contain dark:border-slate-800"
-                        />
-                        <p className="mt-3 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
-                          Buka Google Authenticator, tekan tambah akun, lalu pilih Scan kode QR.
-                        </p>
-                      </div>
-                    )}
-                    <p className="text-xs font-black uppercase tracking-widest text-[#1a73e8] dark:text-[#8ab4f8]">
-                      Key Kunci Awal
-                    </p>
-                    <p className="break-all rounded-2xl bg-white px-4 py-3 text-center font-mono text-lg font-black tracking-[0.18em] text-slate-950 shadow-sm dark:bg-slate-950 dark:text-white">
-                      {totpSecret || 'MEMBUAT KEY...'}
-                    </p>
-                    {totpOtpauthUrl && (
-                      <a
-                        href={totpOtpauthUrl}
-                        className="block rounded-2xl bg-[#e8f0fe] px-4 py-3 text-center text-sm font-black text-[#1a73e8] transition-colors hover:bg-[#dbe9ff] dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]"
-                      >
-                        Buka di Google Authenticator
-                      </a>
-                    )}
-                    <p className="text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
-                      Di Google Authenticator pilih tambah akun, masukkan setup key ini secara manual, lalu isi kode 6 digit yang muncul.
-                    </p>
-                  </div>
-                )}
-
-                <label className="block">
-                  <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                    Kode Google Authenticator
-                  </span>
-                  <input
-                    value={totpCode}
-                    onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="123456"
-                    className={`${googleInputClass} h-16 py-0 rounded-2xl text-center text-4xl font-black tracking-[0.35em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
-                  />
-                </label>
-
-                {loginError && (
-                  <p className="rounded-2xl bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm font-semibold leading-6 text-red-600 dark:text-red-300">
-                    {loginError}
-                  </p>
-                )}
-
-                <button className={`${googlePrimaryButtonClass} w-full py-4 text-base`} disabled={totpLoading || totpCode.length !== 6}>
-                  {totpLoading ? 'Memverifikasi...' : twoFactorView === 'authenticatorSetup' ? 'Simpan Key & Masuk' : 'Verifikasi'}
-                </button>
-              </form>
-            )}
-
-            {twoFactorView === 'email' && (
-              <form onSubmit={verifyLoginOtp} className="space-y-5">
-                <label className="block">
-                  <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                    Kode OTP 6 Digit
-                  </span>
-                  <input
-                    value={otpCode}
-                    onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="123456"
-                    className={`${googleInputClass} h-16 py-0 rounded-2xl text-center text-4xl font-black tracking-[0.35em] placeholder:text-slate-300 dark:placeholder:text-slate-600`}
-                  />
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                      Masukkan 6 angka dari email. Kode berlaku 10 menit.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={resendLoginOtp}
-                      disabled={!canResendOtp}
-                      className="self-end text-xs font-black text-[#1a73e8] transition-colors hover:text-[#1765cc] disabled:cursor-not-allowed disabled:text-slate-400 dark:text-[#8ab4f8] dark:hover:text-[#aecbfa] dark:disabled:text-slate-500"
-                    >
-                      {otpSending
-                        ? 'Mengirim OTP...'
-                        : otpResendRemainingSeconds > 0
-                          ? `Kirim ulang dalam ${Math.ceil(otpResendRemainingSeconds / 60)} menit`
-                          : 'Kirim ulang OTP'}
-                    </button>
-                  </div>
-                </label>
-
-                {otpMessage && (
-                  <p className={`rounded-2xl px-4 py-3 text-sm font-semibold leading-6 ${
-                    otpMessageType === 'success'
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
-                      : 'bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#1a73e8]/15 dark:text-[#8ab4f8]'
-                  }`}>
-                    {otpMessage}
-                  </p>
-                )}
-
-                {loginError && (
-                  <p className="rounded-2xl bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm font-semibold leading-6 text-red-600 dark:text-red-300">
-                    {loginError}
-                  </p>
-                )}
-
-                <button className={`${googlePrimaryButtonClass} w-full py-4 text-base`} disabled={otpVerifying || otpCode.length !== 6}>
-                  {otpVerifying ? 'Memverifikasi...' : 'Verifikasi'}
-                </button>
-
-              </form>
-            )}
-
-            {twoFactorView !== 'select' && (
+          {twoFactorView === 'select' ? (
+            <div className="space-y-2.5">
               <button
                 type="button"
-                onClick={() => {
-                  setTwoFactorView('select');
-                  setLoginError('');
-                  setOtpMessage('');
-                  setOtpCode('');
-                  setTotpCode('');
-                }}
-                className="w-full rounded-full px-4 py-2 text-sm font-black text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+                onClick={startAuthenticatorVerification}
+                disabled={totpLoading}
+                className="flex w-full items-center gap-3.5 border border-slate-200 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700 bg-white dark:bg-slate-900/40 p-3 transition-all hover:bg-slate-50 dark:hover:bg-slate-800/60 text-left disabled:opacity-50 cursor-pointer"
               >
-                Pilih metode lain
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-sm">
+                  <ShieldCheck size={18} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-[#1b1b1b] dark:text-white">Google Authenticator</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                    {totpEnabled ? 'Gunakan kode dari aplikasi keamanan' : 'Setup aplikasi verifikasi baru'}
+                  </div>
+                </div>
               </button>
-            )}
-          </div>
 
-          <button
-            onClick={logout}
-            className="mx-8 mb-8 mt-4 w-[calc(100%-4rem)] rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 py-3 font-semibold flex items-center justify-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            <ArrowLeft size={16} />
-            Ganti Akun
-          </button>
+              <button
+                type="button"
+                onClick={startEmailOtpVerification}
+                disabled={otpSending}
+                className="flex w-full items-center gap-3.5 border border-slate-200 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700 bg-white dark:bg-slate-900/40 p-3 transition-all hover:bg-slate-50 dark:hover:bg-slate-800/60 text-left disabled:opacity-50 cursor-pointer"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-sm">
+                  <Mail size={18} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-[#1b1b1b] dark:text-white">Kirim OTP ke Email</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                    Kode akan dikirim ke email terdaftar Anda
+                  </div>
+                </div>
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-3.5">
+              {twoFactorView === 'authenticatorSetup' && totpOtpauthUrl && (
+                <div className="mb-3 space-y-2 rounded-sm border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-2.5 text-center">
+                  <div className="flex flex-col sm:flex-row items-center gap-3 justify-center text-left">
+                    <div className="bg-white p-1 border border-slate-100 dark:border-slate-800 shrink-0">
+                      <img
+                        src={getQrCodeUrl(totpOtpauthUrl)}
+                        alt="QR Google Authenticator"
+                        className="h-24 w-24 object-contain mx-auto"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-[#0067b8] dark:text-[#4da3ff]">
+                        Scan QR / Key Manual
+                      </p>
+                      <p className="break-all rounded-sm bg-white dark:bg-slate-950 px-2 py-1 text-center font-mono text-xs font-bold text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 mt-1 select-all">
+                        {totpSecret || 'MEMBUAT KEY...'}
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal mt-1">
+                        Masukkan key manual di atas jika tidak bisa memindai QR code.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 6 individual input boxes */}
+              <div className="flex items-center justify-center gap-2 mb-4" dir="ltr">
+                {otpValues.map((value, idx) => (
+                  <input
+                    key={idx}
+                    ref={(el) => { inputRefs.current[idx] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={value}
+                    onChange={(e) => handleOtpChange(idx, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                    onPaste={idx === 0 ? handleOtpPaste : undefined}
+                    className="w-[36px] h-[44px] sm:w-[40px] sm:h-[48px] text-center text-xl font-normal border border-slate-300 focus:border-[#0067b8] focus:ring-1 focus:ring-[#0067b8] outline-none rounded-none bg-white dark:bg-slate-900 text-slate-900 dark:text-white transition-all shadow-sm"
+                    autoFocus={idx === 0}
+                  />
+                ))}
+              </div>
+
+              {/* Description and link actions */}
+              <div className="flex items-center justify-between w-full gap-4 text-[13px] mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTwoFactorView('select');
+                    setLoginError('');
+                    setOtpMessage('');
+                  }}
+                  className="text-[#0067b8] dark:text-[#4da3ff] hover:underline hover:text-[#005da6] transition-colors text-left cursor-pointer"
+                >
+                  Gunakan metode verifikasi lain
+                </button>
+                {twoFactorView === 'email' && (
+                  <button
+                    type="button"
+                    onClick={resendLoginOtp}
+                    disabled={!canResendOtp}
+                    className="text-[#0067b8] dark:text-[#4da3ff] hover:underline hover:text-[#005da6] disabled:text-slate-400 dark:disabled:text-slate-600 disabled:no-underline disabled:cursor-not-allowed transition-colors text-right cursor-pointer"
+                  >
+                    {otpResendRemainingSeconds > 0
+                      ? `Kirim ulang kode OTP (${otpResendRemainingSeconds}s)`
+                      : 'Kirim ulang OTP'}
+                  </button>
+                )}
+              </div>
+
+              {/* Notifications centered */}
+              {(otpMessage || loginError || otpSending) && (
+                <div className="text-center mt-3 min-h-[20px]">
+                  {otpSending && (
+                    <p className="text-[12px] text-slate-500 dark:text-slate-400 animate-fadeIn leading-relaxed font-medium">
+                      Mengirim OTP...
+                    </p>
+                  )}
+                  {!otpSending && otpMessage && (
+                    <p className="text-[12px] text-[#107c41] dark:text-[#3cd17c] animate-fadeIn leading-relaxed font-medium">
+                      {otpMessage}
+                    </p>
+                  )}
+                  {!otpSending && loginError && (
+                    <p className="text-[12px] text-[#e81123] dark:text-[#f1707b] animate-fadeIn leading-relaxed font-medium">
+                      {loginError}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Submit button centered */}
+              <div className="flex justify-center mt-6">
+                <button
+                  type="submit"
+                  disabled={
+                    (twoFactorView === 'email' && (otpVerifying || otpCode.length !== 6)) ||
+                    (isAuthenticatorView && (totpLoading || totpCode.length !== 6))
+                  }
+                  className="bg-[#0067b8] hover:bg-[#005da6] text-white text-[15px] font-normal px-12 py-2 min-w-[120px] text-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  {otpVerifying || totpLoading ? 'Verifikasi...' : 'Masuk'}
+                </button>
+              </div>
+            </form>
+          )}
+
         </div>
+
       </div>
     );
   }
 
   if (!canUseAdminPanel) {
     if (!currentProfile) {
-      return (
-        <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
-          <div className="rounded-xl border border-white/10 bg-white/10 px-5 py-4 font-semibold">
-            Memuat dashboard divisi...
-          </div>
-        </div>
-      );
+      return renderPremiumLoading();
     }
 
     return <DivisionDashboard profile={currentProfile} onLogout={logout} onClose={onClose} />;

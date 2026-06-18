@@ -20,34 +20,37 @@ export const Team: React.FC = () => {
 
   const MemberCard = ({ member }: { member: TeamMember }) => (
     <article
-      className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 dark:border-slate-700 group"
+      className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border border-slate-200/50 dark:border-slate-800/80 group"
     >
       <div className="aspect-square overflow-hidden relative">
-        <div className="absolute inset-0 bg-m-blue/20 group-hover:bg-transparent transition-colors z-10 mix-blend-multiply"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"></div>
         <img 
           src={member.image} 
           alt={member.name} 
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           loading="lazy"
         />
       </div>
       <div className="p-5 text-center">
-        <h4 className="font-bold text-lg text-slate-900 dark:text-white mb-1">{member.name}</h4>
-        <p className="text-sm font-medium text-m-blue dark:text-m-blue-400">
-          {member.role} {member.division ? `- Div. ${member.division}` : ''}
+        <h4 className="font-extrabold text-slate-900 dark:text-white text-base mb-1.5 leading-tight">{member.name}</h4>
+        <p className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-m-blue to-blue-450 dark:from-blue-400 dark:to-indigo-405 uppercase tracking-wider">
+          {member.role} {member.division ? `• Div. ${member.division}` : ''}
         </p>
       </div>
     </article>
   );
 
   return (
-    <section id="team" className="py-20 bg-white dark:bg-slate-900">
-      <div className="container mx-auto px-4 md:px-6">
+    <section id="team" className="py-20 bg-white dark:bg-slate-900 relative overflow-hidden">
+      {/* Background Soft Glow Orbs */}
+      <div className="absolute bottom-1/4 left-0 w-[300px] h-[300px] bg-m-blue/5 rounded-full blur-[100px] pointer-events-none -z-10" />
+
+      <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <div>
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-slate-900 dark:text-white">Struktur Organisasi</h2>
-            <div className="w-20 h-1 bg-m-blue mx-auto rounded-full mb-6"></div>
-            <p className="text-slate-600 dark:text-slate-300 text-lg">
+            <h2 className="text-4xl md:text-5xl font-black mb-4 text-slate-900 dark:text-white tracking-tight">Struktur Organisasi</h2>
+            <div className="w-20 h-1 bg-gradient-to-r from-m-blue to-m-green mx-auto rounded-full mb-6"></div>
+            <p className="text-slate-650 dark:text-slate-350 text-lg font-medium leading-relaxed">
               Mengenal anggota hebat di balik program kerja KKN Kelompok 35.
             </p>
           </div>
@@ -56,7 +59,7 @@ export const Team: React.FC = () => {
         {/* Core Team */}
         {coreTeam.length > 0 && (
           <div className="mb-16">
-            <h3 className="text-xl font-semibold text-center mb-8 text-slate-800 dark:text-slate-200">Pengurus Inti</h3>
+            <h3 className="text-sm font-black text-center uppercase tracking-widest mb-8 text-slate-450 dark:text-slate-500">Pengurus Inti</h3>
             <div
               className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-4xl mx-auto"
             >
@@ -73,7 +76,7 @@ export const Team: React.FC = () => {
             
             return (
               <div key={divName}>
-                <h3 className="text-xl font-semibold text-center mb-8 text-slate-800 dark:text-slate-200">Divisi {divName}</h3>
+                <h3 className="text-sm font-black text-center uppercase tracking-widest mb-8 text-slate-450 dark:text-slate-500">Divisi {divName}</h3>
                 <div
                   className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 justify-center"
                 >

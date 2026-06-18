@@ -12,70 +12,78 @@ export const VillageProfile: React.FC = () => {
   }, []);
 
   return (
-    <section id="village" className="py-20 bg-slate-50 dark:bg-slate-800/50">
-      <div className="container mx-auto px-4 md:px-6">
+    <section id="village" className="py-20 bg-slate-50 dark:bg-slate-800/30 relative overflow-hidden">
+      {/* Background Soft Glow Orbs */}
+      <div className="absolute top-1/2 right-0 w-[300px] h-[300px] bg-m-green/5 rounded-full blur-[100px] pointer-events-none -z-10" />
+
+      <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-slate-900 dark:text-white">{content.villageTitle}</h2>
-            <div className="w-20 h-1 bg-m-blue mx-auto rounded-full mb-6"></div>
-            <p className="text-slate-600 dark:text-slate-300 text-lg">
+            <h2 className="text-4xl md:text-5xl font-black mb-4 text-slate-900 dark:text-white tracking-tight">{content.villageTitle}</h2>
+            <div className="w-20 h-1 bg-gradient-to-r from-m-blue to-m-green mx-auto rounded-full mb-6"></div>
+            <p className="text-slate-650 dark:text-slate-350 text-lg font-medium leading-relaxed">
               {content.villageDescription}
             </p>
           </motion.div>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-12 items-start">
+        <div className="grid lg:grid-cols-2 gap-12 items-stretch">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="space-y-8"
+            className="flex flex-col h-full"
           >
-            <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-              <h3 className="text-2xl font-bold mb-4 text-slate-900 dark:text-white">Gambaran Umum</h3>
-              <p className="text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
-                {content.villageOverview}
-              </p>
+            <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl p-8 rounded-[2rem] shadow-xl border border-slate-200/50 dark:border-slate-800/80 flex flex-col justify-between h-full">
+              <div>
+                <h3 className="text-2xl font-extrabold mb-4 text-slate-900 dark:text-white">Gambaran Umum</h3>
+                <p className="text-slate-600 dark:text-slate-400 leading-relaxed mb-8">
+                  {content.villageOverview}
+                </p>
+              </div>
               
-              <div className="grid sm:grid-cols-2 gap-6">
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-blue-50 dark:bg-blue-900/30 text-m-blue dark:text-blue-400 rounded-lg">
-                    <MapPin size={24} />
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="flex items-start gap-4 bg-slate-50/50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-150 dark:border-slate-800/60 hover:-translate-y-0.5 hover:shadow-sm hover:border-blue-500/20 transition-all duration-300">
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/30 text-m-blue dark:text-blue-400 rounded-xl shrink-0">
+                    <MapPin size={22} />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-slate-900 dark:text-white">Lokasi</h4>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Kec. Indralaya, Ogan Ilir</p>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Lokasi</h4>
+                    <p className="text-xs text-slate-550 dark:text-slate-400 mt-1 font-semibold leading-relaxed">Kec. Indralaya, Ogan Ilir</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-green-50 dark:bg-green-900/30 text-m-green dark:text-green-400 rounded-lg">
-                    <Sprout size={24} />
+
+                <div className="flex items-start gap-4 bg-slate-50/50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-150 dark:border-slate-800/60 hover:-translate-y-0.5 hover:shadow-sm hover:border-green-500/20 transition-all duration-300">
+                  <div className="p-3 bg-green-50 dark:bg-green-900/30 text-m-green dark:text-green-400 rounded-xl shrink-0">
+                    <Sprout size={22} />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-slate-900 dark:text-white">Potensi</h4>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Pertanian & UMKM</p>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Potensi</h4>
+                    <p className="text-xs text-slate-550 dark:text-slate-400 mt-1 font-semibold leading-relaxed">Pertanian & UMKM</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
-                    <Users size={24} />
+
+                <div className="flex items-start gap-4 bg-slate-50/50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-150 dark:border-slate-800/60 hover:-translate-y-0.5 hover:shadow-sm hover:border-purple-500/20 transition-all duration-300">
+                  <div className="p-3 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl shrink-0">
+                    <Users size={22} />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-slate-900 dark:text-white">Sosial</h4>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Masyarakat Agamis & Ramah</p>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Sosial</h4>
+                    <p className="text-xs text-slate-550 dark:text-slate-400 mt-1 font-semibold leading-relaxed">Masyarakat Agamis & Ramah</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-lg">
-                    <Home size={24} />
+
+                <div className="flex items-start gap-4 bg-slate-50/50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-150 dark:border-slate-800/60 hover:-translate-y-0.5 hover:shadow-sm hover:border-orange-500/20 transition-all duration-300">
+                  <div className="p-3 bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-xl shrink-0">
+                    <Home size={22} />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-slate-900 dark:text-white">Fasilitas</h4>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Sekolah, Masjid, Poskesdes</p>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Fasilitas</h4>
+                    <p className="text-xs text-slate-550 dark:text-slate-400 mt-1 font-semibold leading-relaxed">Sekolah, Masjid, Poskesdes</p>
                   </div>
                 </div>
               </div>
@@ -87,14 +95,13 @@ export const VillageProfile: React.FC = () => {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="h-full min-h-[400px] rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 relative group"
+            className="h-full min-h-[420px] rounded-[2rem] overflow-hidden shadow-xl border border-slate-200/50 dark:border-slate-800/80 relative group"
           >
-            {/* Placeholder for Google Maps - Using a generic embed for Indralaya area as example */}
             <iframe 
               src={content.villageMapUrl} 
               width="100%" 
               height="100%" 
-              style={{ border: 0, minHeight: '400px' }} 
+              style={{ border: 0, minHeight: '420px' }} 
               allowFullScreen={true} 
               loading="lazy" 
               referrerPolicy="no-referrer-when-downgrade"

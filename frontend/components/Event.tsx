@@ -101,14 +101,17 @@ export const Event: React.FC = () => {
   }
 
   return (
-    <section id="event" className="py-20 bg-white dark:bg-slate-900 overflow-hidden">
-      <div className="container mx-auto px-4 md:px-6">
+    <section id="event" className="py-20 bg-white dark:bg-slate-900 overflow-hidden relative">
+      {/* Background Soft Glow Orbs */}
+      <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-m-blue/5 rounded-full blur-[120px] pointer-events-none -z-10" />
+
+      <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-10 items-stretch">
           <motion.div
             initial={{ opacity: 0, x: -28 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            className="relative min-h-[460px] rounded-[2rem] overflow-hidden shadow-2xl shadow-slate-900/10"
+            className="relative min-h-[460px] rounded-[2rem] overflow-hidden shadow-2xl shadow-slate-900/10 border border-slate-200/20 dark:border-slate-800/20"
           >
             <img
               src={content.image}
@@ -123,23 +126,23 @@ export const Event: React.FC = () => {
                   Event Terdekat
                 </span>
                 <h2 className="mt-8 text-3xl md:text-5xl font-bold leading-tight">{content.title}</h2>
-                <p className="mt-5 max-w-xl text-base md:text-lg text-white/80 leading-relaxed">
+                <p className="mt-5 max-w-xl text-base md:text-lg text-white/80 leading-relaxed font-medium">
                   {content.description}
                 </p>
               </div>
 
               <div className="mt-10 grid sm:grid-cols-3 gap-4">
                 <div className="flex items-center gap-3 rounded-2xl bg-white/12 p-4 backdrop-blur-md border border-white/15">
-                  <Clock size={22} className="text-m-green" />
-                  <span className="text-sm font-medium">{formatEventDate(eventDate)}</span>
+                  <Clock size={22} className="text-m-green shrink-0" />
+                  <span className="text-xs font-semibold leading-relaxed">{formatEventDate(eventDate)}</span>
                 </div>
                 <div className="flex items-center gap-3 rounded-2xl bg-white/12 p-4 backdrop-blur-md border border-white/15">
-                  <MapPin size={22} className="text-m-green" />
-                  <span className="text-sm font-medium">{content.location}</span>
+                  <MapPin size={22} className="text-m-green shrink-0" />
+                  <span className="text-xs font-semibold leading-relaxed">{content.location}</span>
                 </div>
                 <div className="flex items-center gap-3 rounded-2xl bg-white/12 p-4 backdrop-blur-md border border-white/15">
-                  <UsersRound size={22} className="text-m-green" />
-                  <span className="text-sm font-medium">{content.audience}</span>
+                  <UsersRound size={22} className="text-m-green shrink-0" />
+                  <span className="text-xs font-semibold leading-relaxed">{content.audience}</span>
                 </div>
               </div>
             </div>
@@ -149,16 +152,16 @@ export const Event: React.FC = () => {
             initial={{ opacity: 0, x: 28 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            className="bg-slate-50 dark:bg-slate-800/70 rounded-[2rem] p-6 md:p-8 border border-slate-100 dark:border-slate-700 flex flex-col justify-center"
+            className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl rounded-[2rem] p-6 md:p-8 border border-slate-200/50 dark:border-slate-800/80 shadow-xl flex flex-col justify-center"
           >
             <div className="mb-8">
-              <span className="text-sm font-bold uppercase tracking-widest text-m-blue dark:text-m-green">
+              <span className="text-xs font-black uppercase tracking-wider text-m-blue dark:text-m-green">
                 Countdown Event
               </span>
-              <h3 className="mt-3 text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">
+              <h3 className="mt-3 text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
                 {getEventStatusText(timeLeft.status)}
               </h3>
-              <p className="mt-4 text-slate-600 dark:text-slate-300 leading-relaxed">
+              <p className="mt-4 text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
                 Siapkan diri untuk ikut hadir dan merayakan hasil program kerja bersama masyarakat desa.
               </p>
             </div>
@@ -167,12 +170,12 @@ export const Event: React.FC = () => {
               {countdownItems.map((item) => (
                 <div
                   key={item.label}
-                  className="min-h-[124px] rounded-2xl bg-white dark:bg-slate-900 p-5 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center text-center"
+                  className="min-h-[120px] rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md p-5 border border-slate-200/50 dark:border-slate-800/50 shadow-md flex flex-col items-center justify-center text-center hover:shadow-lg hover:border-m-blue/30 dark:hover:border-m-blue/30 hover:scale-[1.02] transition-all duration-300 group"
                 >
-                  <span className="font-mono text-4xl md:text-5xl font-bold text-slate-900 dark:text-white tabular-nums">
+                  <span className="font-mono text-4xl md:text-5xl font-black text-slate-900 dark:text-white tabular-nums group-hover:scale-105 transition-transform duration-300 select-none">
                     {String(item.value).padStart(2, '0')}
                   </span>
-                  <span className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="mt-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-550 select-none">
                     {item.label}
                   </span>
                 </div>
@@ -181,7 +184,7 @@ export const Event: React.FC = () => {
 
             <a
               href="#contact"
-              className="btn-glass btn-glass-blue mt-8 inline-flex items-center justify-center rounded-full px-6 py-4 text-white font-semibold"
+              className="btn-glass btn-glass-blue mt-8 inline-flex items-center justify-center rounded-full px-6 py-4 text-white font-extrabold uppercase tracking-widest text-xs border border-white/10 shadow-lg hover:shadow-xl"
             >
               Hubungi Panitia
             </a>

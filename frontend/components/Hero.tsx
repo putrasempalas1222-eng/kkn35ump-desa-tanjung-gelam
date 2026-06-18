@@ -39,7 +39,7 @@ export const Hero: React.FC<HeroProps> = ({ introCompleted = true }) => {
             animate={introCompleted ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
             transition={{ duration: 1.4, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
           >
-            <span className="inline-block py-2 px-5 rounded-full bg-white/12 backdrop-blur-2xl text-sm font-semibold mb-5 border border-white/16">
+            <span className="inline-block py-2 px-5 rounded-full bg-white/10 backdrop-blur-md text-sm font-semibold mb-5 border border-white/20 shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-slate-100">
               {content.heroBadge}
             </span>
           </motion.div>
@@ -52,7 +52,7 @@ export const Hero: React.FC<HeroProps> = ({ introCompleted = true }) => {
             className="text-5xl md:text-7xl lg:text-8xl font-black mb-5 leading-[0.94] tracking-normal"
           >
             {content.heroTitle} <br className="hidden md:block" />
-            <span className="text-white/78">{content.heroHighlight}</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-[#60a5fa] to-emerald-400 font-extrabold">{content.heroHighlight}</span>
           </motion.h1>
 
           {/* Subtitle */}
@@ -79,14 +79,14 @@ export const Hero: React.FC<HeroProps> = ({ introCompleted = true }) => {
           >
             <a
               href="#about"
-              className="btn-glass btn-glass-blue w-full sm:w-auto px-7 py-3 rounded-full font-bold text-white flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_30px_rgba(59,130,246,0.5)]"
+              className="btn-glass btn-glass-blue w-full sm:w-auto px-7 py-3 rounded-full font-bold text-white flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.25)] hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] transition-all"
             >
               Tentang KKN
               <ArrowRight size={18} />
             </a>
             <a
               href="#gallery"
-              className="btn-glass btn-glass-white w-full sm:w-auto px-7 py-3 rounded-full font-bold text-white flex items-center justify-center gap-2"
+              className="btn-glass btn-glass-white w-full sm:w-auto px-7 py-3 rounded-full font-bold text-white flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_20px_rgba(255,255,255,0.15)] transition-all"
             >
               Dokumentasi Kegiatan
               <ImageIcon size={18} />

@@ -118,6 +118,34 @@
         }
       }
 
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .animate-fadeIn {
+        animation: fadeIn 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+
+      @keyframes spin-reverse {
+        from {
+          transform: rotate(360deg);
+        }
+        to {
+          transform: rotate(0deg);
+        }
+      }
+
+      .animate-spin-reverse {
+        animation: spin-reverse 3s linear infinite;
+      }
+
       @keyframes apple-kenburns {
         0%, 100% {
           transform: scale(1);
