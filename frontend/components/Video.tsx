@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Play, X } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { storage } from '../services/storage';
 import { SiteContent } from '../types';
 
@@ -31,10 +31,23 @@ const getYouTubeEmbedUrl = (value: string) => {
 
 export const Video: React.FC = () => {
   const [content, setContent] = useState<SiteContent>(storage.defaults.siteContent);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isPlayerActive, setIsPlayerActive] = useState(false);
+  const videoFrameRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     return storage.subscribeSiteContent(setContent);
+  }, []);
+
+  useEffect(() => {
+    const element = videoFrameRef.current;
+    if (!element || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsPlayerActive(entry.isIntersecting && entry.intersectionRatio >= 0.45),
+      { threshold: [0, 0.45, 0.75] }
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
   const title = content.videoTitle || 'After Movie KKN Kelompok 35 UMP';
@@ -43,6 +56,20 @@ export const Video: React.FC = () => {
   const poster = content.videoPoster || 'https://picsum.photos/seed/kknvideo/1280/720';
   const hasVideo = Boolean(content.videoSrc);
   const youtubeEmbedUrl = getYouTubeEmbedUrl(content.videoSrc);
+  const youtubeAutoplayUrl = useMemo(() => {
+    if (!youtubeEmbedUrl) return '';
+    try {
+      const url = new URL(youtubeEmbedUrl);
+      url.searchParams.set('autoplay', '1');
+      url.searchParams.set('mute', '1');
+      url.searchParams.set('playsinline', '1');
+      url.searchParams.set('rel', '0');
+      url.searchParams.set('modestbranding', '1');
+      return url.toString();
+    } catch {
+      return `${youtubeEmbedUrl}${youtubeEmbedUrl.includes('?') ? '&' : '?'}autoplay=1&mute=1&playsinline=1&rel=0`;
+    }
+  }, [youtubeEmbedUrl]);
 
   return (
     <section className="py-20 bg-slate-50 dark:bg-slate-800/50">
@@ -60,61 +87,58 @@ export const Video: React.FC = () => {
         </div>
 
         <motion.div
+          ref={videoFrameRef}
           initial={{ opacity: 0, scale: 0.95 }}
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
           className="max-w-5xl mx-auto rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700 relative aspect-video bg-slate-900 group"
         >
-          <img
-            src={poster}
-            alt="Video Thumbnail"
-            className="w-full h-full object-cover opacity-70 group-hover:opacity-50 transition-opacity duration-500"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <button
-              onClick={() => hasVideo && setIsOpen(true)}
-              disabled={!hasVideo}
-              className={`btn-glass w-20 h-20 disabled:cursor-not-allowed text-white rounded-full flex items-center justify-center pl-1 transform group-hover:scale-110 ${hasVideo ? 'btn-glass-blue' : 'btn-glass-white opacity-50'}`}
-              aria-label="Putar video"
-            >
-              <Play size={38} />
-            </button>
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
-            <h3 className="text-white text-2xl font-bold">{title}</h3>
-            <p className="text-white/80 text-sm mt-1">{hasVideo ? subtitle : 'Video belum diunggah dari admin'}</p>
-          </div>
+          {hasVideo && isPlayerActive ? (
+            youtubeAutoplayUrl ? (
+              <iframe
+                src={youtubeAutoplayUrl}
+                title={title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="absolute inset-0 h-full w-full bg-black"
+              />
+            ) : (
+              <video
+                src={content.videoSrc}
+                controls
+                autoPlay
+                muted
+                playsInline
+                className="absolute inset-0 h-full w-full bg-black object-contain"
+              />
+            )
+          ) : (
+            <>
+              <img
+                src={poster}
+                alt="Video Thumbnail"
+                className="h-full w-full object-cover opacity-70 transition-opacity duration-500 group-hover:opacity-50"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => hasVideo && setIsPlayerActive(true)}
+                  disabled={!hasVideo}
+                  className={`btn-glass flex h-20 w-20 items-center justify-center rounded-full pl-1 text-white transition-transform disabled:cursor-not-allowed group-hover:scale-110 ${hasVideo ? 'btn-glass-blue' : 'btn-glass-white opacity-50'}`}
+                  aria-label="Putar video langsung di halaman"
+                >
+                  <Play size={38} />
+                </button>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
+                <h3 className="text-2xl font-bold text-white">{title}</h3>
+                <p className="mt-1 text-sm text-white/80">{hasVideo ? subtitle : 'Video belum diunggah dari admin'}</p>
+              </div>
+            </>
+          )}
         </motion.div>
       </div>
-
-      {isOpen && (
-        <div className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
-          <button
-            onClick={() => setIsOpen(false)}
-            className="btn-glass btn-glass-white absolute right-5 top-5 rounded-full p-3 text-white/80 hover:text-white"
-            aria-label="Tutup video"
-          >
-            <X size={24} />
-          </button>
-          {youtubeEmbedUrl ? (
-            <iframe
-              src={`${youtubeEmbedUrl}?autoplay=1&rel=0`}
-              title={title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              className="aspect-video w-full max-w-6xl rounded-2xl bg-black shadow-2xl"
-            />
-          ) : (
-            <video
-              src={content.videoSrc}
-              controls
-              autoPlay
-              className="max-h-[86vh] w-full max-w-6xl rounded-2xl bg-black shadow-2xl"
-            />
-          )}
-        </div>
-      )}
     </section>
   );
 };

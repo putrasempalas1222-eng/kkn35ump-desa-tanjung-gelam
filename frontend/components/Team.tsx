@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Crown, Sparkles, UsersRound } from 'lucide-react';
+import { Crown, UsersRound } from 'lucide-react';
 import { storage } from '../services/storage';
 import { TeamMember } from '../types';
 import { TEAM_MEMBERS } from '../constants';
@@ -97,7 +97,7 @@ export const Team: React.FC = () => {
         <div className="mx-auto mb-16 max-w-3xl text-center md:mb-20">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-blue-700 shadow-sm dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-300">
-              <Sparkles size={14} /> Keluarga Besar KKN 35
+              KKN Kelompok 35
             </span>
             <h2 className="text-4xl font-black tracking-tight text-slate-950 dark:text-white md:text-6xl">
               Struktur <span className="bg-gradient-to-r from-m-blue to-m-green bg-clip-text text-transparent">Organisasi</span>

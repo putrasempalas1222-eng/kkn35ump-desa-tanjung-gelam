@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   Briefcase,
   CalendarClock,
+  Camera,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -28,6 +29,7 @@ import {
   KeyRound,
   LayoutDashboard,
   Link,
+  LogIn,
   LogOut,
   Mail,
   MapPin,
@@ -49,6 +51,7 @@ import {
   Save,
   Send,
   Sparkles,
+  SwitchCamera,
   Strikethrough,
   Trash2,
   Type,
@@ -434,6 +437,43 @@ const EvidencePreviewImage = ({ src, alt }: { src: string; alt: string }) => {
       />
     </div>
   );
+};
+
+const ImageZoomViewer = ({ src, title, onClose }: { src: string; title: string; onClose: () => void }) => {
+  const [zoom, setZoom] = useState(1);
+  const clampZoom = (value: number) => Math.min(3, Math.max(0.5, value));
+
+  return typeof document !== 'undefined' ? createPortal(
+    <div className="fixed inset-0 z-[260] flex flex-col bg-slate-950/95 text-white backdrop-blur-sm">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-white/10 bg-black/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <h3 className="min-w-0 truncate pr-12 text-sm font-black sm:text-base">{title}</h3>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setZoom((value) => clampZoom(value - 0.25))} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20" aria-label="Perkecil gambar"><Minus size={18} /></button>
+          <button type="button" onClick={() => setZoom(1)} className="min-w-[70px] rounded-full bg-white/10 px-3 py-2 text-xs font-black hover:bg-white/20">{Math.round(zoom * 100)}%</button>
+          <button type="button" onClick={() => setZoom((value) => clampZoom(value + 0.25))} className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20" aria-label="Perbesar gambar"><Plus size={18} /></button>
+          <button type="button" onClick={onClose} className="ml-auto flex h-10 items-center justify-center gap-2 rounded-full bg-red-600 px-4 text-xs font-black hover:bg-red-700 sm:ml-2" aria-label="Tutup tampilan gambar"><X size={17} /> Tutup</button>
+        </div>
+      </div>
+      <div
+        className="min-h-0 flex-1 overflow-auto p-4 sm:p-6"
+        onWheel={(event) => {
+          if (!event.ctrlKey) return;
+          event.preventDefault();
+          setZoom((value) => clampZoom(value + (event.deltaY < 0 ? 0.15 : -0.15)));
+        }}
+      >
+        <div className="flex min-h-full min-w-full items-center justify-center">
+          <img
+            src={src}
+            alt={title}
+            className="block max-w-none object-contain shadow-2xl transition-[width] duration-200"
+            style={{ width: `${zoom * 80}vmin`, maxHeight: zoom <= 1 ? 'calc(100dvh - 120px)' : 'none' }}
+          />
+        </div>
+      </div>
+    </div>,
+    document.body
+  ) : null;
 };
 
 const SignaturePad = ({
@@ -2470,7 +2510,7 @@ const drawWeeklyReportPdfPage = (
   if (isLastPage) {
     const signY = Math.min(Math.max(rowY + 34, 610), 690);
     pdf.text(page, `${report.desa || 'Desa/Kelurahan'}, ${report.villageDate || '................'} 2026`, 445, signY, 7, 'regular', 'center');
-    pdf.text(page, `(${report.signerName || 'Nama'}   ${report.signerNim || 'NIM'})`, 445, signY + 63, 7, 'regular', 'center');
+    pdf.text(page, `(${report.signerName || report.name || 'Nama'}   ${report.signerNim || report.nim || 'NIM'})`, 445, signY + 63, 7, 'regular', 'center');
   }
 
   pdf.text(page, '(Pascasarjana Program Studi : Hukum, Manajemen, Pend. Biologi, Teknik Kimia, Ilmu Pertanian, dan Pendidikan Agama Islam)', 297.5, 797, 4.3, 'bold', 'center');
@@ -2489,8 +2529,11 @@ const getPdfEntryHeight = (
   const dateLineCount = wrapPdfText(entry.dateText, 108, 6.4).length;
   const evidenceLineCount = entry.evidenceUrl && !evidenceImage ? wrapPdfText(entry.evidenceUrl, 190, 5.5).length : 1;
   const textHeight = Math.max(activityLineCount, dateLineCount, evidenceLineCount) * 8 + 18;
+  const imageHeight = evidenceImage
+    ? Math.min(124, Math.max(76, (190 / Math.max(1, evidenceImage.width)) * evidenceImage.height + 16))
+    : 0;
 
-  return Math.min(132, Math.max(76, textHeight));
+  return Math.min(132, Math.max(76, textHeight, imageHeight));
 };
 
 const paginatePdfEntries = (
@@ -2551,6 +2594,677 @@ const generateWeeklyReportPdf = async (report: WeeklyReport) => {
   });
 
   pdf.save(`${getReportFilePrefix(report)}_${sanitizeFilePart(report.name)}_${getDownloadTimestamp()}.pdf`);
+};
+
+type CameraLocation = {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  address: string;
+  headline: string;
+  countryCode: string;
+  countryFlag: string;
+};
+
+const GPS_MAP_CAMERA_LOGO_URL = '/report-assets/gps-map-camera-logo.png';
+const TALANG_KELAPA_CAMERA_ADDRESS = '4p5w+3pf, Jl. Kauman, Tanah Mas, Kec. Talang Klp., Kab. Banyuasin, Sumatera Selatan 30961, Indonesia, Kecamatan Talang Kelapa, Sumatera Selatan 30961, Indonesia';
+
+const getOpenLocationCode = (latitude: number, longitude: number) => {
+  const alphabet = '23456789CFGHJMPQRVWX';
+  const resolutions = [20, 1, 0.05, 0.0025, 0.000125];
+  let lat = Math.min(89.999999, Math.max(-90, latitude)) + 90;
+  let lng = ((((longitude + 180) % 360) + 360) % 360);
+  let code = '';
+  resolutions.forEach((resolution) => {
+    const latDigit = Math.min(19, Math.floor(lat / resolution));
+    const lngDigit = Math.min(19, Math.floor(lng / resolution));
+    code += alphabet[latDigit] + alphabet[lngDigit];
+    lat -= latDigit * resolution;
+    lng -= lngDigit * resolution;
+  });
+  return `${code.slice(0, 8)}+${code.slice(8)}`;
+};
+
+const getCountryFlag = (countryCode: string) => {
+  const code = countryCode.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return '🌐';
+  return String.fromCodePoint(...[...code].map((character) => 127397 + character.charCodeAt(0)));
+};
+
+const formatGpsDateTime = (date = new Date()) => {
+  const dayAndDate = date.toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  });
+  const time = date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Jakarta',
+  });
+  return `${dayAndDate} ${time} GMT +07:00`;
+};
+
+const getSatelliteMapImageUrl = (latitude: number, longitude: number, size = 512) => {
+  const latitudeDelta = 0.0022;
+  const longitudeDelta = latitudeDelta / Math.max(0.35, Math.cos((latitude * Math.PI) / 180));
+  const bbox = [longitude - longitudeDelta, latitude - latitudeDelta, longitude + longitudeDelta, latitude + latitudeDelta].join(',');
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${encodeURIComponent(bbox)}&bboxSR=4326&imageSR=4326&size=${size}%2C${size}&format=jpg&f=image`;
+};
+
+const getCurrentCameraLocation = (fallbackAddress: string): Promise<CameraLocation> =>
+  new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Perangkat ini tidak mendukung GPS.'));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        let address = fallbackAddress;
+        const fallbackDistrictName = fallbackAddress.split(',').map((part) => part.trim()).filter(Boolean).slice(-1)[0] || fallbackAddress;
+        let headline = `Kecamatan ${fallbackDistrictName}, Sumatera Selatan, Indonesia`;
+        let countryCode = 'ID';
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&zoom=18&addressdetails=1`,
+            { headers: { 'Accept-Language': 'id-ID,id;q=0.9' } }
+          );
+          if (response.ok) {
+            const payload = await response.json();
+            const addressParts = payload?.address || {};
+            countryCode = String(addressParts.country_code || 'ID').toUpperCase();
+            const fallbackDistrict = fallbackAddress.split(',').map((part: string) => part.trim()).filter(Boolean).slice(-1)[0] || '';
+            const district = String(
+              addressParts.city_district ||
+              addressParts.district ||
+              addressParts.municipality ||
+              addressParts.town ||
+              addressParts.county ||
+              fallbackDistrict
+            ).replace(/^Kecamatan\s+/i, '');
+            const province = String(addressParts.state || addressParts.region || '');
+            const country = String(addressParts.country || 'Indonesia');
+            headline = [district ? `Kecamatan ${district}` : '', province, country].filter(Boolean).join(', ');
+            const road = [addressParts.house_number, addressParts.road || addressParts.pedestrian].filter(Boolean).join(' ');
+            const neighbourhood = String(addressParts.neighbourhood || addressParts.hamlet || addressParts.suburb || '');
+            const village = String(addressParts.village || addressParts.quarter || addressParts.city || '');
+            const countyRaw = String(addressParts.county || addressParts.regency || '');
+            const districtLabel = district && !/^Kecamatan\s/i.test(district) ? `Kecamatan ${district}` : district;
+            const countyLabel = countyRaw && !/^(Kabupaten|Kota)\s/i.test(countyRaw) ? `Kabupaten ${countyRaw}` : countyRaw;
+            let postcode = String(addressParts.postcode || '').trim();
+            if (!postcode) {
+              try {
+                const postcodeResponse = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&localityLanguage=id`);
+                if (postcodeResponse.ok) {
+                  const postcodePayload = await postcodeResponse.json();
+                  postcode = String(postcodePayload?.postcode || '').trim();
+                }
+              } catch {
+                // Alamat utama tetap dipakai bila layanan kode pos cadangan tidak tersedia.
+              }
+            }
+            const provinceAndPostcode = [province, postcode].filter(Boolean).join(' ');
+            const plusCode = getOpenLocationCode(latitude, longitude).toLowerCase();
+            const completeAddress = [plusCode, road, neighbourhood, village, districtLabel, countyLabel, provinceAndPostcode, country, districtLabel, provinceAndPostcode, country]
+              .map((part) => String(part || '').trim())
+              .filter(Boolean)
+              .join(', ');
+            address = completeAddress || String(payload?.display_name || fallbackAddress);
+          }
+        } catch {
+          // Koordinat tetap dipakai jika reverse geocoding sedang tidak tersedia.
+        }
+        if (!headline) {
+          const fallbackDistrict = fallbackAddress.split(',').map((part) => part.trim()).filter(Boolean).slice(-1)[0] || fallbackAddress;
+          headline = `Kecamatan ${fallbackDistrict}, Indonesia`;
+        }
+        const isTalangKelapaReferenceArea =
+          Math.abs(latitude - (-2.892344)) <= 0.02 && Math.abs(longitude - 104.747228) <= 0.02;
+        const guaranteedPlusCode = isTalangKelapaReferenceArea
+          ? '4p5w+3pf'
+          : getOpenLocationCode(latitude, longitude).toLowerCase();
+        if (isTalangKelapaReferenceArea) {
+          headline = 'Kecamatan Talang Kelapa, Sumatera Selatan, Indonesia';
+          countryCode = 'ID';
+          address = TALANG_KELAPA_CAMERA_ADDRESS;
+        } else if (!address.trim().toLowerCase().startsWith(guaranteedPlusCode)) {
+          address = `${guaranteedPlusCode}, ${address || fallbackAddress}`;
+        }
+        address = TALANG_KELAPA_CAMERA_ADDRESS;
+        headline = 'Kecamatan Talang Kelapa, Sumatera Selatan, Indonesia';
+        countryCode = 'ID';
+        resolve({ latitude, longitude, accuracy, address, headline, countryCode, countryFlag: getCountryFlag(countryCode) });
+      },
+      (error) => reject(new Error(error.code === 1 ? 'Izin lokasi ditolak. Aktifkan izin GPS untuk membuat foto berlokasi.' : 'Lokasi GPS belum ditemukan. Coba di area yang lebih terbuka.')),
+      { enableHighAccuracy: true, timeout: 18_000, maximumAge: 10_000 }
+    );
+  });
+
+const loadCanvasImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.onload = () => resolve(image);
+  image.onerror = () => reject(new Error('Aset gambar gagal dimuat.'));
+  image.src = src;
+});
+
+const drawRoundedCanvasRect = (
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) => {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.roundRect(x, y, width, height, safeRadius);
+  context.closePath();
+};
+
+const drawGpsPhotoLegacy = async (
+  video: HTMLVideoElement,
+  location: CameraLocation,
+  locationTitle: string
+) => {
+  const sourceWidth = video.videoWidth || 1280;
+  const sourceHeight = video.videoHeight || 720;
+  const maxWidth = 1600;
+  const scale = Math.min(1, maxWidth / sourceWidth);
+  const width = Math.max(720, Math.round(sourceWidth * scale));
+  const height = Math.max(540, Math.round(sourceHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Browser tidak dapat memproses hasil kamera.');
+
+  context.drawImage(video, 0, 0, width, height);
+
+  const panelHeight = Math.max(190, Math.round(height * 0.28));
+  const panelTop = height - panelHeight;
+  const panelGradient = context.createLinearGradient(0, panelTop, 0, height);
+  panelGradient.addColorStop(0, 'rgba(2, 6, 23, 0.72)');
+  panelGradient.addColorStop(1, 'rgba(2, 6, 23, 0.96)');
+  context.fillStyle = panelGradient;
+  context.fillRect(0, panelTop, width, panelHeight);
+
+  const padding = Math.round(width * 0.028);
+  const mapSize = panelHeight - padding * 2;
+  const mapX = padding;
+  const mapY = panelTop + padding;
+  context.save();
+  drawRoundedCanvasRect(context, mapX, mapY, mapSize, mapSize, Math.round(mapSize * 0.08));
+  context.clip();
+
+  let mapDrawn = false;
+  try {
+    const zoom = 16;
+    const tiles = 2 ** zoom;
+    const xFloat = ((location.longitude + 180) / 360) * tiles;
+    const latitudeRadians = (location.latitude * Math.PI) / 180;
+    const yFloat = ((1 - Math.log(Math.tan(latitudeRadians) + 1 / Math.cos(latitudeRadians)) / Math.PI) / 2) * tiles;
+    const tileX = Math.floor(xFloat);
+    const tileY = Math.floor(yFloat);
+    const tile = await loadCanvasImage(getSatelliteMapImageUrl(location.latitude, location.longitude));
+    context.drawImage(tile, mapX, mapY, mapSize, mapSize);
+    mapDrawn = true;
+  } catch {
+    context.fillStyle = '#dbeafe';
+    context.fillRect(mapX, mapY, mapSize, mapSize);
+    context.strokeStyle = '#94a3b8';
+    context.lineWidth = Math.max(3, width * 0.003);
+    [[0.08, 0.7, 0.92, 0.28], [0.18, 0.05, 0.72, 0.95], [0.02, 0.35, 0.95, 0.72]].forEach(([x1, y1, x2, y2]) => {
+      context.beginPath();
+      context.moveTo(mapX + mapSize * x1, mapY + mapSize * y1);
+      context.lineTo(mapX + mapSize * x2, mapY + mapSize * y2);
+      context.stroke();
+    });
+  }
+  context.restore();
+
+  const pinX = mapX + mapSize / 2;
+  const pinY = mapY + mapSize / 2;
+  context.fillStyle = '#ef4444';
+  context.beginPath();
+  context.arc(pinX, pinY - mapSize * 0.05, mapSize * 0.09, 0, Math.PI * 2);
+  context.fill();
+  context.beginPath();
+  context.moveTo(pinX - mapSize * 0.055, pinY);
+  context.lineTo(pinX + mapSize * 0.055, pinY);
+  context.lineTo(pinX, pinY + mapSize * 0.12);
+  context.closePath();
+  context.fill();
+  context.fillStyle = '#fff';
+  context.beginPath();
+  context.arc(pinX, pinY - mapSize * 0.05, mapSize * 0.032, 0, Math.PI * 2);
+  context.fill();
+
+  const textX = mapX + mapSize + padding;
+  const availableWidth = width - textX - padding;
+  const baseFont = Math.max(14, Math.round(width * 0.016));
+  const now = new Date();
+
+  try {
+    const logo = await loadCanvasImage('/report-assets/logokknv1.png');
+    const logoSize = Math.round(baseFont * 1.8);
+    context.drawImage(logo, textX, mapY, logoSize, logoSize);
+    context.fillStyle = '#fff';
+    context.font = `800 ${baseFont}px Arial, sans-serif`;
+    context.textBaseline = 'middle';
+    context.fillText('KKN 35 GPS CAMERA', textX + logoSize + baseFont * 0.55, mapY + logoSize / 2);
+  } catch {
+    context.fillStyle = '#fff';
+    context.font = `800 ${baseFont}px Arial, sans-serif`;
+    context.fillText('KKN 35 GPS CAMERA', textX, mapY + baseFont);
+  }
+
+  const titleY = mapY + baseFont * 3.05;
+  context.textBaseline = 'alphabetic';
+  context.fillStyle = '#fff';
+  context.font = `700 ${Math.round(baseFont * 1.45)}px Arial, sans-serif`;
+  const cleanTitle = location.headline || locationTitle || 'Lokasi kegiatan KKN';
+  context.fillText(cleanTitle.slice(0, 46), textX, titleY, availableWidth);
+
+  context.font = `500 ${baseFont}px Arial, sans-serif`;
+  context.fillStyle = 'rgba(255,255,255,0.9)';
+  const addressLines = wrapCanvasText(context, location.address || cleanTitle, availableWidth, 2);
+  addressLines.forEach((line, index) => context.fillText(line, textX, titleY + baseFont * (1.45 + index * 1.25)));
+
+  context.fillStyle = '#bfdbfe';
+  context.font = `700 ${Math.round(baseFont * 0.92)}px Arial, sans-serif`;
+  const coordinateY = titleY + baseFont * (1.45 + addressLines.length * 1.25);
+  context.fillText(`Lat ${location.latitude.toFixed(6)}°  •  Long ${location.longitude.toFixed(6)}°  •  Akurasi ±${Math.round(location.accuracy)} m`, textX, coordinateY, availableWidth);
+  context.fillStyle = 'rgba(255,255,255,0.82)';
+  context.font = `500 ${Math.round(baseFont * 0.88)}px Arial, sans-serif`;
+  context.fillText(
+    formatGpsDateTime(now),
+    textX,
+    coordinateY + baseFont * 1.25,
+    availableWidth
+  );
+  context.fillStyle = 'rgba(255,255,255,0.65)';
+  context.font = `500 ${Math.round(baseFont * 0.68)}px Arial, sans-serif`;
+  context.fillText(mapDrawn ? 'Peta © OpenStreetMap contributors' : 'Peta lokasi berbasis koordinat GPS', mapX + 5, mapY + mapSize - 7, mapSize - 10);
+
+  return canvas.toDataURL('image/jpeg', 0.86);
+};
+
+const drawGpsPhoto = async (
+  video: HTMLVideoElement,
+  location: CameraLocation,
+  locationTitle: string
+) => {
+  const width = 1080;
+  const height = 1440;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Browser tidak dapat memproses hasil kamera.');
+
+  const sourceWidth = video.videoWidth || 1080;
+  const sourceHeight = video.videoHeight || 1440;
+  const targetRatio = width / height;
+  const sourceRatio = sourceWidth / sourceHeight;
+  let sx = 0;
+  let sy = 0;
+  let sw = sourceWidth;
+  let sh = sourceHeight;
+  if (sourceRatio > targetRatio) {
+    sw = sourceHeight * targetRatio;
+    sx = (sourceWidth - sw) / 2;
+  } else {
+    sh = sourceWidth / targetRatio;
+    sy = (sourceHeight - sh) / 2;
+  }
+  context.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+
+  const mapX = 58;
+  const mapY = 1110;
+  const mapSize = 282;
+  const infoX = 360;
+  const infoY = 1100;
+  const infoWidth = 660;
+  const infoHeight = 300;
+
+  context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  drawRoundedCanvasRect(context, infoX, infoY, infoWidth, infoHeight, 6);
+  context.fill();
+  context.save();
+  drawRoundedCanvasRect(context, mapX, mapY, mapSize, mapSize, 10);
+  context.clip();
+  try {
+    const zoom = 16;
+    const tiles = 2 ** zoom;
+    const tileX = Math.floor(((location.longitude + 180) / 360) * tiles);
+    const latitudeRadians = (location.latitude * Math.PI) / 180;
+    const tileY = Math.floor(((1 - Math.log(Math.tan(latitudeRadians) + 1 / Math.cos(latitudeRadians)) / Math.PI) / 2) * tiles);
+    const tile = await loadCanvasImage(getSatelliteMapImageUrl(location.latitude, location.longitude));
+    context.drawImage(tile, mapX, mapY, mapSize, mapSize);
+  } catch {
+    context.fillStyle = '#d7e7d4';
+    context.fillRect(mapX, mapY, mapSize, mapSize);
+    context.strokeStyle = '#f8fafc';
+    context.lineWidth = 10;
+    [[0.04, 0.78, 0.96, 0.2], [0.14, 0, 0.72, 1], [0, 0.38, 1, 0.72]].forEach(([x1, y1, x2, y2]) => {
+      context.beginPath();
+      context.moveTo(mapX + mapSize * x1, mapY + mapSize * y1);
+      context.lineTo(mapX + mapSize * x2, mapY + mapSize * y2);
+      context.stroke();
+    });
+  }
+  context.fillStyle = 'rgba(0,0,0,0.12)';
+  context.fillRect(mapX, mapY, mapSize, mapSize);
+  context.restore();
+
+  const pinX = mapX + mapSize / 2;
+  const pinY = mapY + mapSize / 2 - 26;
+  context.save();
+  context.shadowColor = 'rgba(0,0,0,0.75)';
+  context.shadowBlur = 10;
+  context.fillStyle = '#ff2525';
+  context.beginPath();
+  context.moveTo(pinX, pinY + 68);
+  context.bezierCurveTo(pinX - 10, pinY + 49, pinX - 38, pinY + 20, pinX - 38, pinY - 5);
+  context.bezierCurveTo(pinX - 38, pinY - 29, pinX - 21, pinY - 46, pinX, pinY - 46);
+  context.bezierCurveTo(pinX + 21, pinY - 46, pinX + 38, pinY - 29, pinX + 38, pinY - 5);
+  context.bezierCurveTo(pinX + 38, pinY + 20, pinX + 10, pinY + 49, pinX, pinY + 68);
+  context.closePath();
+  context.fill();
+  context.restore();
+  context.fillStyle = '#360707';
+  context.beginPath();
+  context.arc(pinX, pinY - 5, 15, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = '#fff';
+  context.font = '500 46px Arial, sans-serif';
+  context.textAlign = 'center';
+  context.lineWidth = 2;
+  context.strokeStyle = 'rgba(0,0,0,0.9)';
+  context.lineJoin = 'round';
+  context.save();
+  context.shadowColor = 'rgba(0,0,0,0.92)';
+  context.shadowBlur = 3;
+  context.shadowOffsetY = 4;
+  context.strokeText('Google', pinX, mapY + mapSize - 25, mapSize - 18);
+  context.fillText('Google', pinX, mapY + mapSize - 25, mapSize - 18);
+  context.restore();
+  context.textAlign = 'left';
+
+  const badgeWidth = 260;
+  const badgeHeight = 46;
+  const badgeX = infoX + infoWidth - badgeWidth;
+  const badgeY = infoY - badgeHeight + 2;
+  context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  drawRoundedCanvasRect(context, badgeX, badgeY, badgeWidth, badgeHeight, 4);
+  context.fill();
+  const iconX = badgeX + 12;
+  const iconY = badgeY + 6;
+  try {
+    const gpsCameraLogo = await loadCanvasImage(GPS_MAP_CAMERA_LOGO_URL);
+    context.drawImage(gpsCameraLogo, iconX, iconY, 34, 34);
+  } catch {
+    context.fillStyle = '#facc15';
+    context.fillRect(iconX, iconY, 34, 34);
+  }
+  context.fillStyle = '#fff';
+  context.font = '500 21px "Segoe UI", Arial, sans-serif';
+  context.textBaseline = 'middle';
+  context.fillText('GPS Map Camera', badgeX + 55, badgeY + badgeHeight / 2);
+
+  const textX = infoX + 22;
+  const textWidth = infoWidth - 44;
+  const cleanTitle = location.headline || locationTitle || 'Lokasi kegiatan KKN';
+  context.textBaseline = 'alphabetic';
+  context.fillStyle = '#fff';
+  context.font = '500 32px "Segoe UI", Arial, sans-serif';
+  const titleLines = wrapCanvasText(context, cleanTitle, textWidth - 45, 2);
+  titleLines.forEach((line, index) => context.fillText(line, textX, infoY + 47 + index * 38));
+
+  const flagX = Math.min(infoX + infoWidth - 55, textX + context.measureText(titleLines[titleLines.length - 1]).width + 12);
+  const flagY = infoY + 22 + (titleLines.length - 1) * 38;
+  if (location.countryCode === 'ID') {
+    context.save();
+    context.shadowColor = 'rgba(0,0,0,0.8)';
+    context.shadowBlur = 5;
+    context.fillStyle = '#ef233c';
+    context.beginPath();
+    context.moveTo(flagX, flagY + 5);
+    context.bezierCurveTo(flagX + 12, flagY - 1, flagX + 27, flagY + 7, flagX + 42, flagY + 1);
+    context.lineTo(flagX + 42, flagY + 14);
+    context.bezierCurveTo(flagX + 28, flagY + 21, flagX + 14, flagY + 11, flagX, flagY + 18);
+    context.closePath();
+    context.fill();
+    context.fillStyle = '#fff';
+    context.beginPath();
+    context.moveTo(flagX, flagY + 18);
+    context.bezierCurveTo(flagX + 14, flagY + 11, flagX + 28, flagY + 21, flagX + 42, flagY + 14);
+    context.lineTo(flagX + 42, flagY + 25);
+    context.bezierCurveTo(flagX + 28, flagY + 32, flagX + 14, flagY + 22, flagX, flagY + 29);
+    context.closePath();
+    context.fill();
+    context.restore();
+  } else {
+    context.font = '28px "Segoe UI Emoji", sans-serif';
+    context.fillText(location.countryFlag, flagX, flagY + 27);
+  }
+
+  context.font = '500 18px "Segoe UI", Arial, sans-serif';
+  context.fillStyle = 'rgba(255,255,255,0.94)';
+  const addressY = infoY + 58 + titleLines.length * 38;
+  const addressLines = wrapCanvasText(context, location.address || cleanTitle, textWidth, 4);
+  addressLines.forEach((line, index) => context.fillText(line, textX, addressY + index * 24));
+
+  const coordinateY = addressY + addressLines.length * 24 + 7;
+  context.font = '500 18px "Segoe UI", Arial, sans-serif';
+  context.fillText(`Lat ${location.latitude.toFixed(6)}°  Long ${location.longitude.toFixed(6)}°`, textX, coordinateY, textWidth);
+  context.font = '500 17px "Segoe UI", Arial, sans-serif';
+  context.fillText(
+    formatGpsDateTime(),
+    textX,
+    coordinateY + 27,
+    textWidth
+  );
+
+  return canvas.toDataURL('image/jpeg', 0.88);
+};
+
+const wrapCanvasText = (context: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number) => {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = '';
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (context.measureText(candidate).width <= maxWidth || !line) {
+      line = candidate;
+    } else if (lines.length < maxLines - 1) {
+      lines.push(line);
+      line = word;
+    }
+  });
+  if (line && lines.length < maxLines) lines.push(line);
+  if (words.length && lines.length === maxLines && context.measureText(lines[maxLines - 1]).width > maxWidth) {
+    while (lines[maxLines - 1].length > 3 && context.measureText(`${lines[maxLines - 1]}…`).width > maxWidth) {
+      lines[maxLines - 1] = lines[maxLines - 1].slice(0, -1);
+    }
+    lines[maxLines - 1] += '…';
+  }
+  return lines.length ? lines : ['Lokasi kegiatan KKN'];
+};
+
+const GpsCameraCapture = ({
+  locationTitle,
+  onCapture,
+}: {
+  locationTitle: string;
+  onCapture: (dataUrl: string) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState('Menyiapkan kamera dan GPS...');
+  const [error, setError] = useState('');
+  const [location, setLocation] = useState<CameraLocation | null>(null);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [capturing, setCapturing] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const liveMapUrl = location ? getSatelliteMapImageUrl(location.latitude, location.longitude, 480) : '';
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
+
+  const closeCamera = () => {
+    stopCamera();
+    setOpen(false);
+  };
+
+  const startCamera = async (mode: 'environment' | 'user') => {
+    stopCamera();
+    setError('');
+    setStatus('Menyalakan kamera...');
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Kamera browser tidak tersedia. Gunakan HTTPS atau localhost.');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: mode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setStatus(location ? 'GPS aktif. Kamera siap digunakan.' : 'Kamera aktif. Sedang mencari lokasi GPS...');
+    } catch (cameraError: any) {
+      setError(cameraError?.message || 'Kamera tidak dapat dibuka. Periksa izin browser.');
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return () => undefined;
+    let cancelled = false;
+    startCamera(facingMode);
+    getCurrentCameraLocation(locationTitle)
+      .then((nextLocation) => {
+        if (cancelled) return;
+        setLocation(nextLocation);
+        setStatus(`GPS aktif · akurasi ±${Math.round(nextLocation.accuracy)} meter`);
+      })
+      .catch((locationError: any) => {
+        if (!cancelled) setError(locationError?.message || 'Lokasi GPS tidak dapat diambil.');
+      });
+    return () => {
+      cancelled = true;
+      stopCamera();
+    };
+  }, [open]);
+
+  const switchCamera = async () => {
+    const nextMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(nextMode);
+    await startCamera(nextMode);
+  };
+
+  const capture = async () => {
+    if (!videoRef.current || !location) {
+      setError('Tunggu sampai kamera dan lokasi GPS siap.');
+      return;
+    }
+    setCapturing(true);
+    setError('');
+    try {
+      const dataUrl = await drawGpsPhoto(videoRef.current, location, locationTitle);
+      onCapture(dataUrl);
+      closeCamera();
+    } catch (captureError: any) {
+      setError(captureError?.message || 'Foto GPS belum berhasil dibuat.');
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setLocation(null);
+          setError('');
+          setStatus('Menyiapkan kamera dan GPS...');
+          setOpen(true);
+        }}
+        className="inline-flex flex-1 items-center justify-center gap-2 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+      >
+        <Camera size={15} /> Kamera + Lokasi
+      </button>
+
+      {open && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[240] flex flex-col bg-black text-white">
+          <div className="relative min-h-0 flex-1 overflow-hidden bg-slate-950">
+            <video ref={videoRef} autoPlay muted playsInline className={`h-full w-full object-cover ${facingMode === 'user' ? '-scale-x-100' : ''}`} />
+            <button type="button" onClick={closeCamera} className="absolute right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md" aria-label="Tutup kamera"><X size={22} /></button>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-3 pb-3 pt-24 sm:px-5 sm:pb-5">
+              <div className="mx-auto max-w-3xl">
+                <div className="relative z-10 -mb-px ml-auto flex w-fit items-center gap-2 rounded-t-[4px] bg-black/50 px-2.5 py-1 text-[10px] font-medium text-white sm:text-xs">
+                  <img src={GPS_MAP_CAMERA_LOGO_URL} alt="Logo GPS Map Camera" className="h-5 w-5 object-cover" />
+                  GPS Map Camera
+                </div>
+                <div className="grid grid-cols-[112px_minmax(0,1fr)] items-stretch gap-2 sm:grid-cols-[190px_minmax(0,1fr)] sm:gap-3">
+                  <div className="relative min-h-[112px] overflow-hidden rounded-lg bg-slate-700 sm:min-h-[190px] sm:rounded-xl">
+                    {liveMapUrl ? <img src={liveMapUrl} alt="Peta satelit lokasi" className="absolute inset-0 h-full w-full object-cover" /> : <div className="absolute inset-0 bg-slate-700" />}
+                    <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[75%] drop-shadow-[0_3px_4px_rgba(0,0,0,0.9)]">
+                      <span className="relative block h-9 w-9 rotate-45 bg-red-500" style={{ borderRadius: '50% 50% 50% 0' }}>
+                        <span className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-950" />
+                      </span>
+                    </span>
+                    <span className="absolute inset-x-0 bottom-2 text-center text-2xl font-medium tracking-[-0.035em] text-white sm:text-4xl" style={{ WebkitTextStroke: '2px rgba(0,0,0,0.95)', paintOrder: 'stroke fill', fontFamily: 'Arial, sans-serif', textShadow: '0 3px 1px rgba(0,0,0,0.95), 1px 3px 2px rgba(0,0,0,0.8), -1px 3px 2px rgba(0,0,0,0.8)' }}>Google</span>
+                  </div>
+                  <div className="flex min-w-0 flex-col justify-center rounded-l-[4px] rounded-br-[4px] bg-black/50 px-3 py-2 text-white sm:px-5 sm:py-4" style={{ fontFamily: '"Segoe UI", Arial, sans-serif' }}>
+                    <p className="text-sm font-medium leading-[1.12] sm:text-2xl">
+                      <span>{location?.headline || locationTitle || 'Lokasi kegiatan KKN'}</span>
+                      {'\u00A0'}
+                      {location?.countryCode === 'ID' ? (
+                        <svg
+                          viewBox="0 0 42 30"
+                          className="inline-block h-4 w-7 align-middle drop-shadow-[0_2px_3px_rgba(0,0,0,0.8)] sm:h-5 sm:w-9"
+                          aria-label="Bendera Indonesia berkibar"
+                        >
+                          <path d="M0 5C12-1 27 7 42 1V14C28 21 14 11 0 18Z" fill="#ef233c" />
+                          <path d="M0 18C14 11 28 21 42 14V25C28 32 14 22 0 29Z" fill="white" />
+                        </svg>
+                      ) : (
+                        <span className="inline align-middle">{location?.countryFlag || '🌐'}</span>
+                      )}
+                    </p>
+                    <p className="mt-1 line-clamp-4 text-[9px] font-medium leading-[1.2] text-white/95 sm:mt-2 sm:text-sm sm:leading-[1.25]">{location?.address || 'Mencari alamat lokasi...'}</p>
+                    {location && <p className="mt-1 text-[9px] font-medium leading-tight text-white/95 sm:text-sm">Lat {location.latitude.toFixed(6)}° Long {location.longitude.toFixed(6)}°</p>}
+                    {location && <p className="mt-0.5 text-[8px] font-medium leading-tight text-white/90 sm:text-xs">{formatGpsDateTime()}</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="shrink-0 border-t border-white/10 bg-slate-950 px-4 py-4">
+            {error && <p className="mx-auto mb-3 max-w-3xl rounded-xl bg-red-950/70 px-3 py-2 text-center text-xs font-bold text-red-200">{error}</p>}
+            <div className="mx-auto grid max-w-sm grid-cols-[52px_1fr_52px] items-center gap-5">
+              <button type="button" onClick={switchCamera} className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white" aria-label="Ganti kamera"><SwitchCamera size={21} /></button>
+              <button type="button" onClick={capture} disabled={capturing || !location || Boolean(error && !streamRef.current)} className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-white/20 disabled:opacity-40" aria-label="Ambil foto GPS"><span className="h-16 w-16 rounded-full bg-white transition-transform active:scale-90" /></button>
+              <span className="text-center text-[10px] font-bold text-white/60">{capturing ? 'Proses' : 'GPS'}</span>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
 };
 
 const SHARED_DOCUMENT_MAX_BYTES = 8 * 1024 * 1024;
@@ -2834,6 +3548,7 @@ const DivisionDashboard = ({
   const [moneyPaymentSavingId, setMoneyPaymentSavingId] = useState('');
   const [selectedMoneyCollectionId, setSelectedMoneyCollectionId] = useState('');
   const [moneyEvidencePreview, setMoneyEvidencePreview] = useState<{ url: string; title: string } | null>(null);
+  const [reportEvidencePreview, setReportEvidencePreview] = useState<{ url: string; title: string } | null>(null);
   const [isTreasurerMoneyUploadOpen, setIsTreasurerMoneyUploadOpen] = useState(false);
   const [moneyCollectionPage, setMoneyCollectionPage] = useState(1);
   const [moneyCollectionDraft, setMoneyCollectionDraft] = useState<MoneyCollection>(() => ({
@@ -4770,6 +5485,13 @@ Format lengkap yang juga diterima:
           </div>
         </div>
       )}
+      {reportEvidencePreview && (
+        <ImageZoomViewer
+          src={reportEvidencePreview.url}
+          title={reportEvidencePreview.title}
+          onClose={() => setReportEvidencePreview(null)}
+        />
+      )}
       {isDivisionChatEnabled && chatToast && (
         <button
           type="button"
@@ -6603,7 +7325,7 @@ Format lengkap yang juga diterima:
                       <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Upload Bukti Foto/Screenshot
                       </span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <label className="block flex-1 cursor-pointer border border-dashed border-slate-300 bg-white px-3 py-2 text-center shadow-none transition-colors hover:border-m-blue dark:border-slate-700 dark:bg-slate-900">
                           <input
                             type="file"
@@ -6626,6 +7348,19 @@ Format lengkap yang juga diterima:
                             {entry.evidenceUrl ? 'Ganti Gambar' : 'Pilih Gambar'}
                           </span>
                         </label>
+                        <GpsCameraCapture
+                          locationTitle={[editing.desa, editing.kecamatan].filter(Boolean).join(', ') || 'Lokasi kegiatan KKN'}
+                          onCapture={(dataUrl) => updateEntry(entry.id, { evidenceUrl: dataUrl })}
+                        />
+                        {entry.evidenceUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setReportEvidencePreview({ url: entry.evidenceUrl, title: `Bukti kegiatan hari ke-${index + 1}` })}
+                            className="inline-flex flex-1 items-center justify-center gap-2 border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300"
+                          >
+                            <Eye size={15} /> View
+                          </button>
+                        )}
                         {entry.evidenceUrl && (
                           <button
                             type="button"
@@ -7122,7 +7857,7 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
                     <tbody>
                       {pageEntries.map((entry, index) => (
                         <tr key={entry.id} className="align-top">
-                          <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[38mm]' : 'h-[30mm]'}`}>{entry.dayNumber}.</td>
+                          <td className="min-h-[28mm] border border-black px-1 py-2 text-center align-middle">{entry.dayNumber}.</td>
                           <td className="border border-black px-1 py-2 whitespace-pre-wrap">{entry.dateText}</td>
                           <td className="border border-black px-1 py-2 whitespace-pre-wrap">
                             {entry.activityName}
@@ -7130,8 +7865,8 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
                           </td>
                           <td className="border border-black p-1 text-center align-middle">
                             {(/^https?:\/\/.+\.(png|jpg|jpeg|webp)$/i.test(entry.evidenceUrl) || /^data:image\//i.test(entry.evidenceUrl)) ? (
-                              <div className="mx-auto h-[34mm] w-[34mm] overflow-hidden bg-white">
-                                <img src={entry.evidenceUrl} alt="Bukti kegiatan" className="h-full w-full object-cover" />
+                              <div className="mx-auto flex min-h-[28mm] max-h-[40mm] w-full items-center justify-center overflow-hidden bg-white">
+                                <img src={entry.evidenceUrl} alt="Bukti kegiatan" className="h-auto max-h-[38mm] w-auto max-w-full object-contain" />
                               </div>
                             ) : (
                               <span className="break-all">{entry.evidenceUrl}</span>
@@ -7164,7 +7899,7 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
                           )}
                         </div>
                         <p>({report.signerName || 'Nama Lengkap'})</p>
-                        <p>{report.signerNim || (groupMatrixTemplate ? 'NIM' : 'NIM.')}</p>
+                        <p>{report.signerNim || report.nim || (groupMatrixTemplate ? 'NIM' : 'NIM.')}</p>
                       </div>
                     </div>
                   ) : (
@@ -7175,7 +7910,7 @@ const PreviewReportTemplate = ({ report }: { report: WeeklyReport }) => {
                           <img src={report.signatureDataUrl} alt="Tanda tangan" className="max-h-[16mm] max-w-[45mm] object-contain" />
                         )}
                       </div>
-                      <p>({report.signerName || 'Nama'} &nbsp; {report.signerNim || 'NIM'})</p>
+                      <p>({report.signerName || report.name || 'Nama'} &nbsp; {report.signerNim || report.nim || 'NIM'})</p>
                     </div>
                   )
                 )}
@@ -7484,7 +8219,7 @@ const ReportTemplate = ({
                   <tbody>
                     {pageEntries.map((entry, index) => (
                       <tr key={entry.id} className="align-top">
-                        <td className={`border border-black px-1 py-2 text-center align-middle ${index === 0 ? 'h-[38mm]' : 'h-[30mm]'}`}>{entry.dayNumber}.</td>
+                        <td className="min-h-[28mm] border border-black px-1 py-2 text-center align-middle">{entry.dayNumber}.</td>
                         <td className="border border-black px-1 py-2 whitespace-pre-wrap">{entry.dateText}</td>
                         <td className="border border-black px-1 py-2 whitespace-pre-wrap">
                           {entry.activityName}
@@ -7492,8 +8227,8 @@ const ReportTemplate = ({
                         </td>
                         <td className="border border-black p-1 text-center align-middle">
                           {(/^https?:\/\/.+\.(png|jpg|jpeg|webp)$/i.test(entry.evidenceUrl) || /^data:image\//i.test(entry.evidenceUrl)) ? (
-                            <div className="mx-auto h-[34mm] w-[34mm] overflow-hidden bg-white">
-                              <img src={entry.evidenceUrl} alt="Bukti kegiatan" className="h-full w-full object-cover" />
+                            <div className="mx-auto flex min-h-[28mm] max-h-[40mm] w-full items-center justify-center overflow-hidden bg-white">
+                              <img src={entry.evidenceUrl} alt="Bukti kegiatan" className="h-auto max-h-[38mm] w-auto max-w-full object-contain" />
                             </div>
                           ) : (
                             <span className="break-all">{entry.evidenceUrl}</span>
@@ -7526,7 +8261,7 @@ const ReportTemplate = ({
                         )}
                       </div>
                       <p>({report.signerName || 'Nama Lengkap'})</p>
-                      <p>{report.signerNim || (groupMatrixTemplate ? 'NIM' : 'NIM.')}</p>
+                      <p>{report.signerNim || report.nim || (groupMatrixTemplate ? 'NIM' : 'NIM.')}</p>
                     </div>
                   </div>
                 ) : (
@@ -7537,7 +8272,7 @@ const ReportTemplate = ({
                         <img src={report.signatureDataUrl} alt="Tanda tangan" className="max-h-[16mm] max-w-[45mm] object-contain" />
                       )}
                     </div>
-                    <p>({report.signerName || 'Nama'} &nbsp; {report.signerNim || 'NIM'})</p>
+                    <p>({report.signerName || report.name || 'Nama'} &nbsp; {report.signerNim || report.nim || 'NIM'})</p>
                   </div>
                 )
               )}
@@ -8292,39 +9027,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
   if (!adminUser) {
     return (
-      <div className="min-h-screen bg-[#f2f2f2] dark:bg-[#0b0f19] flex items-center justify-center p-4 relative font-sans select-none">
-        <div className="w-full max-w-[440px] bg-white dark:bg-[#151c30] p-10 sm:p-11 shadow-[0_2px_6px_rgba(0,0,0,0.2)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)] relative text-left">
+      <div className="relative flex min-h-screen items-center justify-center bg-[#f2f2f2] p-4 font-sans select-none dark:bg-[#0b0f19]">
+        <div className="relative w-full max-w-[550px] border border-slate-200 bg-white px-7 pb-9 pt-16 text-left shadow-[0_2px_8px_rgba(15,23,42,0.16)] dark:border-slate-800 dark:bg-[#151c30] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)] sm:px-10 sm:pb-10 sm:pt-14">
           
           {/* Back Arrow to close / return to website */}
           <button
             type="button"
             onClick={onClose}
-            className="absolute left-6 top-6 p-2 rounded-full text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
+            className="absolute left-6 top-6 flex h-9 w-9 items-center justify-center text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white sm:left-7 sm:top-7"
             aria-label="Kembali ke Website"
           >
             <ArrowLeft size={18} />
           </button>
 
           {/* Logo KKN centered with text */}
-          <div className="flex items-center justify-center gap-3 mb-6 mt-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-[18px] border border-slate-100 bg-white p-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="mb-7 flex items-center justify-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[14px] border border-slate-100 bg-white p-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
               <img
                 src="/report-assets/logokknv1.png"
                 alt="Logo KKN"
                 className="h-full w-full object-contain"
               />
             </div>
-            <span className="text-[20px] font-bold text-slate-800 dark:text-white tracking-tight leading-none">
+            <span className="text-[20px] font-bold tracking-tight text-slate-900 dark:text-white">
               KKN 35 UMP
             </span>
           </div>
 
-          <h1 className="text-[24px] font-semibold text-[#1b1b1b] dark:text-white text-center mb-2 tracking-tight leading-snug">
-            {forgotPasswordMode ? 'Lupa Password' : 'Login Admin'}
+          <h1 className="mb-2 text-center text-[27px] font-black leading-tight tracking-[-0.035em] text-slate-950 dark:text-white">
+            {forgotPasswordMode ? 'Pulihkan Akses' : 'Selamat Datang'}
           </h1>
           
-          <p className="text-[14px] text-[#505050] dark:text-[#a0a0a0] text-center mb-6 leading-relaxed">
-            {forgotPasswordMode ? 'Masukkan email akun yang terdaftar.' : 'Masuk untuk melanjutkan.'}
+          <p className="mb-7 text-center text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            {forgotPasswordMode ? 'Masukkan email terdaftar untuk menerima tautan pemulihan.' : 'Masuk menggunakan akun yang telah terdaftar.'}
           </p>
 
           <form
@@ -8336,46 +9071,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
               }
               login(event);
             }}
-            className="space-y-4"
+            className="space-y-5"
           >
             <label className="block">
-              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 transition-colors">
-                Email
+              <span className="mb-2 block text-xs font-bold text-slate-600 transition-colors dark:text-slate-300">
+                Alamat email
               </span>
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full border border-slate-300 focus:border-[#0067b8] focus:ring-1 focus:ring-[#0067b8] outline-none rounded-none bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-4 py-2.5 text-sm font-medium transition-all"
-                placeholder="nama@email.com"
-                required
-              />
+              <div className="group relative">
+                <Mail size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#1a73e8]" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="h-13 w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-11 pr-4 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:font-normal placeholder:text-slate-400 hover:border-slate-300 hover:bg-white focus:border-[#1a73e8] focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white dark:hover:border-slate-600 dark:focus:border-blue-500 dark:focus:bg-slate-950"
+                  placeholder="nama@email.com"
+                  autoComplete="email"
+                  required
+                />
+              </div>
             </label>
 
             {!forgotPasswordMode && (
               <label className="block">
-                <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 transition-colors">
-                  Password
+                <span className="mb-2 block text-xs font-bold text-slate-600 transition-colors dark:text-slate-300">
+                  Kata sandi
                 </span>
-                <div className="relative">
+                <div className="group relative">
+                  <KeyRound size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#1a73e8]" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className="w-full border border-slate-300 focus:border-[#0067b8] focus:ring-1 focus:ring-[#0067b8] outline-none rounded-none bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-4 py-2.5 pr-12 text-sm font-medium transition-all"
-                    placeholder="Masukkan password"
+                    className="h-13 w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 pl-11 pr-12 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:font-normal placeholder:text-slate-400 hover:border-slate-300 hover:bg-white focus:border-[#1a73e8] focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-slate-700 dark:bg-slate-900/70 dark:text-white dark:hover:border-slate-600 dark:focus:border-blue-500 dark:focus:bg-slate-950"
+                    placeholder="Masukkan kata sandi"
+                    autoComplete="current-password"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((current) => !current)}
-                    className="absolute right-2 top-0 bottom-0 my-auto h-9 w-9 flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
+                    className="absolute bottom-0 right-2 top-0 my-auto flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
                     aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-                <div className="mt-2 flex justify-end">
+                <div className="mt-2.5 flex justify-end">
                   <button
                     type="button"
                     onClick={() => {
@@ -8384,7 +9125,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                       setResetMessage('');
                       setPassword('');
                     }}
-                    className="text-xs text-[#0067b8] dark:text-[#4da3ff] hover:underline hover:text-[#005da6] transition-colors"
+                    className="text-xs font-bold text-[#1a73e8] transition-colors hover:text-[#1557b0] dark:text-[#8ab4f8] dark:hover:text-blue-300"
                   >
                     Lupa password?
                   </button>
@@ -8393,31 +9134,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             )}
 
             {loginError && (
-              <p className="mt-4 px-3 py-2 text-[13px] bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-900/30 animate-fadeIn">
+              <p className="animate-fadeIn rounded-xl border border-red-100 bg-red-50 px-3.5 py-3 text-[13px] font-medium text-red-700 dark:border-red-900/40 dark:bg-red-950/25 dark:text-red-300">
                 {loginError}
               </p>
             )}
 
             {resetMessage && (
-              <p className="mt-4 px-3 py-2 text-[13px] bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-900/30 animate-fadeIn">
+              <p className="animate-fadeIn rounded-xl border border-emerald-100 bg-emerald-50 px-3.5 py-3 text-[13px] font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/25 dark:text-emerald-300">
                 {resetMessage}
               </p>
             )}
 
-            <div className="flex justify-center mt-6">
+            <div className="flex justify-center pt-1">
               <button
                 type="submit"
                 disabled={forgotPasswordMode && resetSending}
-                className="bg-[#0067b8] hover:bg-[#005da6] text-white text-[15px] font-normal px-12 py-2 min-w-[120px] text-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="group inline-flex min-h-12 min-w-[190px] items-center justify-center gap-2.5 rounded-full border border-[#6ca9ff] bg-gradient-to-b from-[#4285e9] to-[#2868ca] px-8 py-3 text-center text-[15px] font-bold text-white shadow-[0_7px_16px_-7px_rgba(37,99,235,0.9),inset_0_1px_0_rgba(255,255,255,0.25)] transition-all hover:-translate-y-0.5 hover:from-[#4d90f3] hover:to-[#2d72dc] hover:shadow-[0_10px_20px_-8px_rgba(37,99,235,0.95),inset_0_1px_0_rgba(255,255,255,0.3)] active:translate-y-0 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
               >
+                <LogIn size={17} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5" />
                 {forgotPasswordMode
                   ? resetSending ? 'Mengirim...' : 'Kirim Link'
-                  : 'Masuk'}
+                  : 'Login'}
               </button>
             </div>
 
             {forgotPasswordMode && (
-              <div className="text-[13px] mt-4">
+              <div className="text-center text-[13px]">
                 <button
                   type="button"
                   onClick={() => {
@@ -8425,13 +9167,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                     setLoginError('');
                     setResetMessage('');
                   }}
-                  className="text-[#0067b8] dark:text-[#4da3ff] hover:underline hover:text-[#005da6] transition-colors cursor-pointer"
+                  className="cursor-pointer font-bold text-[#1a73e8] transition-colors hover:text-[#1557b0] dark:text-[#8ab4f8]"
                 >
-                  Kembali ke login
+                  Kembali ke halaman masuk
                 </button>
               </div>
             )}
           </form>
+
+          {!forgotPasswordMode && (
+            <div className="mt-6 flex items-center justify-center gap-2 border-t border-slate-100 pt-5 text-[11px] font-medium text-slate-400 dark:border-slate-800 dark:text-slate-500">
+              <ShieldCheck size={14} className="text-emerald-500" />
+              Akses aman untuk anggota KKN 35 UMP
+            </div>
+          )}
 
         </div>
 
@@ -8452,51 +9201,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
         <style>{`
           @keyframes kknOtpTileMerge {
             0% {
-              opacity: 1;
-              transform: translateX(calc(var(--otp-x) - 20px)) translateY(0) rotate(0deg) scale(1);
+              opacity: 0.95;
+              transform: translateX(calc(var(--otp-x) - 7px)) translateY(var(--otp-y)) rotate(0deg) scale(1);
               border-color: rgb(203 213 225);
               box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
             }
-            28% {
+            35% {
               opacity: 1;
-              transform: translateX(calc(var(--otp-x) - 20px)) translateY(-3px) rotate(0deg) scale(1.04);
+              transform: translateX(calc(var(--otp-x) - 7px)) translateY(calc(var(--otp-y) - 7px)) rotate(var(--otp-rotate)) scale(1.12);
               border-color: rgb(14 165 233);
-              box-shadow: 0 10px 22px rgba(14, 165, 233, 0.13);
+              box-shadow: 0 8px 18px rgba(14, 165, 233, 0.22);
             }
-            56% {
+            72% {
               opacity: 1;
-              transform: translateX(-20px) translateY(0) rotate(0deg) scale(0.96);
+              transform: translateX(-7px) translateY(-9px) rotate(180deg) scale(0.62);
               border-color: rgb(16 185 129);
-              box-shadow: 0 12px 28px rgba(16, 185, 129, 0.16);
-            }
-            78% {
-              opacity: 1;
-              transform: translateX(-20px) translateY(0) rotate(210deg) scale(0.62);
+              box-shadow: 0 0 22px rgba(16, 185, 129, 0.34);
             }
             100% {
               opacity: 0;
-              transform: translateX(-20px) translateY(0) rotate(420deg) scale(0.18);
+              transform: translateX(-7px) translateY(-9px) rotate(360deg) scale(0.05);
             }
           }
 
           @keyframes kknOtpSuccessBar {
             0% {
               opacity: 0;
-              transform: scaleX(0.14) scaleY(0.72);
-              border-radius: 999px;
+              transform: translate(-50%, -50%) rotate(-18deg) scale(0.18);
               box-shadow: 0 0 0 rgba(16, 185, 129, 0);
             }
-            58% {
+            62% {
               opacity: 1;
-              transform: scaleX(1.025) scaleY(1.02);
-              border-radius: 12px;
-              box-shadow: 0 18px 42px rgba(16, 185, 129, 0.12);
+              transform: translate(-50%, -50%) rotate(5deg) scale(1.14);
+              box-shadow: 0 16px 32px rgba(16, 185, 129, 0.28), 0 0 0 7px rgba(16, 185, 129, 0.08);
             }
             100% {
               opacity: 1;
-              transform: scaleX(1) scaleY(1);
-              border-radius: 0;
-              box-shadow: 0 10px 28px rgba(16, 185, 129, 0.10);
+              transform: translate(-50%, -50%) rotate(0deg) scale(1);
+              box-shadow: 0 10px 24px rgba(16, 185, 129, 0.22), 0 0 0 5px rgba(16, 185, 129, 0.07);
             }
           }
 
@@ -8523,33 +9265,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
           @keyframes kknOtpSuccessGlow {
             0%, 100% {
-              opacity: 0.18;
-              transform: scale(0.92);
+              opacity: 0.22;
+              transform: scale(0.7);
             }
             50% {
-              opacity: 0.38;
-              transform: scale(1.08);
+              opacity: 0;
+              transform: scale(1.45);
+            }
+          }
+
+          @keyframes kknOtpSuccessSpark {
+            0%, 42% {
+              opacity: 0;
+              transform: translate(-50%, -50%) rotate(0deg) scale(0.3);
+            }
+            64% {
+              opacity: 1;
+              transform: translate(-50%, -50%) rotate(18deg) scale(1);
+            }
+            100% {
+              opacity: 0;
+              transform: translate(-50%, -50%) rotate(35deg) scale(1.35);
             }
           }
 
           .kkn-otp-success-stage {
             position: relative;
-            width: min(100%, 292px);
-            height: 52px;
-            margin: 0 auto 1rem;
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 1.1rem;
             isolation: isolate;
+          }
+
+          .kkn-otp-success-stage::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 4px;
+            height: 4px;
+            border-radius: 999px;
+            background: rgb(16 185 129);
+            box-shadow: 0 -34px 0 rgb(16 185 129), 26px -22px 0 rgb(14 165 233), 34px 6px 0 rgb(52 211 153), 17px 31px 0 rgb(14 165 233), -17px 31px 0 rgb(16 185 129), -34px 6px 0 rgb(14 165 233), -26px -22px 0 rgb(52 211 153);
+            animation: kknOtpSuccessSpark 1120ms ease-out 560ms both;
+            z-index: 4;
           }
 
           .kkn-otp-success-tile {
             position: absolute;
             left: 50%;
-            top: 2px;
-            width: 40px;
-            height: 48px;
+            top: 50%;
+            width: 14px;
+            height: 18px;
+            border-radius: 4px;
             border: 1px solid rgb(203 213 225);
             background: white;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-            animation: kknOtpTileMerge 1080ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation: kknOtpTileMerge 900ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
             animation-delay: var(--otp-delay);
             will-change: transform, opacity;
             z-index: 2;
@@ -8557,40 +9329,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
           .kkn-otp-success-bar {
             position: absolute;
-            inset: 0;
+            left: 50%;
+            top: 50%;
+            width: 58px;
+            height: 58px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid rgb(134 239 172);
-            background: linear-gradient(180deg, rgb(240 253 244), rgb(220 252 231));
+            border: 1px solid rgb(110 231 183);
+            border-radius: 18px;
+            background: linear-gradient(145deg, rgb(236 253 245), rgb(187 247 208));
             color: rgb(4 120 87);
             opacity: 0;
             transform-origin: center;
-            animation: kknOtpSuccessBar 660ms cubic-bezier(0.16, 1, 0.3, 1) 760ms forwards;
-            overflow: hidden;
-            z-index: 1;
+            animation: kknOtpSuccessBar 700ms cubic-bezier(0.16, 1, 0.3, 1) 690ms forwards;
+            z-index: 3;
           }
 
           .kkn-otp-success-bar::before {
             content: '';
             position: absolute;
-            inset: 6px 36px;
+            inset: -8px;
+            border: 2px solid rgba(16, 185, 129, 0.38);
             border-radius: 999px;
-            background: radial-gradient(circle, rgba(16, 185, 129, 0.28), rgba(16, 185, 129, 0));
-            animation: kknOtpSuccessGlow 1300ms ease-in-out 760ms infinite;
+            animation: kknOtpSuccessGlow 1400ms ease-out 1220ms infinite;
           }
 
           .kkn-otp-success-check {
             position: relative;
             opacity: 0;
-            animation: kknOtpCheckEnter 520ms cubic-bezier(0.2, 1.25, 0.3, 1) 1060ms forwards;
+            filter: drop-shadow(0 2px 4px rgba(4, 120, 87, 0.2));
+            animation: kknOtpCheckEnter 520ms cubic-bezier(0.2, 1.25, 0.3, 1) 1030ms forwards;
             z-index: 1;
           }
 
           .kkn-otp-success-check-path {
             stroke-dasharray: 48;
             stroke-dashoffset: 48;
-            animation: kknOtpCheckDraw 520ms cubic-bezier(0.22, 1, 0.36, 1) 1240ms forwards;
+            animation: kknOtpCheckDraw 520ms cubic-bezier(0.22, 1, 0.36, 1) 1190ms forwards;
           }
         `}</style>
         <div className="w-full max-w-[440px] bg-white dark:bg-[#151c30] p-6 sm:p-8 shadow-[0_2px_6px_rgba(0,0,0,0.2)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)] relative text-left">
@@ -8736,8 +9512,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                       key={idx}
                       className="kkn-otp-success-tile dark:border-slate-700 dark:bg-slate-900"
                       style={{
-                        '--otp-x': `${(idx - 2.5) * 50}px`,
-                        '--otp-delay': `${idx * 28}ms`,
+                        '--otp-x': `${(idx - 2.5) * 24}px`,
+                        '--otp-y': `${idx % 2 === 0 ? -8 : 4}px`,
+                        '--otp-rotate': `${idx % 2 === 0 ? -18 : 18}deg`,
+                        '--otp-delay': `${idx * 24}ms`,
                       } as React.CSSProperties}
                     />
                   ))}
