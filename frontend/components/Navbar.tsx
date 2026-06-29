@@ -101,7 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({ darkMode, toggleDarkMode, introC
           />
           <div className={`font-semibold text-sm leading-tight transition-colors duration-300 ${onLight ? 'text-slate-900' : 'text-white drop-shadow-sm'}`}>
             KKN Kelompok 35
-            <span className={`block text-xs font-medium ${onLight ? 'text-slate-500' : 'text-white/60'}`}>UMP</span>
+            <span className={`block text-xs font-medium ${onLight ? 'text-slate-500' : 'text-white/60'}`}>UNIVERSITAS MUHAMMADIYAH PALEMBANG</span>
           </div>
         </a>
 
