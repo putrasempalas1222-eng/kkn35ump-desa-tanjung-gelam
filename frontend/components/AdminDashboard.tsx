@@ -37,6 +37,7 @@ import {
   WalletCards,
   Home,
   Globe,
+  HardDrive,
   StickyNote,
   List,
   ListOrdered,
@@ -85,16 +86,17 @@ import {
   MoneyCollection,
   MoneyCollectionPayment,
   SecretarySharedDocument,
+  SharedStorageDocument,
 } from '../types';
 
 interface AdminDashboardProps {
   onClose: () => void;
 }
 
-type Tab = 'overview' | 'accounts' | 'content' | 'maintenance' | 'event' | 'team' | 'programs' | 'gallery' | 'testimonials' | 'reviews' | 'messages' | 'competitions' | 'competition-registrations';
+type Tab = 'overview' | 'storage' | 'accounts' | 'content' | 'maintenance' | 'event' | 'team' | 'programs' | 'gallery' | 'testimonials' | 'reviews' | 'messages' | 'competitions' | 'competition-registrations';
 type EditableType = 'team' | 'programs' | 'gallery' | 'testimonials';
 type EditableItem = TeamMember | Program | GalleryImage | Testimonial;
-type DivisionDashboardView = 'home' | 'maps' | 'notes' | 'secretaryDocs' | 'chat' | 'moneyCollection' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput' | 'treasurerIncome';
+type DivisionDashboardView = 'home' | 'maps' | 'notes' | 'storage' | 'secretaryDocs' | 'chat' | 'moneyCollection' | 'weekly' | 'individualMatrix' | 'groupMatrix' | 'treasurerOutput' | 'treasurerIncome';
 type TwoFactorView = 'select' | 'email' | 'authenticator' | 'authenticatorSetup';
 
 const ADMIN_EMAIL = 'kamikkn35ump@kknump.plg';
@@ -102,6 +104,7 @@ const DIVISION_DASHBOARD_VIEWS: DivisionDashboardView[] = [
   'home',
   'maps',
   'notes',
+  'storage',
   'secretaryDocs',
   'chat',
   'moneyCollection',
@@ -113,6 +116,7 @@ const DIVISION_DASHBOARD_VIEWS: DivisionDashboardView[] = [
 ];
 const ADMIN_TABS: Tab[] = [
   'overview',
+  'storage',
   'accounts',
   'content',
   'maintenance',
@@ -710,39 +714,97 @@ const ImageField = ({
   onChange: (value: string) => void;
 }) => {
   const [error, setError] = useState('');
-  const youtubeEmbedUrl = getYouTubeEmbedUrl(value);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isStoredDataUrl = value.startsWith('data:image/');
 
-  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const processFile = async (file?: File) => {
     if (!file) return;
 
     try {
       setError('');
+      setUploading(true);
       const dataUrl = await fileToImageDataUrl(file);
       onChange(dataUrl);
     } catch (uploadError: any) {
       setError(uploadError?.message || 'Gambar gagal diunggah.');
     } finally {
-      event.target.value = '';
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   return (
     <div className="space-y-3">
-      <Field label={label} value={value} onChange={onChange} />
-      <label className="block cursor-pointer rounded-md border border-dashed border-slate-300 bg-[#f8fafd] px-4 py-4 transition-colors hover:border-[#1a73e8] hover:bg-white dark:border-slate-700 dark:bg-[#111827] dark:hover:bg-[#151c2c]">
-        <input type="file" accept="image/*" onChange={handleFile} className="sr-only" />
-        <span className="block text-sm font-bold text-slate-700 dark:text-slate-200">Upload gambar dari perangkat</span>
-        <span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Gambar dikompres lalu disimpan sebagai data URL di database, tanpa Firebase Storage.
-        </span>
-      </label>
-      {value && (
-        <img
-          src={value}
-          alt={label}
-          className="h-32 w-full rounded-md object-cover border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
+      <label className="block">
+        <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</span>
+        <input
+          type="url"
+          value={isStoredDataUrl ? '' : value}
+          onChange={(event) => {
+            setError('');
+            onChange(event.target.value);
+          }}
+          className={googleInputClass}
+          placeholder={isStoredDataUrl ? 'Gambar dari perangkat sudah tersimpan' : 'https://contoh.com/gambar.jpg'}
         />
+      </label>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,image/*"
+        onChange={(event) => processFile(event.target.files?.[0])}
+        className="sr-only"
+      />
+      <div className="border border-dashed border-slate-300 bg-[#f8fafd] p-4 transition-colors hover:border-[#1a73e8] dark:border-slate-700 dark:bg-[#111827]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <span className="block text-sm font-bold text-slate-700 dark:text-slate-200">
+              {value ? 'Ganti gambar dari perangkat' : 'Upload gambar dari perangkat'}
+            </span>
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+              JPG, PNG, WEBP, atau GIF akan dikompres dan disimpan sebagai Base64.
+            </span>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className={`${adminMiniPrimaryButtonClass} min-w-[130px]`}
+            >
+              <Upload size={14} />
+              {uploading ? 'Memproses...' : value ? 'Pilih Pengganti' : 'Pilih Gambar'}
+            </button>
+            {value && (
+              <button
+                type="button"
+                onClick={() => {
+                  setError('');
+                  onChange('');
+                }}
+                disabled={uploading}
+                className={adminMiniDangerButtonClass}
+                title="Hapus gambar"
+                aria-label="Hapus gambar"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      {value && (
+        <div className="relative overflow-hidden border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
+          <img
+            src={value}
+            alt={label}
+            className="h-36 w-full object-cover sm:h-44"
+            onError={() => setError('Preview gambar gagal dimuat. Periksa URL atau pilih file gambar lain.')}
+          />
+          {uploading && <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-sm font-black text-[#1a73e8] backdrop-blur-sm dark:bg-slate-950/75 dark:text-[#8ab4f8]">Memproses gambar...</div>}
+        </div>
       )}
       {error && <p className="text-sm font-semibold text-red-600 dark:text-red-300">{error}</p>}
     </div>
@@ -2489,6 +2551,222 @@ const generateWeeklyReportPdf = async (report: WeeklyReport) => {
   });
 
   pdf.save(`${getReportFilePrefix(report)}_${sanitizeFilePart(report.name)}_${getDownloadTimestamp()}.pdf`);
+};
+
+const SHARED_DOCUMENT_MAX_BYTES = 8 * 1024 * 1024;
+const SHARED_DOCUMENT_CHUNK_LENGTH = 900_000;
+const SHARED_DOCUMENT_EXTENSIONS = ['pdf', 'ppt', 'docx'] as const;
+
+const getSharedDocumentExtension = (name: string) =>
+  name.split('.').pop()?.trim().toLowerCase() || '';
+
+const getSharedDocumentMimeType = (extension: SharedStorageDocument['extension']) => ({
+  pdf: 'application/pdf',
+  ppt: 'application/vnd.ms-powerpoint',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}[extension]);
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const joinBase64Chunks = (data: SharedStorageDocument['dataBase64']) =>
+  typeof data === 'string'
+    ? data
+    : Object.keys(data || {})
+        .sort()
+        .map((key) => data[key])
+        .join('');
+
+const splitBase64IntoChunks = (dataUrl: string) => {
+  const chunks: Record<string, string> = {};
+  for (let offset = 0, index = 0; offset < dataUrl.length; offset += SHARED_DOCUMENT_CHUNK_LENGTH, index += 1) {
+    chunks[`chunk_${String(index).padStart(3, '0')}`] = dataUrl.slice(offset, offset + SHARED_DOCUMENT_CHUNK_LENGTH);
+  }
+  return chunks;
+};
+
+const dataUrlToBlob = (data: SharedStorageDocument['dataBase64'], fallbackType: string) => {
+  const dataUrl = joinBase64Chunks(data);
+  const [header, encoded = ''] = dataUrl.split(',', 2);
+  const mimeType = header.match(/^data:([^;]+)/)?.[1] || fallbackType;
+  const binary = atob(encoded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mimeType });
+};
+
+const SharedStoragePanel = ({ profile }: { profile: UserProfile }) => {
+  const [documents, setDocuments] = useState<SharedStorageDocument[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [previewDocument, setPreviewDocument] = useState<SharedStorageDocument | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canDelete = profile.role === 'admin' || profile.email === ADMIN_EMAIL;
+
+  useEffect(() => storage.subscribeSharedStorageDocuments(setDocuments), []);
+
+  const openDocument = (document: SharedStorageDocument) => {
+    if (document.extension === 'pdf') {
+      setPreviewDocument(document);
+      return;
+    }
+
+    const blobUrl = URL.createObjectURL(dataUrlToBlob(document.dataBase64, document.mimeType));
+    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  };
+
+  const downloadDocument = (document: SharedStorageDocument) => {
+    const blobUrl = URL.createObjectURL(dataUrlToBlob(document.dataBase64, document.mimeType));
+    const link = window.document.createElement('a');
+    link.href = blobUrl;
+    link.download = document.name;
+    window.document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1_000);
+  };
+
+  const uploadDocument = async (file?: File) => {
+    if (!file) return;
+    setNotice('');
+    const extension = getSharedDocumentExtension(file.name);
+    if (!SHARED_DOCUMENT_EXTENSIONS.includes(extension as SharedStorageDocument['extension'])) {
+      setNotice('Format tidak didukung. Pilih file PDF, PPT, atau DOCX.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (file.size > SHARED_DOCUMENT_MAX_BYTES) {
+      setNotice('Ukuran file maksimal 8 MB.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('File tidak dapat dibaca.'));
+        reader.readAsDataURL(file);
+      });
+      const typedExtension = extension as SharedStorageDocument['extension'];
+      const now = Date.now();
+      await storage.saveSharedStorageDocument({
+        id: `storage_${now}_${Math.random().toString(36).slice(2, 9)}`,
+        name: file.name,
+        extension: typedExtension,
+        mimeType: getSharedDocumentMimeType(typedExtension),
+        size: file.size,
+        dataBase64: splitBase64IntoChunks(dataBase64),
+        uploadedByUid: profile.uid,
+        uploadedByName: profile.name,
+        uploadedByDivision: profile.division,
+        date: new Date().toLocaleString('id-ID'),
+        createdAtMs: now,
+      });
+      setNotice('Dokumen berhasil diunggah ke penyimpanan bersama.');
+    } catch (error: any) {
+      setNotice(error?.message || 'Dokumen belum berhasil diunggah.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const deleteDocument = async (document: SharedStorageDocument) => {
+    if (!canDelete || !window.confirm(`Hapus ${document.name} dari penyimpanan?`)) return;
+    try {
+      await storage.deleteSharedStorageDocument(document.id);
+      if (previewDocument?.id === document.id) setPreviewDocument(null);
+      setNotice('Dokumen berhasil dihapus.');
+    } catch (error: any) {
+      setNotice(error?.message || 'Dokumen belum berhasil dihapus.');
+    }
+  };
+
+  return (
+    <section className="order-1 min-w-0 w-full space-y-3 sm:space-y-4 lg:col-span-2">
+      <div className="border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-[#0d1320] sm:p-5 lg:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#1a73e8] dark:text-[#8ab4f8]">Seluruh Divisi</p>
+            <h2 className="mt-1 text-2xl font-black text-slate-950 dark:text-white">Penyimpanan</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Dokumen bersama dalam format PDF, PPT, dan DOCX. Maksimal 8 MB per file.</p>
+          </div>
+          <label className={`${googlePrimaryButtonClass} w-full shrink-0 cursor-pointer sm:w-fit`}>
+            <Upload size={16} />
+            {uploading ? 'Mengunggah...' : 'Upload Dokumen'}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.ppt,.docx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="sr-only"
+              disabled={uploading}
+              onChange={(event) => uploadDocument(event.target.files?.[0])}
+            />
+          </label>
+        </div>
+        {notice && <p className="mt-4 break-words border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">{notice}</p>}
+      </div>
+
+      {documents.length === 0 ? (
+        <div className="flex min-h-[420px] flex-col items-center justify-center border border-dashed border-slate-300 bg-white p-6 text-center dark:border-slate-700 dark:bg-[#0d1320] sm:min-h-[calc(100dvh-250px)] sm:p-8">
+          <HardDrive size={38} className="text-slate-300 dark:text-slate-600" />
+          <p className="mt-3 font-black text-slate-700 dark:text-slate-200">Belum ada dokumen</p>
+          <p className="mt-1 text-sm text-slate-500">Upload dokumen pertama untuk seluruh divisi.</p>
+        </div>
+      ) : (
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {documents.map((document) => (
+            <article key={document.id} className="min-w-0 border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-[#0d1320]">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center bg-[#e8f0fe] font-black uppercase text-[#1a73e8] dark:bg-[#1a73e8]/20 dark:text-[#8ab4f8]">{document.extension}</div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-sm font-black text-slate-950 dark:text-white" title={document.name}>{document.name}</h3>
+                  <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{formatFileSize(document.size)} · {document.uploadedByName}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-slate-400">Divisi {getDivisionLabel(document.uploadedByDivision)} · {document.date}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <button type="button" onClick={() => openDocument(document)} className={`${adminMiniNeutralButtonClass} w-full`}><Eye size={14} /> View</button>
+                <button type="button" onClick={() => downloadDocument(document)} className={`${adminMiniPrimaryButtonClass} w-full`}><Download size={14} /> Download</button>
+                {canDelete && <button type="button" onClick={() => deleteDocument(document)} className={`${adminMiniDangerButtonClass} col-span-2 w-full`} title="Hapus dokumen"><Trash2 size={14} /> Hapus</button>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {previewDocument && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/75 p-0 backdrop-blur-sm">
+          <div className="relative flex h-dvh w-screen max-w-none flex-col overflow-hidden bg-white shadow-2xl dark:bg-[#0d1320]">
+            <button
+              type="button"
+              onClick={() => setPreviewDocument(null)}
+              className="absolute right-3 top-3 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-red-950/30 transition-colors hover:bg-red-700 sm:hidden"
+              aria-label="Tutup preview dokumen"
+              title="Tutup"
+            >
+              <X size={22} strokeWidth={2.5} />
+            </button>
+            <div className="relative z-20 flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-white px-3 py-3 pr-16 dark:border-slate-800 dark:bg-[#0d1320] sm:flex-row sm:items-center sm:justify-between sm:px-4">
+              <h3 className="min-w-0 truncate font-black text-slate-950 dark:text-white">{previewDocument.name}</h3>
+              <div className="grid shrink-0 grid-cols-1 gap-2 sm:flex">
+                <button type="button" onClick={() => downloadDocument(previewDocument)} className={`${adminMiniPrimaryButtonClass} w-full`}><Download size={14} /> Download</button>
+                <button type="button" onClick={() => setPreviewDocument(null)} className={`${adminMiniNeutralButtonClass} hidden w-full sm:inline-flex`}><X size={16} /> Tutup</button>
+              </div>
+            </div>
+            <iframe title={`Preview ${previewDocument.name}`} src={joinBase64Chunks(previewDocument.dataBase64)} className="relative z-10 min-h-0 w-full flex-1 bg-slate-100" />
+          </div>
+        </div>,
+        document.body
+      )}
+    </section>
+  );
 };
 
 const DivisionDashboard = ({
@@ -4275,6 +4553,7 @@ Format lengkap yang juga diterima:
     { label: 'Home', icon: Home, active: dashboardView === 'home', action: () => openDashboardView('home') },
     { label: 'Live Maps', icon: MapPinned, active: dashboardView === 'maps', action: () => openDashboardView('maps') },
     { label: 'Catatan', icon: StickyNote, active: dashboardView === 'notes', action: () => openDashboardView('notes') },
+    { label: 'Penyimpanan', icon: HardDrive, active: dashboardView === 'storage', action: () => openDashboardView('storage') },
     ...(isSecretary ? [{ label: 'Dokumen Bersama', icon: FileText, active: dashboardView === 'secretaryDocs', action: () => openDashboardView('secretaryDocs') }] : []),
     ...(isDivisionChatEnabled ? [{ label: unreadChatCount ? `Chat Divisi (${unreadChatCount})` : 'Chat Divisi', icon: MessageSquare, active: dashboardView === 'chat', action: () => openDashboardView('chat') }] : []),
     { label: 'Pengumpulan Uang', icon: WalletCards, active: dashboardView === 'moneyCollection', action: () => openDashboardView('moneyCollection') },
@@ -5168,6 +5447,10 @@ Format lengkap yang juga diterima:
               </div>
             </form>
           </section>
+        )}
+
+        {dashboardView === 'storage' && (
+          <SharedStoragePanel profile={profile} />
         )}
 
         {dashboardView === 'secretaryDocs' && isSecretary && (
@@ -7962,6 +8245,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
 
   const navItems = [
     { id: 'overview', label: 'Monitoring', icon: LayoutDashboard },
+    { id: 'storage', label: 'Penyimpanan', icon: HardDrive },
     { id: 'accounts', label: 'Akun Divisi', icon: User },
     { id: 'content', label: 'Konten Website', icon: FileText },
     { id: 'maintenance', label: 'Maintenance', icon: CalendarClock },
@@ -7990,6 +8274,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     ? [
       { label: 'Home', icon: Home, action: () => openDivisionDashboard('home') },
       { label: 'Live Maps', icon: MapPinned, action: () => openDivisionDashboard('maps') },
+      { label: 'Penyimpanan', icon: HardDrive, action: () => openDivisionDashboard('storage') },
       { label: 'Pengumpulan Uang', icon: WalletCards, action: () => openDivisionDashboard('moneyCollection') },
       { label: 'Laporan Mingguan', icon: FileText, action: () => openDivisionDashboard('weekly') },
       { label: 'Matriks Individu', icon: ClipboardCheck, action: () => openDivisionDashboard('individualMatrix') },
@@ -8890,6 +9175,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
             <AccountManager profiles={userProfiles} />
           )}
 
+          {activeTab === 'storage' && (
+            <SharedStoragePanel
+              profile={currentProfile || {
+                id: currentUid,
+                uid: currentUid,
+                email: adminUser || ADMIN_EMAIL,
+                name: 'Admin',
+                division: 'admin',
+                role: 'admin',
+              }}
+            />
+          )}
+
           {activeTab === 'content' && (
             <div className="w-full">
               <div className="space-y-3">
@@ -8937,6 +9235,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
                       <Field label="Judul Profil Desa" value={siteContent.villageTitle} onChange={(value) => setSiteContent({ ...siteContent, villageTitle: value })} />
                       <Field label="Deskripsi Profil Desa" rows={2} value={siteContent.villageDescription} onChange={(value) => setSiteContent({ ...siteContent, villageDescription: value })} />
                       <Field label="Gambaran Umum" rows={4} value={siteContent.villageOverview} onChange={(value) => setSiteContent({ ...siteContent, villageOverview: value })} />
+                      <Field label="Lokasi Desa" value={siteContent.villageLocation} onChange={(value) => setSiteContent({ ...siteContent, villageLocation: value })} />
                       <Field label="Google Maps Embed URL" rows={4} value={siteContent.villageMapUrl} onChange={(value) => setSiteContent({ ...siteContent, villageMapUrl: value })} />
                     </div>
                   </section>

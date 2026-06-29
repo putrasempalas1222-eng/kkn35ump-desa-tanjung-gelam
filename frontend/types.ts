@@ -57,6 +57,7 @@ export interface SiteContent {
   villageTitle: string;
   villageDescription: string;
   villageOverview: string;
+  villageLocation: string;
   villageMapUrl: string;
   contactAddress: string;
   contactEmail: string;
@@ -204,6 +205,21 @@ export interface SecretarySharedDocument {
   updatedAtMs?: number;
   createdAt?: number | object;
   updatedAt?: number | object;
+}
+
+export interface SharedStorageDocument {
+  id: string;
+  name: string;
+  extension: 'pdf' | 'ppt' | 'docx';
+  mimeType: string;
+  size: number;
+  dataBase64: string | Record<string, string>;
+  uploadedByUid: string;
+  uploadedByName: string;
+  uploadedByDivision: DivisionName;
+  date: string;
+  createdAtMs: number;
+  createdAt?: number | object;
 }
 
 export interface DivisionChatMessage {

@@ -54,7 +54,9 @@ export const VillageProfile: React.FC = () => {
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-900 dark:text-white text-sm">Lokasi</h4>
-                    <p className="text-xs text-slate-550 dark:text-slate-400 mt-1 font-semibold leading-relaxed">Kec. Indralaya, Ogan Ilir</p>
+                    <p className="text-xs text-slate-550 dark:text-slate-400 mt-1 font-semibold leading-relaxed">
+                      {content.villageLocation || 'Lokasi belum diatur'}
+                    </p>
                   </div>
                 </div>
 

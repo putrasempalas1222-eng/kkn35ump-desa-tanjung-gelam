@@ -43,6 +43,7 @@ import {
   CompetitionRegistration,
   DivisionNote,
   SecretarySharedDocument,
+  SharedStorageDocument,
   DivisionChatMessage,
   MoneyCollection,
   MoneyCollectionPayment,
@@ -133,6 +134,7 @@ const COLLECTIONS = {
   financialReports: 'financialReports',
   divisionNotes: 'divisionNotes',
   secretaryDocuments: 'secretaryDocuments',
+  sharedStorageDocuments: 'sharedStorageDocuments',
   divisionChats: 'divisionChats',
   moneyCollections: 'moneyCollections',
   liveLocations: 'liveLocations',
@@ -160,6 +162,7 @@ const EMPTY_SITE_CONTENT: SiteContent = {
   villageTitle: '',
   villageDescription: '',
   villageOverview: '',
+  villageLocation: 'Kec. Indralaya, Ogan Ilir',
   villageMapUrl: '',
   contactAddress: '',
   contactEmail: '',
@@ -756,6 +759,22 @@ export const storage = {
     return id;
   },
   deleteSecretaryDocument: (id: string) => remove(ref(database, `${COLLECTIONS.secretaryDocuments}/${id}`)),
+
+  subscribeSharedStorageDocuments: (callback: (data: SharedStorageDocument[]) => void) =>
+    subscribeList<SharedStorageDocument>(COLLECTIONS.sharedStorageDocuments, (documents) =>
+      callback(documents.sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)))
+    ),
+  saveSharedStorageDocument: async (document: SharedStorageDocument) => {
+    const id = document.id || `storage_${Date.now()}`;
+    await set(ref(database, `${COLLECTIONS.sharedStorageDocuments}/${id}`), {
+      ...document,
+      id,
+      createdAt: serverTimestamp(),
+    });
+    return id;
+  },
+  deleteSharedStorageDocument: (id: string) =>
+    remove(ref(database, `${COLLECTIONS.sharedStorageDocuments}/${id}`)),
 
   subscribeMoneyCollections: (callback: (data: MoneyCollection[]) => void) =>
     subscribeList<MoneyCollection>(COLLECTIONS.moneyCollections, (collections) =>
